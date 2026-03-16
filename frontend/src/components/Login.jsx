@@ -65,10 +65,22 @@ export default function Login(){
               />
               <span
                 onClick={()=>setShowPassword(v=>!v)}
-                style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',cursor:'pointer',userSelect:'none'}}
+                style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',cursor:'pointer',userSelect:'none',width:24,height:24,display:'flex',alignItems:'center'}}
                 title={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
               >
-                {showPassword ? '👁️' : '🙈'}
+                {showPassword ? (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <ellipse cx="12" cy="12" rx="8" ry="5" />
+                    <circle cx="12" cy="12" r="2.5" />
+                  </svg>
+                ) : (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <ellipse cx="12" cy="12" rx="8" ry="5" />
+                    <circle cx="12" cy="12" r="2.5" />
+                    <line x1="4" y1="20" x2="20" y2="4" />
+                  </svg>
+                )}
               </span>
             </div>
             <input className="input" placeholder="Code MFA (si requis)" value={mfa} onChange={e=>setMfa(e.target.value)} />
