@@ -1,0 +1,122 @@
+import React from 'react'
+import {BrowserRouter,Routes,Route,Navigate} from 'react-router-dom'
+import {AuthProvider} from './contexts/AuthContext'
+import Navbar from './components/Navbar'
+import RHLayout from './components/RHLayout'
+import Login from './components/Login'
+import Home from './pages/Home'
+import EmailLoginCallback from './pages/EmailLoginCallback'
+import Dashboard from './pages/Dashboard'
+import Employees from './pages/Employees'
+import EmployeeForm from './pages/EmployeeForm'
+import Leaves from './pages/Leaves'
+import LeaveForm from './pages/LeaveForm'
+import CongesPage from './pages/CongesPage'
+import PermissionsPage from './pages/PermissionsPage'
+import MissionsPage from './pages/MissionsPage'
+import FraisPage from './pages/FraisPage'
+import ProtectedRoute from './components/ProtectedRoute'
+import MFASetup from './components/MFASetup'
+import ChangePassword from './components/ChangePassword'
+import Operations from './pages/Operations'
+import EvaluationsPage from './pages/EvaluationsPage'
+import NotificationsPage from './pages/NotificationsPage'
+import Organisation from './pages/Organisation'
+import Administration from './pages/Administration'
+import UsageStats from './pages/UsageStats'
+import AdminUsageStats from './pages/AdminUsageStats'
+import MissionsIG from './pages/MissionsIG'
+import CongeCalendar from './pages/CongeCalendar'
+import SortiesPage from './pages/SortiesPage'
+import Parametrage from './pages/Parametrage'
+import ModulePlaceholder from './pages/ModulePlaceholder'
+import TasksPage from './pages/TasksPage'
+import EventsPage from './pages/EventsPage'
+import AnalyticsDashboards from './pages/AnalyticsDashboards'
+import EmployeeTimeline from './pages/EmployeeTimeline'
+import OrgChart from './pages/OrgChart'
+import PerformanceReviews from './pages/PerformanceReviews'
+import WorkforcePlanning from './pages/WorkforcePlanning'
+import TalentManagement from './pages/TalentManagement'
+import ClubReview from './pages/ClubReview'
+import SandboxPage from './pages/SandboxPage'
+import AbsencesPage from './pages/AbsencesPage'
+import './index.css'
+
+export default function App(){
+  return (
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <AuthProvider>
+        <Navbar />
+        <Routes>
+          <Route path="/" element={<Navigate to="/rh/home" replace />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/login/email/callback" element={<EmailLoginCallback />} />
+
+          <Route path="/rh" element={<ProtectedRoute><RHLayout /></ProtectedRoute>}>
+            <Route index element={<Navigate to="home" replace />} />
+            <Route path="home" element={<Home />} />
+            <Route path="dashboard" element={<Dashboard />} />
+
+            <Route path="employees" element={<ProtectedRoute allowedRoles={["RH","PCA","ADMIN"]}><Employees /></ProtectedRoute>} />
+            <Route path="employees/:id" element={<ProtectedRoute allowedRoles={["RH","PCA","ADMIN"]}><EmployeeForm /></ProtectedRoute>} />
+            <Route path="employees/new" element={<ProtectedRoute allowedRoles={["RH","PCA","ADMIN"]}><EmployeeForm /></ProtectedRoute>} />
+
+            <Route path="leaves" element={<Leaves />} />
+            <Route path="leaves/new" element={<LeaveForm />} />
+            <Route path="absences" element={<AbsencesPage />} />
+            <Route path="conges" element={<CongesPage />} />
+            <Route path="conges/edit/:id" element={<LeaveForm />} />
+            <Route path="permissions" element={<PermissionsPage />} />
+            <Route path="permissions/edit/:id" element={<LeaveForm />} />
+            <Route path="missions" element={<MissionsPage />} />
+            <Route path="missions/edit/:id" element={<LeaveForm />} />
+            <Route path="frais" element={<FraisPage />} />
+            <Route path="operations" element={<Operations />} />
+            <Route path="missions-ig" element={<MissionsIG />} />
+            <Route path="evaluations" element={<EvaluationsPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="organisation" element={<Organisation />} />
+            <Route path="administration" element={<ProtectedRoute allowedRoles={["RH","DG","PCA","ADMIN"]}><Administration /></ProtectedRoute>} />
+            <Route path="usage-stats" element={<UsageStats />} />
+            <Route path="admin/usage-stats" element={<ProtectedRoute allowedRoles={["RH","DG","PCA","ADMIN"]}><AdminUsageStats /></ProtectedRoute>} />
+            <Route path="mfa" element={<MFASetup />} />
+            <Route path="password" element={<ChangePassword />} />
+            <Route path="calendrier-conge" element={<CongeCalendar />} />
+            <Route path="sorties" element={<SortiesPage />} />
+            <Route path="parametrage" element={<Parametrage />} />
+            <Route path="tasks" element={<TasksPage />} />
+            <Route path="events" element={<EventsPage />} />
+            <Route path="analytics" element={<AnalyticsDashboards />} />
+            <Route path="timeline" element={<EmployeeTimeline />} />
+            <Route path="orgchart" element={<OrgChart />} />
+            <Route path="performance" element={<PerformanceReviews />} />
+            <Route path="workforce" element={<WorkforcePlanning />} />
+            <Route path="talent" element={<TalentManagement />} />
+            <Route path="club-review" element={<ClubReview />} />
+            <Route path="sandbox" element={<SandboxPage />} />
+            <Route path="module/:slug" element={<ModulePlaceholder />} />
+          </Route>
+
+          <Route path="/home" element={<Navigate to="/rh/home" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/rh/dashboard" replace />} />
+          <Route path="/employees" element={<Navigate to="/rh/employees" replace />} />
+          <Route path="/employees/new" element={<Navigate to="/rh/employees/new" replace />} />
+          <Route path="/leaves" element={<Navigate to="/rh/leaves" replace />} />
+          <Route path="/leaves/new" element={<Navigate to="/rh/leaves/new" replace />} />
+          <Route path="/operations" element={<Navigate to="/rh/operations" replace />} />
+          <Route path="/missions-ig" element={<Navigate to="/rh/missions-ig" replace />} />
+          <Route path="/evaluations" element={<Navigate to="/rh/evaluations" replace />} />
+          <Route path="/notifications" element={<Navigate to="/rh/notifications" replace />} />
+          <Route path="/organisation" element={<Navigate to="/rh/organisation" replace />} />
+          <Route path="/administration" element={<Navigate to="/rh/administration" replace />} />
+          <Route path="/usage-stats" element={<Navigate to="/rh/usage-stats" replace />} />
+          <Route path="/admin/usage-stats" element={<Navigate to="/rh/admin/usage-stats" replace />} />
+          <Route path="/mfa" element={<Navigate to="/rh/mfa" replace />} />
+          <Route path="/password" element={<Navigate to="/rh/password" replace />} />
+
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  )
+}

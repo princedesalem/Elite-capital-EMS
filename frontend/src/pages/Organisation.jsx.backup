@@ -1,0 +1,575 @@
+import React, { useState, useEffect } from 'react'
+import api from '../services/api'
+import '../styles/Organisation.css'
+
+export default function Organisation() {
+  const [pays, setPays] = useState([])
+  const [villes, setVilles] = useState([])
+  const [selectedPays, setSelectedPays] = useState(null)
+  const [selectedVille, setSelectedVille] = useState(null)
+  const [activeTab, setActiveTab] = useState('entites') // entites, directions, departements
+  const [loading, setLoading] = useState(false)
+  
+  // Data for tabs
+  const [entitesData, setEntitesData] = useState([])
+  const [directionsData, setDirectionsData] = useState([])
+  const [departementsData, setDepartementsData] = useState([])
+  
+  // Modals
+  const [showAddPaysModal, setShowAddPaysModal] = useState(false)
+  const [showAddVilleModal, setShowAddVilleModal] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(null) // 'entite', 'direction', 'departement'
+  
+  // Form data for autocomplete
+  const [newPaysQuery, setNewPaysQuery] = useState('')
+  const [newVilleQuery, setNewVilleQuery] = useState('')
+  const [worldCountries, setWorldCountries] = useState([])
+  const [worldCities, setWorldCities] = useState([])
+  const [createForm, setCreateForm] = useState({ nom: '', id_entite: '', id_direction: '' })
+  
+  const [error, setError] = useState('')
+
+  // Helper function to format error messages
+  const getErrorMessage = (err) => {
+    if (typeof err.response?.data?.detail === 'string') {
+      return err.response.data.detail
+    } else if (typeof err.response?.data?.detail === 'object') {
+      return JSON.stringify(err.response.data.detail)
+    }
+    return err.message || 'Erreur inconnue'
+  }
+
+  useEffect(() => {
+    loadPays()
+  }, [])
+
+  useEffect(() => {
+    if (selectedPays) {
+      loadVillesByPays()
+    } else {
+      setVilles([])
+    }
+  }, [selectedPays])
+
+  useEffect(() => {
+    if (selectedPays && selectedVille) {
+      loadOrganisationData()
+    }
+  }, [selectedPays, selectedVille, activeTab])
+
+  const loadPays = async () => {
+    try {
+      const res = await api.get('/employees/pays')
+      setPays(res.data || [])
+    } catch (err) {
+      console.error('Erreur chargement pays:', err)
+    }
+  }
+
+  const loadVillesByPays = async () => {
+    if (!selectedPays) return
+    try {
+      const res = await api.get(`/employees/pays/${selectedPays.id_pays}/villes`)
+      setVilles(res.data || [])
+    } catch (err) {
+      console.error('Erreur chargement villes:', err)
+      setVilles([])
+    }
+  }
+
+  const loadOrganisationData = async () => {
+    setLoading(true)
+    try {
+      if (activeTab === 'entites') {
+        const res = await api.get(`/employees/villes/${selectedVille.id_localisation}/entites-structure`)
+        setEntitesData(res.data || [])
+      } else if (activeTab === 'directions') {
+        const res = await api.get(`/employees/villes/${selectedVille.id_localisation}/directions-structure`)
+        setDirectionsData(res.data || [])
+      } else if (activeTab === 'departements') {
+        const res = await api.get(`/employees/villes/${selectedVille.id_localisation}/departements`)
+        setDepartementsData(res.data || [])
+      }
+    } catch (err) {
+      setError('Erreur chargement données: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const searchWorldCountries = async (query) => {
+    if (!query || query.length < 1) {
+      setWorldCountries([])
+      return
+    }
+    try {
+      const res = await api.get(`/employees/world-countries/search?q=${query}`)
+      setWorldCountries(res.data || [])
+    } catch (err) {
+      console.error('Erreur recherche pays:', err)
+    }
+  }
+
+  const searchWorldCities = async (query) => {
+    if (!query || query.length < 1) {
+      setWorldCities([])
+      return
+    }
+    try {
+      const res = await api.get(`/employees/world-cities/search?q=${query}`)
+      setWorldCities(res.data || [])
+    } catch (err) {
+      console.error('Erreur recherche villes:', err)
+    }
+  }
+
+  const handleAddPays = async (country) => {
+    // Vérifier si le pays existe déjà
+    const exists = pays.find(p => p.code_pays.toUpperCase() === country.code.toUpperCase())
+    if (exists) {
+      alert('ELITE CAPITAL DEJA PRESENT')
+      return
+    }
+    try {
+      await api.post('/employees/pays', null, {
+        params: { nom_pays: country.name, code_pays: country.code }
+      })
+      alert(`Pays ${country.name} ajouté avec succès!`)
+      loadPays()
+      setShowAddPaysModal(false)
+      setNewPaysQuery('')
+      setWorldCountries([])
+    } catch (err) {
+      alert('Erreur: ' + getErrorMessage(err))
+    }
+  }
+
+  const handleAddVille = async (city) => {
+    if (!selectedPays) {
+      alert('Veuillez d\'abord sélectionner un pays')
+      return
+    }
+    // Vérifier si la ville existe déjà
+    const exists = villes.find(v => v.ville.toLowerCase() === city.name.toLowerCase())
+    if (exists) {
+      alert('ELITE CAPITAL DEJA PRESENT')
+      return
+    }
+    try {
+      await api.post('/employees/villes', null, {
+        params: { nom: city.name, id_pays: selectedPays.id_pays }
+      })
+      alert(`Ville ${city.name} ajoutée avec succès!`)
+      loadVillesByPays()
+      setShowAddVilleModal(false)
+      setNewVilleQuery('')
+      setWorldCities([])
+    } catch (err) {
+      alert('Erreur: ' + getErrorMessage(err))
+    }  const handleDeletePays = async (id_pays) => {
+    if (!window.confirm('Supprimer ce pays?')) return
+    try {
+      await api.delete(`/employees/pays/${id_pays}`)
+      alert('Pays supprimé!')
+      loadPays()
+    } catch (err) {
+      alert('Erreur: ' + getErrorMessage(err))
+    }
+  }
+
+  const handleDeleteVille = async (id_localisation) => {
+    if (!window.confirm('Supprimer cette ville?')) return
+    try {
+      await api.delete(`/employees/villes/${id_localisation}`)
+      alert('Ville supprimée!')
+      loadVilles()
+    } catch (err) {
+      alert('Erreur: ' + getErrorMessage(err))
+    }
+  }
+
+  const handleCreateItem = async (e) => {
+    e.preventDefault()
+    try {
+      if (showCreateModal === 'entite') {
+        await api.post('/employees/create-entite', null, { params: { nom: createForm.nom } })
+        alert('Entité créée!')
+      } else if (showCreateModal === 'direction') {
+        await api.post('/employees/create-direction', null, {
+          params: { nom: createForm.nom, id_entite: createForm.id_entite }
+        })
+        alert('Direction créée!')
+      } else if (showCreateModal === 'departement') {
+        await api.post('/employees/create-departement', null, {
+          params: {
+            nom: createForm.nom,
+            id_entite: createForm.id_entite,
+            id_direction: createForm.id_direction
+          }
+        })
+        alert('Département créé!')
+      }
+      setShowCreateModal(null)
+      setCreateForm({ nom: '', id_entite: '', id_direction: '' })
+      loadOrganisationData()
+    } catch (err) {
+      alert('Erreur: ' + getErrorMessage(err))
+    }
+  }
+
+  const handleSelectLocation = (paysItem, villeItem) => {
+    setSelectedPays(paysItem)
+    setSelectedVille(villeItem)
+    setActiveTab('entites')
+  }
+
+  const handleSelectPaysForVille = (paysItem) => {
+    setSelectedPays(paysItem)
+  }
+
+  return (
+    <div className="organisation-container">
+      <header className="org-header">
+        <h1>🌍 Organisation</h1>
+        <p>Structure & Implantation des Entités</p>
+      </header>
+
+      <div className="org-content">
+        {!selectedPays || !selectedVille ? (
+          <>
+            {/* Section: Pays & Implantation */}
+            <div className="section-card">
+              <div className="section-header">
+                <h2>🌎 Pays & Implantation</h2>
+                <button
+                  className="btn-add"
+                  onClick={() => setShowAddPaysModal(true)}
+                >
+                  ➕ Ajouter un Pays
+                </button>
+              </div>
+              <div className="pays-buttons-group">
+                {pays.length === 0 && <p className="empty-state">Aucun pays dans la base de données</p>}
+                {pays.map((p) => (
+                  <button 
+                    key={p.id_pays} 
+                    className="pays-button"
+                    onClick={() => handleSelectPaysForVille(p)}
+                    title={`${p.nom_pays} (${p.code_pays})`}
+                  >
+                    <span className="pays-button-flag">{p.flag}</span>
+                    <span className="pays-button-name">{p.nom_pays}</span>
+                    <span className="pays-button-code">{p.code_pays}</span>
+                    <button
+                      className="btn-delete-small"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeletePays(p.id_pays)
+                      }}
+                      title="Supprimer"
+                    >
+                      🗑️
+                    </button>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Section: Villes */}
+            <div className="section-card">
+              <div className="section-header">
+                <h2>🏙️ Villes {selectedPays && `(${selectedPays.nom_pays})`}</h2>
+                <button
+                  className="btn-add"
+                  disabled={!selectedPays}
+                  onClick={() => setShowAddVilleModal(true)}
+                >
+                  ➕ Ajouter une Ville
+                </button>
+              </div>
+              {!selectedPays ? (
+                <div className="empty-state">
+                  Sélectionnez un pays pour voir ses villes
+                </div>
+              ) : (
+                <div className="villes-buttons-group">
+                  {villes.length === 0 && <p className="empty-state">Aucune ville pour ce pays</p>}
+                  {villes.map((v) => (
+                    <button
+                      key={v.id_localisation}
+                      className="ville-button"
+                      onClick={() => handleSelectLocation(selectedPays, v)}
+                      title={`${v.ville}, ${selectedPays?.nom_pays}`}
+                    >
+                      <span className="ville-button-flag">{selectedPays?.flag || '🏳️'}</span>
+                      <span className="ville-button-name">{v.ville}</span>
+                      <span className="ville-button-code">{selectedPays?.code_pays}</span>
+                      <button
+                        className="btn-delete-small"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteVille(v.id_localisation)
+                        }}
+                        title="Supprimer"
+                      >
+                        🗑️
+                      </button>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Selected Location View */}
+            <div className="location-banner">
+              <div className="location-info">
+                <span className="location-flag">{selectedPays?.flag}</span>
+                <h2>{selectedVille.ville}, {selectedPays?.nom_pays}</h2>
+              </div>
+              <button
+                className="btn-back"
+                onClick={() => {
+                  setSelectedPays(null)
+                  setSelectedVille(null)
+                }}
+              >
+                ← Retour
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="tabs-container">
+              <div className="tabs">
+                <button
+                  className={`tab ${activeTab === 'entites' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('entites')}
+                >
+                  🏢 Entités
+                </button>
+                <button
+                  className={`tab ${activeTab === 'directions' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('directions')}
+                >
+                  📂 Directions
+                </button>
+                <button
+                  className={`tab ${activeTab === 'departements' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('departements')}
+                >
+                  📋 Départements
+                </button>
+              </div>
+
+              <button
+                className="btn-create"
+                onClick={() => setShowCreateModal(activeTab === 'entites' ? 'entite' : activeTab === 'directions' ? 'direction' : 'departement')}
+              >
+                ➕ Créer {activeTab === 'entites' ? 'Entité' : activeTab === 'directions' ? 'Direction' : 'Département'}
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div className="tab-content">
+              {loading && <p className="loading">Chargement...</p>}
+              {error && <p className="error-message">{error}</p>}
+
+              {activeTab === 'entites' && !loading && (
+                <div className="data-grid">
+                  {entitesData.length === 0 && <p className="empty-state">Aucune entité</p>}
+                  {entitesData.map((item) => (
+                    <div key={item.id_entite} className="data-card">
+                      <h3>{item.nom}</h3>
+                      <p className="data-meta">ID: {item.id_entite}</p>
+                      <p className="data-meta">Directions: {item.directions_count || 0}</p>
+                      <p className="data-meta">Départements: {item.departements_count || 0}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {activeTab === 'directions' && !loading && (
+                <div className="data-grid">
+                  {directionsData.length === 0 && <p className="empty-state">Aucune direction</p>}
+                  {directionsData.map((item) => (
+                    <div key={item.id_direction} className="data-card">
+                      <h3>{item.nom}</h3>
+                      <p className="data-meta">Entité: {item.entite_nom || 'N/A'}</p>
+                      <p className="data-meta">Départements: {item.departements_count || 0}</p>
+                      <p className="data-meta">ID: {item.id_direction}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {activeTab === 'departements' && !loading && (
+                <div className="data-grid">
+                  {departementsData.length === 0 && <p className="empty-state">Aucun département</p>}
+                  {departementsData.map((item) => (
+                    <div key={item.dept_id} className="data-card">
+                      <h3>{item.nom}</h3>
+                      <p className="data-meta">Direction: {item.direction_nom || 'N/A'}</p>
+                      <p className="data-meta">Entité: {item.entite_nom || 'N/A'}</p>
+                      <p className="data-meta">ID: {item.dept_id}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Modal: Add Pays */}
+      {showAddPaysModal && (
+        <div className="modal-overlay" onClick={() => setShowAddPaysModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>➕ Ajouter un Pays</h2>
+            <input
+              type="text"
+              placeholder="Tapez un nom de pays (ex: Congo, Cameroon)"
+              value={newPaysQuery}
+              onChange={(e) => {
+                setNewPaysQuery(e.target.value)
+                searchWorldCountries(e.target.value)
+              }}
+              className="modal-input"
+              autoFocus
+            />
+            <div className="autocomplete-results">
+              {worldCountries.length === 0 && newPaysQuery && (
+                <p className="empty-state">Aucun pays trouvé</p>
+              )}
+              {worldCountries.map((country) => (
+                <div
+                  key={country.code}
+                  className="autocomplete-item"
+                  onClick={() => handleAddPays(country)}
+                >
+                  <span className="autocomplete-flag">{country.flag}</span>
+                  <span>{country.name}</span>
+                  <span className="autocomplete-code">{country.code}</span>
+                </div>
+              ))}
+            </div>
+            <button className="btn-cancel" onClick={() => setShowAddPaysModal(false)}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Add Ville */}
+      {showAddVilleModal && (
+        <div className="modal-overlay" onClick={() => setShowAddVilleModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>➕ Ajouter une Ville</h2>
+            {!selectedPays && (
+              <p className="warning-message">⚠️ Sélectionnez d'abord un pays en cliquant sur un bouton de pays ci-dessus</p>
+            )}
+            {selectedPays && (
+              <>
+                <p className="info-message">📍 Ajout d'une ville pour: <strong>{selectedPays.nom_pays} {selectedPays.flag}</strong></p>
+                <input
+                  type="text"
+                  placeholder="Tapez un nom de ville (ex: Yaoundé, Lagos)"
+                  value={newVilleQuery}
+                  onChange={(e) => {
+                    setNewVilleQuery(e.target.value)
+                    searchWorldCities(e.target.value)
+                  }}
+                  className="modal-input"
+                  autoFocus
+                />
+                <div className="autocomplete-results">
+                  {worldCities.length === 0 && newVilleQuery && (
+                    <p className="empty-state">Aucune ville trouvée</p>
+                  )}
+                  {worldCities.map((city, idx) => (
+                    <div
+                      key={idx}
+                      className="autocomplete-item"
+                      onClick={() => handleAddVille(city)}
+                    >
+                      <span>🏙️</span>
+                      <span>{city.name}</span>
+                      <span className="autocomplete-code">{city.country_code}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            <button className="btn-cancel" onClick={() => setShowAddVilleModal(false)}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Create Entity/Direction/Department */}
+      {showCreateModal && (
+        <div className="modal-overlay" onClick={() => setShowCreateModal(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>
+              ➕ Créer {showCreateModal === 'entite' ? 'Entité' : showCreateModal === 'direction' ? 'Direction' : 'Département'}
+            </h2>
+            <form onSubmit={handleCreateItem}>
+              <input
+                type="text"
+                placeholder="Nom"
+                value={createForm.nom}
+                onChange={(e) => setCreateForm({ ...createForm, nom: e.target.value })}
+                className="modal-input"
+                required
+              />
+              {showCreateModal === 'direction' && (
+                <input
+                  type="number"
+                  placeholder="ID Entité"
+                  value={createForm.id_entite}
+                  onChange={(e) => setCreateForm({ ...createForm, id_entite: e.target.value })}
+                  className="modal-input"
+                  required
+                />
+              )}
+              {showCreateModal === 'departement' && (
+                <>
+                  <input
+                    type="number"
+                    placeholder="ID Entité"
+                    value={createForm.id_entite}
+                    onChange={(e) => setCreateForm({ ...createForm, id_entite: e.target.value })}
+                    className="modal-input"
+                    required
+                  />
+                  <input
+                    type="number"
+                    placeholder="ID Direction"
+                    value={createForm.id_direction}
+                    onChange={(e) => setCreateForm({ ...createForm, id_direction: e.target.value })}
+                    className="modal-input"
+                    required
+                  />
+                </>
+              )}
+              <div className="modal-buttons">
+                <button type="submit" className="btn-submit">
+                  Créer
+                </button>
+                <button
+                  type="button"
+                  className="btn-cancel"
+                  onClick={() => setShowCreateModal(null)}
+                >
+                  Annuler
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+

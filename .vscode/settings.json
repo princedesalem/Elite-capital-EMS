@@ -1,0 +1,9 @@
+{
+  "python.defaultInterpreterPath": "",
+  "python.languageServer": "None",
+  "pylance.enabled": false,
+  "python.disableInstallationCheck": true,
+  "python.experiments.enabled": false,
+  "python.terminal.activateEnvironment": false,
+  "python.createEnvironment.trigger": "off"
+}
