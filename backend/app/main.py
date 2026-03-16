@@ -28,18 +28,30 @@ app = FastAPI(title="Extranet ELITE CAPITAL - Backend")
 # Add CORS middleware FIRST, before audit middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://elitecapitalems.netlify.app",
+        "https://69b81a2f94cfe526a986b71e--elitecapitalems.netlify.app",
+        "*"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+# Middleware global CORS (force header sur toutes les réponses)
+@app.middleware('http')
+async def global_cors_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = '*'
+    return response
+
+# Audit middleware (après CORS)
 @app.middleware('http')
 async def audit_middleware(request: Request, call_next):
-    # Process request first, then audit
     resp = await call_next(request)
-    
-    # Audit logging (without reading body to avoid blocking)
     try:
         db = SessionLocal()
         actor = None
@@ -53,11 +65,7 @@ async def audit_middleware(request: Request, call_next):
                 pass
         action = f"{request.method} {request.url.path}"
         ip = request.client.host if request.client else None
-        
-        # Log to file
         audit_logger.info(json.dumps({"actor": actor, "action": action, "ip": ip}))
-        
-        # Log to DB
         try:
             db.add(models.AuditLog(actor=actor, action=action, entity='request', entity_id=None, detail=None, ip=ip, request_body=None))
             db.commit()
@@ -67,7 +75,6 @@ async def audit_middleware(request: Request, call_next):
             db.close()
     except Exception:
         pass
-    
     return resp
 
 

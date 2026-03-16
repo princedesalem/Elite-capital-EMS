@@ -223,11 +223,22 @@ def get_departements(id_direction: int = None, db: Session = Depends(get_db)):
     query = db.query(models.Departement)
     if id_direction:
         query = query.filter(models.Departement.id_direction == id_direction)
-    departements = query.all()
-    return [
-        {"value": d.dept_id, "label": d.dept_name}
-        for d in departements
-    ]
+    from fastapi import Response
+    import logging, json
+    try:
+        departements = query.all()
+        result = [
+            {"value": d.dept_id, "label": d.nom}
+            for d in departements
+        ]
+        response = Response(content=json.dumps(result), media_type="application/json")
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        return response
+    except Exception as e:
+        logging.error(f"departements autocomplete error: {e}")
+        response = Response(content=json.dumps({"detail": str(e)}), status_code=500, media_type="application/json")
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        return response
 
 
 @router.get('/autocomplete/directions')
@@ -570,12 +581,32 @@ def get_user_info_by_login(login: str, db: Session = Depends(get_db)):
 
 # ===== ENDPOINTS STATISTIQUES D'UTILISATION =====
 
+from fastapi import Response
+import logging
 @router.post('/sessions/login')
-def record_session_login(matricule: int, request: Request, db: Session = Depends(get_db)):
-    """Enregistrer le login d'un utilisateur"""
+async def record_session_login(request: Request, db: Session = Depends(get_db)):
+    """Enregistrer le login d'un utilisateur (debug CORS/422)"""
+    try:
+        data = await request.json()
+    except Exception:
+        data = await request.body()
+    logging.warning(f"/sessions/login received: {data}")
+    matricule = None
+    if isinstance(data, dict):
+        matricule = data.get('matricule')
+    elif isinstance(data, (bytes, str)):
+        import json
+        try:
+            data_dict = json.loads(data)
+            matricule = data_dict.get('matricule')
+        except Exception:
+            pass
+    if not matricule:
+        resp = Response(content='{"detail": "matricule manquant"}', status_code=422, media_type="application/json")
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get('user-agent', '')
-    
     session = models.SessionUtilisation(
         matricule=matricule,
         date_connexion=datetime.utcnow(),
@@ -585,7 +616,9 @@ def record_session_login(matricule: int, request: Request, db: Session = Depends
     db.add(session)
     db.commit()
     db.refresh(session)
-    return {'id_session': session.id_session, 'status': 'logged_in'}
+    resp = Response(content=f'{{"id_session": {session.id_session}, "status": "logged_in"}}', media_type="application/json")
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
 
 
 @router.put('/sessions/{id_session}/logout')
