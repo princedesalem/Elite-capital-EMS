@@ -170,7 +170,11 @@ export default function RHLayout() {
           {MODULES.map(mod => {
             const isOpen = !!open[mod.id]
             const visibleSubs = mod.id === 'rh'
-              ? mod.subs.filter(s => (!s.adminOnly || isAdminRH) && (!s.adminMgmtOnly || isAdminMgmt))
+              ? mod.subs.filter(s =>
+                  (!s.adminOnly || isAdminRH) &&
+                  (!s.adminMgmtOnly || isAdminMgmt) &&
+                  (!s.hideForEmploye || (role && role !== 'EMPLOYE'))
+                )
               : mod.subs
             return (
               <div key={mod.id} style={{marginBottom:'1px'}}>
