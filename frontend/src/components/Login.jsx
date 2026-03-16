@@ -7,6 +7,7 @@ import {validatePasswordPolicy} from '../utils/passwordPolicy'
 export default function Login(){
   const [matricule,setMatricule]=useState('')
   const [password,setPassword]=useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [mfa,setMfa]=useState('')
   const [err,setErr]=useState(null)
   const [email,setEmail]=useState('')
@@ -53,7 +54,23 @@ export default function Login(){
           <h2>Connexion par matricule</h2>
           <form onSubmit={submit} style={{display:'grid',gap:8}}>
             <input className="input" placeholder="Matricule" value={matricule} onChange={e=>setMatricule(e.target.value)} />
-            <input className="input" placeholder="Mot de passe" value={password} onChange={e=>setPassword(e.target.value)} type="password" />
+            <div style={{position:'relative'}}>
+              <input
+                className="input"
+                placeholder="Mot de passe"
+                value={password}
+                onChange={e=>setPassword(e.target.value)}
+                type={showPassword ? "text" : "password"}
+                style={{paddingRight:32}}
+              />
+              <span
+                onClick={()=>setShowPassword(v=>!v)}
+                style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',cursor:'pointer',userSelect:'none'}}
+                title={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+              >
+                {showPassword ? '👁️' : '🙈'}
+              </span>
+            </div>
             <input className="input" placeholder="Code MFA (si requis)" value={mfa} onChange={e=>setMfa(e.target.value)} />
             {err && <div className="error">{err}</div>}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
