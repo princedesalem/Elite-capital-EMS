@@ -2,12 +2,14 @@ import React, { useState } from 'react'
 import CongesPage from './CongesPage'
 import PermissionsPage from './PermissionsPage'
 import SortiesPage from './SortiesPage'
-import { CalendarDays, Clock, LogOut } from 'lucide-react'
+import RemplacantsPage from './RemplacantsPage'
+import { CalendarDays, Clock, LogOut, Users } from 'lucide-react'
 
 const TABS = [
-  { id: 'conges',      label: 'Congés',              Icon: CalendarDays },
-  { id: 'permissions', label: 'Permissions',          Icon: Clock },
-  { id: 'sorties',     label: 'Demandes de Sorties',  Icon: LogOut },
+  { id: 'conges',       label: 'Congés',              Icon: CalendarDays },
+  { id: 'permissions',  label: 'Permissions',          Icon: Clock },
+  { id: 'sorties',      label: 'Demandes de Sorties',  Icon: LogOut },
+  { id: 'remplacants',  label: 'Remplaçants',          Icon: Users },
 ]
 
 export default function AbsencesPage() {
@@ -63,6 +65,7 @@ export default function AbsencesPage() {
         {activeTab === 'conges'      && <CongesPage />}
         {activeTab === 'permissions' && <PermissionsPage />}
         {activeTab === 'sorties'     && <SortiesPage />}
+        {activeTab === 'remplacants' && <RemplacantsPage />}
       </div>
     </div>
   )

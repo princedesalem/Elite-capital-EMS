@@ -1,7 +1,9 @@
 import React, {useState} from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 
 export default function ChangePassword(){
+  const navigate = useNavigate()
   const [mat, setMat] = useState('')
   const [oldp, setOldp] = useState('')
   const [newp, setNewp] = useState('')
@@ -25,7 +27,8 @@ export default function ChangePassword(){
           <input className="input" placeholder="Ancien mot de passe" type="password" value={oldp} onChange={e=>setOldp(e.target.value)} />
           <input className="input" placeholder="Nouveau mot de passe" type="password" value={newp} onChange={e=>setNewp(e.target.value)} />
           {msg && <div className="small">{msg}</div>}
-          <div style={{display:'flex',justifyContent:'flex-end'}}>
+          <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+            <button className="button" type="button" onClick={() => navigate(-1)} style={{background:'#64748b'}}>Annuler</button>
             <button className="button" type="submit">Enregistrer</button>
           </div>
         </form>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
+import ModifiedBadge from './ModifiedBadge';
 
 function StatusIcon({ type, size = 22 }) {
   const common = {
@@ -24,7 +25,7 @@ function StatusIcon({ type, size = 22 }) {
   return <svg {...common}>{icons[type]}</svg>;
 }
 
-const ProgressionValidation = ({ idOperation, typeDefault = null }) => {
+const ProgressionValidation = ({ idOperation, typeDefault = null, onClose = null }) => {
   const [progression, setProgression] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -75,7 +76,7 @@ const ProgressionValidation = ({ idOperation, typeDefault = null }) => {
     );
   }
 
-  const { etapes, progression: percentProgression, statut_final, demandeur, type_demande, date_demande } = progression;
+  const { etapes, progression: percentProgression, statut_final, demandeur, type_demande, date_demande, est_modifie, date_modification } = progression;
 
   const getStatusClass = () => {
     if (statut_final.includes('REFUSÉE')) return 'refusee';
@@ -110,15 +111,34 @@ const ProgressionValidation = ({ idOperation, typeDefault = null }) => {
             <div className="progression-header-title">
               <span className="progression-status-icon"><StatusIcon type={getStatusIcon()} /></span>
               <div>
-                <h2>Progression de Validation</h2>
+                <h2>Progression de validation</h2>
                 <p className="progression-subtitle">
                   {demandeur && <span>{demandeur.nom_complet} - </span>}
                   <strong>{type_demande || typeDefault || 'Demande'}</strong>
                 </p>
+                <div style={{ marginTop: 8 }}>
+                  <ModifiedBadge estModifie={est_modifie} dateModification={date_modification} />
+                </div>
               </div>
             </div>
-            <div className={`progression-status-badge ${getStatusClass()}`}>
-              {statut_final}
+            <div className="progression-header-actions">
+              <div className={`progression-status-badge ${getStatusClass()}`}>
+                {statut_final}
+              </div>
+              {onClose && (
+                <button
+                  type="button"
+                  className="progression-close-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose();
+                  }}
+                  aria-label="Fermer"
+                  title="Fermer"
+                >
+                  x
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -199,6 +219,11 @@ const ProgressionValidation = ({ idOperation, typeDefault = null }) => {
           <div className="progression-footer">
             <span className="footer-icon"><StatusIcon type="calendar" size={14} /></span>
             Demandée le <strong>{formatDate(date_demande)}</strong>
+            {est_modifie && date_modification && (
+              <span style={{ marginLeft: 12 }}>
+                • Modifiée le <strong>{formatDate(date_modification)}</strong>
+              </span>
+            )}
           </div>
         )}
       </div>

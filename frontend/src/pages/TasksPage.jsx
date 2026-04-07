@@ -26,24 +26,9 @@ const emptyForm = {
   assigne_a: '',
 }
 
-// Local storage key for tasks (no backend endpoint yet)
-const STORAGE_KEY = 'ems_tasks_v1'
-
-function loadTasks() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-  } catch {
-    return []
-  }
-}
-
-function saveTasks(tasks) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks))
-}
-
 export default function TasksPage() {
   const { user } = useAuth()
-  const [tasks, setTasks] = useState(() => loadTasks())
+  const [tasks, setTasks] = useState([])
   const [employees, setEmployees] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -51,46 +36,71 @@ export default function TasksPage() {
   const [filterStatut, setFilterStatut] = useState('tous')
   const [filterPrio, setFilterPrio] = useState('tous')
   const [searchQ, setSearchQ] = useState('')
+  const [error, setError] = useState('')
 
-  const isAdmin = ['RH', 'DG', 'PCA', 'ADMIN'].includes(user?.role || '')
+  const roleValue = String(user?.role || '').toUpperCase()
+  const isAdmin = ['RH', 'DG', 'PCA', 'ADMIN'].includes(roleValue)
+
+  async function loadTasks() {
+    if (!user?.matricule) return
+    try {
+      const response = await api.get(`/api/tasks/${user.matricule}`, { params: { role: roleValue } })
+      setTasks(Array.isArray(response.data) ? response.data : [])
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Impossible de charger les tâches')
+    }
+  }
+
+  useEffect(() => {
+    loadTasks()
+  }, [user?.matricule, roleValue])
 
   useEffect(() => {
     if (isAdmin) {
-      api.get('/employees').then(r => setEmployees(r.data || [])).catch(() => {})
+      api.get('/employees/').then(r => setEmployees(r.data || [])).catch(() => {})
     }
   }, [isAdmin])
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    let updated
-    if (editingId) {
-      updated = tasks.map(t => t.id === editingId ? { ...t, ...form, updated_at: new Date().toISOString() } : t)
-    } else {
-      const newTask = {
-        ...form,
-        id: Date.now(),
-        created_by: user?.matricule,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }
-      updated = [newTask, ...tasks]
+    setError('')
+    const payload = {
+      ...form,
+      matricule_actor: user?.matricule,
+      role_actor: roleValue,
     }
-    setTasks(updated)
-    saveTasks(updated)
-    resetForm()
+    try {
+      if (editingId) {
+        await api.put(`/api/tasks/${editingId}`, payload)
+      } else {
+        await api.post('/api/tasks/', payload)
+      }
+      await loadTasks()
+      resetForm()
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Erreur lors de l’enregistrement de la tâche')
+    }
   }
 
-  const deleteTask = (id) => {
+  const deleteTask = async (id) => {
     if (!window.confirm('Supprimer cette tâche ?')) return
-    const updated = tasks.filter(t => t.id !== id)
-    setTasks(updated)
-    saveTasks(updated)
+    setError('')
+    try {
+      await api.delete(`/api/tasks/${id}`, { params: { matricule_actor: user?.matricule, role_actor: roleValue } })
+      await loadTasks()
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Erreur lors de la suppression de la tâche')
+    }
   }
 
-  const changeStatut = (id, statut) => {
-    const updated = tasks.map(t => t.id === id ? { ...t, statut, updated_at: new Date().toISOString() } : t)
-    setTasks(updated)
-    saveTasks(updated)
+  const changeStatut = async (id, statut) => {
+    setError('')
+    try {
+      await api.patch(`/api/tasks/${id}/statut`, { statut, matricule_actor: user?.matricule, role_actor: roleValue })
+      await loadTasks()
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Erreur lors du changement de statut')
+    }
   }
 
   const editTask = (task) => {
@@ -150,6 +160,8 @@ export default function TasksPage() {
           </button>
         </div>
       </div>
+
+        {error && <div style={{ background: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: '0.9rem' }}>{error}</div>}
 
       {/* Stats bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>

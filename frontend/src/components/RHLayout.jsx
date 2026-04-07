@@ -1,6 +1,7 @@
-import React, {useState} from 'react'
+import React, {useState, useEffect} from 'react'
 import {NavLink, Outlet, useLocation} from 'react-router-dom'
 import {useAuth} from '../contexts/AuthContext'
+import api from '../services/api'
 
 const SIDEBAR_BG = '#112033'
 const SIDEBAR_BG_ALT = '#17283d'
@@ -59,12 +60,13 @@ const MODULES = [
     icon: 'users',
     label: 'Ressources Humaines',
     subs: [
-      {label: 'Employés', path: '/rh/employees', adminOnly: true},
-      {label: 'Administration', path: '/rh/administration', adminMgmtOnly: true},
+      {label: 'Employés', path: '/rh/employees'},
+      {label: 'Administration', path: '/rh/administration'},
       {label: 'Absences', path: '/rh/absences', isGroup: true, groupSubs: [
         {label: 'Congés',            path: '/rh/conges'},
         {label: 'Permissions',       path: '/rh/permissions'},
         {label: 'Demandes de Sortie',path: '/rh/sorties'},
+        {label: 'Remplaçants',       path: '/rh/remplacants'},
       ]},
       {label: 'Opérations', path: '/rh/operations'},
       {label: 'Missions', path: '/rh/missions', isGroup: true, groupSubs: [
@@ -98,8 +100,9 @@ const MODULES = [
 ]
 
 function getInitialOpen(pathname) {
+  if (!pathname || pathname === '/rh' || pathname === '/rh/' || pathname === '/rh/home' || pathname === '/rh/dashboard') return null
   const mod = MODULES.find(m => m.subs.some(s => pathname.startsWith(s.path)))
-  return mod ? mod.id : 'rh'
+  return mod ? mod.id : null
 }
 
 function quickLink(isActive) {
@@ -128,15 +131,44 @@ function subLink(isActive) {
 export default function RHLayout() {
   const {user} = useAuth()
   const location = useLocation()
-  const role = user?.role || ''
-  const isAdminRH = ['RH','PCA','ADMIN'].includes(role)
-  const isAdminStats = ['RH','DG','PCA','ADMIN'].includes(role)
-  const isAdminMgmt = ['RH','DG','PCA','ADMIN'].includes(role)
+  const role = String(user?.role || '').toUpperCase()
+  const isAdminRH = ['RH','PCA','ADMIN','AG'].includes(role)
+  const isAdminStats = ['RH','DG','PCA','ADMIN','AG'].includes(role)
+  const isAdminMgmt = ['RH','PCA','ADMIN','AG'].includes(role)
+
+  const [userFonction, setUserFonction] = useState('')
+  useEffect(() => {
+    const matricule = user?.matricule || user?.sub
+    if (!matricule) return
+    api.get(`/employees/${matricule}`)
+      .then(r => setUserFonction(r.data?.fonction || ''))
+      .catch(() => {})
+  }, [user])
+
+  const isFullAccessRole = ['ADMIN', 'PCA', 'AG'].includes(role)
+  const hiddenByRole = {
+    EMPLOYE: new Set(['Tâches', 'Analytics RH', 'Workforce Planning', 'Talent Management', 'Sandbox']),
+    RESPONSABLE: new Set(['Tâches', 'Workforce Planning', 'Talent Management', 'Sandbox', 'Workflow']),
+    DIRECTEUR: new Set(['Tâches', 'Workforce Planning', 'Talent Management', 'Sandbox']),
+    DG: new Set(['Tâches', 'Workforce Planning', 'Talent Management', 'Sandbox']),
+  }
+
+  const canSeeModule = () => true
+
+  const canSeeSub = (sub) => {
+    if (sub.label === 'Missions IG') {
+      return String(userFonction).toLowerCase().includes('inspecteur')
+    }
+    if (isFullAccessRole || role === 'RH') return true
+    const hidden = hiddenByRole[role]
+    if (!hidden) return true
+    return !hidden.has(sub.label)
+  }
 
   const [open, setOpen] = useState(() => ({[getInitialOpen(location.pathname)]: true}))
   const toggle = id => setOpen(p => ({...p, [id]: !p[id]}))
 
-  const absencePaths = ['/rh/absences', '/rh/conges', '/rh/permissions', '/rh/sorties']
+  const absencePaths = ['/rh/absences', '/rh/conges', '/rh/permissions', '/rh/sorties', '/rh/remplacants']
   const missionPaths = ['/rh/missions', '/rh/frais', '/rh/missions-ig']
   const [openGroups, setOpenGroups] = useState(() => {
     const init = {}
@@ -167,14 +199,23 @@ export default function RHLayout() {
           <div style={{fontSize:'0.72rem', color:SIDEBAR_MUTED, padding:'0 8px 8px', letterSpacing:'0.07em', textTransform:'uppercase', fontWeight:700}}>Modules</div>
 
           {/* Accordion modules */}
-          {MODULES.map(mod => {
+          {MODULES.filter(canSeeModule).map(mod => {
             const isOpen = !!open[mod.id]
             const visibleSubs = mod.id === 'rh'
-              ? mod.subs.filter(s =>
-                  (!s.adminOnly || isAdminRH) &&
-                  (!s.adminMgmtOnly || isAdminMgmt) &&
-                  (!s.hideForEmploye || (role && role !== 'EMPLOYE'))
-                )
+              ? mod.subs
+                .filter(s => (!s.adminOnly || isAdminRH) && (!s.adminMgmtOnly || isAdminMgmt))
+                .map((s) => {
+                  if (!s.isGroup) return s
+                  return {
+                    ...s,
+                    groupSubs: (s.groupSubs || []).filter(canSeeSub),
+                  }
+                })
+                .filter((s) => {
+                  if (!canSeeSub(s)) return false
+                  if (!s.isGroup) return true
+                  return Array.isArray(s.groupSubs) && s.groupSubs.length > 0
+                })
               : mod.subs
             return (
               <div key={mod.id} style={{marginBottom:'1px'}}>
@@ -198,7 +239,7 @@ export default function RHLayout() {
                               onClick={() => toggleGroup(s.path)}
                               style={{
                                 ...subLink(grpActive),
-                                width: '100%', border: 'none', cursor: 'pointer',
+                                width: '100%', cursor: 'pointer',
                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                                 background: grpActive ? 'rgba(255,255,255,0.08)' : 'transparent',
                               }}
@@ -242,6 +283,7 @@ export default function RHLayout() {
           <div style={{height:'1px', background:SIDEBAR_BORDER, margin:'10px 0'}} />
 
           {/* Stats & admin */}
+          {['ADMIN','PCA','AG'].includes(role) && <NavLink to="/rh/utilisateurs" style={({isActive})=>quickLink(isActive)}><Icon name="users" /> Utilisateurs</NavLink>}
           <NavLink to="/rh/usage-stats" style={({isActive})=>quickLink(isActive)}><Icon name="usage" /> Utilisation</NavLink>
           {isAdminStats && <NavLink to="/rh/admin/usage-stats" style={({isActive})=>quickLink(isActive)}><Icon name="shield" /> Stats Admin</NavLink>}
 

@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   db:
     image: mysql:8.0
@@ -21,6 +20,16 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: '60'
       APP_URL: http://localhost:5173
       INIT_ADMIN_PW: ChangeMe123!@#
+      # Web Push (VAPID) — génération automatique
+      WEBPUSH_PUBLIC_KEY: BH4nCKU6RhzEuXBYjFpN9M-2ensb3oZJZOqhZStMiOkzzNFd0ChJIvx-rMy90Gys8wbBFhiFmkQoZDapSl2cnhk
+      WEBPUSH_PRIVATE_KEY: _bsR9XGPjJzW-X9DwCgvaD4n9oSN_IQTt5HpvUvaggo
+      WEBPUSH_SUBJECT: mailto:admin@elitecapital.com
+      # SMTP Gmail — remplir SMTP_USER et SMTP_PASS pour activer les emails
+      SMTP_ENABLED: 'false'
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: '587'
+      SMTP_USER: votre-adresse@gmail.com
+      SMTP_PASS: votre-mot-de-passe-application
     ports:
       - '8000:8000'
     depends_on:
@@ -42,6 +51,39 @@ services:
       - ./frontend:/app
       - /app/node_modules
     command: ["npm", "run", "dev", "--", "--host"]
+
+  backend-test:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: sqlite:////app/tests/test_suite.db
+      SECRET_KEY: test-secret-key
+      ACCESS_TOKEN_EXPIRE_MINUTES: '60'
+      APP_URL: http://localhost:5173
+    profiles: ['test']
+    volumes:
+      - ./backend:/app
+    working_dir: /app
+    command: ["sh", "-c", "pytest -q"]
+
+  frontend-test:
+    image: node:20-slim
+    profiles: ['test']
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    environment:
+      - NODE_OPTIONS=--max-old-space-size=4096
+    command: ["sh", "-c", "npm install --silent --no-audit --no-fund && npm run test"]
+
+  frontend-e2e-test:
+    image: mcr.microsoft/playwright:v1.53.0-jammy
+    profiles: ['test']
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    command: ["sh", "-c", "npm install --silent --no-audit --no-fund && npm run test:e2e -- e2e/sorties-visual.spec.js"]
 
 volumes:
   db_data:

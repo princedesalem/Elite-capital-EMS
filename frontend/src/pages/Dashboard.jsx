@@ -22,8 +22,31 @@ export default function Dashboard(){
   const [analytics, setAnalytics] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [activeTab, setActiveTab] = useState('personnel') // 'personnel', 'departements', 'organisation'
+  const [activeTab, setActiveTab] = useState('personnel') // 'personnel', 'departements'
   const [activeSlices, setActiveSlices] = useState({})
+
+  const normalizedRole = String(analytics?.role || employe?.role || user?.role || '').toUpperCase()
+  const canViewRhDashboard = Boolean(analytics?.show_org_stats)
+
+  const getDashboardLabel = (role) => {
+    const upperRole = String(role || '').toUpperCase()
+    switch(upperRole) {
+      case 'RESPONSABLE':
+        return 'Dashboard Département'
+      case 'DIRECTEUR':
+        return 'Dashboard Direction'
+      case 'RH':
+      case 'ADMIN':
+        return 'Dashboard RH'
+      case 'DG':
+        return 'Dashboard Entité'
+      case 'PCA':
+      case 'AG':
+        return 'Dashboard Entités'
+      default:
+        return 'Dashboard RH'
+    }
+  }
 
   useEffect(() => {
     const loadEmployeInfo = async () => {
@@ -232,8 +255,8 @@ export default function Dashboard(){
           {/* ANALYTICS */}
           {analytics && (
             <>
-              {/* ONGLETS (si role supérieur à EMPLOYE) */}
-              {['RESPONSABLE', 'DIRECTEUR', 'DG', 'RH', 'ADMIN', 'PCA', 'AG'].includes(employe.role || user?.role) && (
+              {/* ONGLETS role-based: Mes operations personnelles + Dashboard RH */}
+              {canViewRhDashboard && (
                 <div style={{ 
                   display: 'flex', 
                   gap: '6px', 
@@ -257,7 +280,7 @@ export default function Dashboard(){
                       fontWeight: activeTab === 'personnel' ? 'bold' : 'normal'
                     }}
                   >
-                    Personnel
+                    Mes operations personnelles
                   </button>
                   <button 
                     onClick={() => setActiveTab('departements')}
@@ -272,28 +295,13 @@ export default function Dashboard(){
                       fontWeight: activeTab === 'departements' ? 'bold' : 'normal'
                     }}
                   >
-                    Entreprise - Départements
-                  </button>
-                  <button 
-                    onClick={() => setActiveTab('organisation')}
-                    style={{
-                      padding: '8px 16px',
-                      background: activeTab === 'organisation' ? 'linear-gradient(135deg, #021630 0%, #ce2b2b 100%)' : '#f0f0f0',
-                      color: activeTab === 'organisation' ? 'white' : '#333',
-                      border: 'none',
-                      borderRadius: '4px 4px 0 0',
-                      cursor: 'pointer',
-                      fontSize: '0.9rem',
-                      fontWeight: activeTab === 'organisation' ? 'bold' : 'normal'
-                    }}
-                  >
-                    Entreprise - Organisation
+                    {getDashboardLabel(normalizedRole)}
                   </button>
                 </div>
               )}
 
               {/* DASHBOARD PERSONNEL */}
-              {(activeTab === 'personnel' || !['RESPONSABLE', 'DIRECTEUR', 'DG', 'RH', 'ADMIN', 'PCA', 'AG'].includes(employe.role || user?.role)) && (
+              {(activeTab === 'personnel' || !canViewRhDashboard) && (
               <>
               {/* TITRE SECTION MES OPÉRATIONS */}
               <div style={{ 
@@ -403,7 +411,7 @@ export default function Dashboard(){
               )}
 
               {/* ONGLET DÉPARTEMENTS - Opérations et Employés */}
-              {activeTab === 'departements' && analytics.perimetre && analytics.perimetre.total_operations > 0 && (
+              {activeTab === 'departements' && analytics.show_org_stats && (
                 <>
                   <div style={{ 
                     background: 'linear-gradient(135deg, #021630 0%, #ce2b2b 100%)',
@@ -414,7 +422,8 @@ export default function Dashboard(){
                     marginBottom: '6px'
                   }}>
                     <h2 style={{ margin: 0, fontSize: '1rem' }}>
-                      Entreprise - Départements ({analytics.role || ''})
+                      {getDashboardLabel(normalizedRole)} - Perimetre {normalizedRole ? `(${normalizedRole})` : ''}
+                      {analytics.scope_level ? ` - ${String(analytics.scope_level).toUpperCase()}` : ''}
                     </h2>
                   </div>
 
@@ -703,8 +712,8 @@ export default function Dashboard(){
                 </>
               )}
 
-              {/* ONGLET ORGANISATION - Pays, Villes, KPIs Géographiques */}
-              {activeTab === 'organisation' && analytics.show_org_stats && (
+              {/* Section organisation integree au Dashboard RH */}
+              {activeTab === 'departements' && analytics.show_org_stats && (
                 <>
                   <div style={{ 
                     background: 'linear-gradient(135deg, #021630 0%, #ce2b2b 100%)',
@@ -714,7 +723,7 @@ export default function Dashboard(){
                     marginTop: '8px',
                     marginBottom: '6px'
                   }}>
-                    <h2 style={{ margin: 0, fontSize: '1rem' }}>Entreprise - Organisation</h2>
+                    <h2 style={{ margin: 0, fontSize: '1rem' }}>Dashboard RH - Organisation</h2>
                   </div>
 
                   {/* ORGANISATION - KPIs PAR PAYS */}

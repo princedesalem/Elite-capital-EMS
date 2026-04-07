@@ -1,16 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
+import AvatarCircle from '../components/AvatarCircle'
 import { Users, Plus, X, Star, Calendar, ChevronDown } from 'lucide-react'
 import '../styles/Operations.css'
 
 const ACCENT = '#ce2b2b'
 const DARK = '#021630'
-const CLUBS_KEY = 'ems_clubs_v1'
-const ACTIVITIES_KEY = 'ems_club_activities_v1'
-const REVIEWS_KEY = 'ems_club_reviews_v1'
-const loadLS = (k, d = []) => { try { return JSON.parse(localStorage.getItem(k) || JSON.stringify(d)) } catch { return d } }
-const saveLS = (k, v) => localStorage.setItem(k, JSON.stringify(v))
 
 const CLUB_TYPES = ['Sports', 'Culture & Arts', 'Tech & Innovation', 'Bien-être', 'Social', 'Professionnel', 'Autre']
 
@@ -64,9 +60,14 @@ function ClubCard({ club, members, activities, reviews, employees, onEdit, onDel
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {memberList.slice(0, 6).map(emp => (
                     <div key={emp.matricule} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#475569' }}>
-                        {(emp.prenom?.[0] || '') + (emp.nom?.[0] || '')}
-                      </div>
+                      <AvatarCircle
+                        photoUrl={emp.photo_url}
+                        letter={(emp.prenom?.[0] || '') + (emp.nom?.[0] || '?')}
+                        size={24}
+                        borderWidth={1}
+                        borderColor='#cbd5e1'
+                        fallbackBackground='#e2e8f0'
+                      />
                       <span style={{ fontSize: '0.78rem', color: '#334155' }}>{emp.prenom} {emp.nom}</span>
                     </div>
                   ))}
@@ -119,10 +120,11 @@ export default function ClubReview() {
   const { user } = useAuth()
   const isAdmin = ['RH', 'DG', 'PCA', 'ADMIN'].includes(user?.role || '')
   const [employees, setEmployees] = useState([])
-  const [clubs, setClubs] = useState(() => loadLS(CLUBS_KEY))
-  const [members, setMembers] = useState(() => loadLS('ems_club_members_v1', {}))
-  const [activities, setActivities] = useState(() => loadLS(ACTIVITIES_KEY))
-  const [reviews, setReviews] = useState(() => loadLS(REVIEWS_KEY))
+  const [clubs, setClubs] = useState([])
+  const [members, setMembers] = useState({})
+  const [memberRows, setMemberRows] = useState([])
+  const [activities, setActivities] = useState([])
+  const [reviews, setReviews] = useState([])
   const [showClubForm, setShowClubForm] = useState(false)
   const [showActivityForm, setShowActivityForm] = useState(false)
   const [showReviewForm, setShowReviewForm] = useState(false)
@@ -133,60 +135,112 @@ export default function ClubReview() {
   const [actForm, setActForm] = useState({ club_id: '', titre: '', date: '', description: '' })
   const [reviewForm, setReviewForm] = useState({ club_id: '', rating: 5, commentaire: '' })
 
-  useEffect(() => { api.get('/employees').then(r => setEmployees(r.data || [])).catch(() => {}) }, [])
+  useEffect(() => {
+    api.get('/employees/').then(r => setEmployees(r.data || [])).catch(() => {})
+    loadClubData()
+  }, [])
+
+  async function loadClubData() {
+    const [clubsRes, membersRes, activitiesRes, reviewsRes] = await Promise.all([
+      api.get('/api/module-store/club_review_clubs').catch(() => ({ data: [] })),
+      api.get('/api/module-store/club_review_memberships').catch(() => ({ data: [] })),
+      api.get('/api/module-store/club_review_activities').catch(() => ({ data: [] })),
+      api.get('/api/module-store/club_review_reviews').catch(() => ({ data: [] })),
+    ])
+
+    const memberList = Array.isArray(membersRes.data) ? membersRes.data : []
+    const membersMap = {}
+    memberList.forEach((m) => {
+      const clubId = Number(m.club_id)
+      if (!membersMap[clubId]) membersMap[clubId] = []
+      membersMap[clubId].push(String(m.user_id))
+    })
+
+    setClubs(Array.isArray(clubsRes.data) ? clubsRes.data : [])
+    setMemberRows(memberList)
+    setMembers(membersMap)
+    setActivities(Array.isArray(activitiesRes.data) ? activitiesRes.data : [])
+    setReviews(Array.isArray(reviewsRes.data) ? reviewsRes.data : [])
+  }
 
   const filtered = useMemo(() => clubs.filter(c => filterType === 'tous' || c.type === filterType), [clubs, filterType])
 
-  const submitClub = (e) => {
+  const submitClub = async (e) => {
     e.preventDefault()
     if (!clubForm.nom.trim()) return
     if (editClub) {
-      const updated = clubs.map(c => c.id === editClub.id ? { ...c, ...clubForm } : c)
-      setClubs(updated); saveLS(CLUBS_KEY, updated)
+      await api.put(`/api/module-store/club_review_clubs/${editClub.id}`, { ...clubForm }).catch(() => null)
     } else {
-      const nc = { ...clubForm, id: Date.now(), created_at: new Date().toISOString() }
-      const updated = [nc, ...clubs]; setClubs(updated); saveLS(CLUBS_KEY, updated)
+      await api.post('/api/module-store/club_review_clubs', {
+        ...clubForm,
+        created_at: new Date().toISOString(),
+        _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
+      }).catch(() => null)
     }
+    await loadClubData()
     setClubForm({ nom: '', description: '', type: 'Sports', emoji: '' }); setEditClub(null); setShowClubForm(false)
   }
 
-  const deleteClub = (id) => {
+  const deleteClub = async (id) => {
     if (!window.confirm('Supprimer ce club ?')) return
-    const updated = clubs.filter(c => c.id !== id); setClubs(updated); saveLS(CLUBS_KEY, updated)
+    await api.delete(`/api/module-store/club_review_clubs/${id}`).catch(() => null)
+    const relatedMemberships = memberRows.filter((m) => Number(m.club_id) === Number(id))
+    const relatedActivities = activities.filter((a) => Number(a.club_id) === Number(id))
+    const relatedReviews = reviews.filter((r) => Number(r.club_id) === Number(id))
+    await Promise.all([
+      ...relatedMemberships.map((m) => api.delete(`/api/module-store/club_review_memberships/${m.id}`).catch(() => null)),
+      ...relatedActivities.map((a) => api.delete(`/api/module-store/club_review_activities/${a.id}`).catch(() => null)),
+      ...relatedReviews.map((r) => api.delete(`/api/module-store/club_review_reviews/${r.id}`).catch(() => null)),
+    ])
+    await loadClubData()
   }
 
-  const joinClub = (clubId) => {
-    const current = { ...members }
-    if (!current[clubId]) current[clubId] = []
-    if (!current[clubId].includes(String(user?.matricule))) {
-      current[clubId] = [...current[clubId], String(user?.matricule)]
-      setMembers(current); saveLS('ems_club_members_v1', current)
-    }
+  const joinClub = async (clubId) => {
+    const alreadyMember = memberRows.some((m) => Number(m.club_id) === Number(clubId) && String(m.user_id) === String(user?.matricule))
+    if (alreadyMember) return
+    await api.post('/api/module-store/club_review_memberships', {
+      club_id: Number(clubId),
+      user_id: String(user?.matricule),
+      joined_at: new Date().toISOString(),
+      _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
+    }).catch(() => null)
+    await loadClubData()
   }
 
-  const leaveClub = (clubId) => {
-    const current = { ...members }
-    if (current[clubId]) {
-      current[clubId] = current[clubId].filter(id => id !== String(user?.matricule))
-      setMembers(current); saveLS('ems_club_members_v1', current)
-    }
+  const leaveClub = async (clubId) => {
+    const row = memberRows.find((m) => Number(m.club_id) === Number(clubId) && String(m.user_id) === String(user?.matricule))
+    if (!row) return
+    await api.delete(`/api/module-store/club_review_memberships/${row.id}`).catch(() => null)
+    await loadClubData()
   }
 
-  const submitActivity = (e) => {
+  const submitActivity = async (e) => {
     e.preventDefault()
     if (!actForm.titre.trim() || !actForm.club_id) return
-    const na = { ...actForm, id: Date.now(), created_by: user?.matricule }
-    const updated = [na, ...activities]; setActivities(updated); saveLS(ACTIVITIES_KEY, updated)
+    await api.post('/api/module-store/club_review_activities', {
+      ...actForm,
+      club_id: Number(actForm.club_id),
+      created_by: user?.matricule,
+      _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
+    }).catch(() => null)
+    await loadClubData()
     setActForm({ club_id: '', titre: '', date: '', description: '' }); setShowActivityForm(false)
   }
 
-  const submitReview = (e) => {
+  const submitReview = async (e) => {
     e.preventDefault()
     if (!reviewForm.club_id) return
     const exists = reviews.find(r => r.club_id === Number(reviewForm.club_id) && String(r.user_id) === String(user?.matricule))
     if (exists) { alert('Vous avez déjà évalué ce club.'); return }
-    const nr = { ...reviewForm, club_id: Number(reviewForm.club_id), id: Date.now(), user_id: user?.matricule, created_at: new Date().toISOString() }
-    const updated = [nr, ...reviews]; setReviews(updated); saveLS(REVIEWS_KEY, updated)
+    await api.post('/api/module-store/club_review_reviews', {
+      ...reviewForm,
+      club_id: Number(reviewForm.club_id),
+      rating: Number(reviewForm.rating),
+      user_id: user?.matricule,
+      created_at: new Date().toISOString(),
+      _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
+    }).catch(() => null)
+    await loadClubData()
     setReviewForm({ club_id: '', rating: 5, commentaire: '' }); setShowReviewForm(false)
   }
 

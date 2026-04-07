@@ -440,7 +440,7 @@ export default function OrgChart() {
   const [editEmp, setEditEmp]           = useState(null)
 
   useEffect(() => {
-    api.get('/employees')
+    api.get('/employees/')
       .then(r => setEmployees(Array.isArray(r.data) ? r.data : []))
       .catch(() => {})
       .finally(() => setLoading(false))

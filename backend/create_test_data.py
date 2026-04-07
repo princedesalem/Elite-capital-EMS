@@ -188,7 +188,7 @@ try:
     db.commit()
     
     print(f"\n🎉 {len(operations_creees)} demandes de test créées !")
-    print(f"\n📱 Accède à http://localhost:5173")
+    print(f"\n📱 Accède à http://192.168.3.186:5173")
     print(f"   Connecte-toi avec:")
     print(f"   • Matricule: 9007 (employé) ou 9004 (responsable)")
     print(f"   • Mot de passe: DemoPassword123!@#")

@@ -5,6 +5,45 @@ import {useNavigate} from 'react-router-dom'
 
 const AuthContext = createContext()
 
+/**
+ * Abonne le navigateur aux notifications push via l'API Web Push.
+ * Récupère la clé publique VAPID depuis le backend, demande la permission
+ * à l'utilisateur, puis enregistre le endpoint de push auprès du serveur.
+ *
+ * @param {number|string} matricule - Matricule de l'utilisateur connecté.
+ */
+async function subscribeToPush(matricule) {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+    const permission = await Notification.requestPermission()
+    if (permission !== 'granted') return
+
+    // Récupère la clé publique VAPID
+    const { data } = await api.get('/api/notifications/push/vapid-public-key')
+    if (!data?.configured || !data?.public_key) return
+
+    const registration = await navigator.serviceWorker.ready
+
+    // Convertit la clé base64url en Uint8Array pour applicationServerKey
+    const b64 = (data.public_key + '===').slice(0, data.public_key.length + (4 - data.public_key.length % 4) % 4)
+    const raw = Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))
+
+    // Abonne ou récupère l'abonnement existant
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: raw,
+    })
+
+    // Envoie le endpoint + clés au backend
+    await api.post('/api/notifications/push/subscribe', {
+      matricule: Number(matricule),
+      subscription: subscription.toJSON(),
+    })
+  } catch {
+    // Erreur silencieuse — la push n'est pas critique
+  }
+}
+
 export function AuthProvider({children}){
   const [user,setUser] = useState(null)
   const [sessionId, setSessionId] = useState(null)
@@ -13,7 +52,12 @@ export function AuthProvider({children}){
   useEffect(()=>{
     const token = localStorage.getItem('ec_token') || localStorage.getItem('access_token')
     if(token){
-      try{const data = jwt_decode(token); setUser(data)}catch(e){localStorage.removeItem('ec_token'); localStorage.removeItem('access_token')}
+      try{
+        const data = jwt_decode(token)
+        setUser(data)
+        // Réabonner aux notifications push si déjà connecté
+        subscribeToPush(data.matricule || data.sub)
+      }catch(e){localStorage.removeItem('ec_token'); localStorage.removeItem('access_token')}
     }
   },[])
 
@@ -31,6 +75,9 @@ export function AuthProvider({children}){
     localStorage.setItem('access_token',access_token)
     const data = jwt_decode(access_token)
     setUser(data)
+
+    // Abonner aux notifications push après connexion
+    subscribeToPush(data.matricule || data.sub)
 
     // Record session login
     try {

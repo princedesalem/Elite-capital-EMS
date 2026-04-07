@@ -2,12 +2,11 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
+import LeaveRequestForm from '../components/LeaveRequestForm'
+import AvatarCircle from '../components/AvatarCircle'
 import { BarChart2, LogOut, Star, MessageSquare, ThumbsUp, BarChart, Send, Plus, X, ChevronDown, Search, Gift, Users, Briefcase, Clock } from 'lucide-react'
 
-// ── Team Engagement local storage helpers ──
-const SHOUTOUTS_KEY = 'ems_shoutouts_v1'
-const KUDOS_KEY = 'ems_kudos_v1'
-const POLLS_KEY = 'ems_polls_v1'
+// ── Team Engagement (backend persisted) ──
 const WISHES_KEY = 'ems_wishes_v1'
 const loadLS = (key) => { try { return JSON.parse(localStorage.getItem(key) || '[]') } catch { return [] } }
 const saveLS = (key, data) => localStorage.setItem(key, JSON.stringify(data))
@@ -38,12 +37,6 @@ function Icon({ name, size = 20, stroke = 1.8 }) {
   return <svg {...common}>{icons[name]}</svg>
 }
 
-function Avatar({ photo, letter, size = 36, borderWidth = 1.5, style = {} }) {
-  const s = { width: size, height: size, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: `${borderWidth}px solid #cbd5e1`, background: 'transparent', ...style }
-  if (photo) return <div style={s}><img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
-  return <div style={{ ...s, color: '#021630', fontWeight: 700, fontSize: size * 0.38 }}>{(letter || '?').toUpperCase()}</div>
-}
-
 export default function Home() {
     // Heart animation and like logic
     const [likeHearts, setLikeHearts] = useState({});
@@ -64,9 +57,9 @@ export default function Home() {
   const [createForm, setCreateForm] = useState({ nom: '', id_entite: '', id_direction: '' })
 
   // Team Engagement state
-  const [shoutouts, setShoutouts] = useState(() => loadLS(SHOUTOUTS_KEY))
-  const [kudos, setKudos] = useState(() => loadLS(KUDOS_KEY))
-  const [polls, setPolls] = useState(() => loadLS(POLLS_KEY))
+  const [shoutouts, setShoutouts] = useState([])
+  const [kudos, setKudos] = useState([])
+  const [polls, setPolls] = useState([])
   const [showShoutoutForm, setShowShoutoutForm] = useState(false)
   const [showKudosForm, setShowKudosForm] = useState(false)
   const [showPollForm, setShowPollForm] = useState(false)
@@ -86,6 +79,10 @@ export default function Home() {
   const [dbDepartements, setDbDepartements] = useState([])
   const [filterType, setFilterType] = useState('all')
   const [filterSearch, setFilterSearch] = useState('')
+  const [showLeaveModal, setShowLeaveModal] = useState(false)
+  const [leaveSuccess, setLeaveSuccess] = useState('')
+  const [leaveModalForm, setLeaveModalForm] = useState({ date_debut: '', date_fin: '', motif: '' })
+  const [leaveModalMsg, setLeaveModalMsg] = useState(null)
   const birthdayRef = useRef(null)
 
   useEffect(() => {
@@ -96,17 +93,57 @@ export default function Home() {
       }).catch(() => {})
     }
     // Fetch simple stats
-    api.get('/employees').then(r => {
+    api.get('/employees/').then(r => {
       setStats(prev => ({ ...prev, employees: r.data.length }))
       setAllEmployees(r.data)
     }).catch(() => {})
     api.get('/api/operations').then(r => setOperations(r.data)).catch(() => {})
-    api.get('/api/sorties').then(r => setSorties(r.data)).catch(() => {})
+    // Sorties list loaded via workflow boite in the new pages; skip global fetch here
     // Fetch org structure from DB
     api.get('/employees/autocomplete/entites').then(r => setDbEntites(r.data)).catch(() => {})
     api.get('/employees/autocomplete/directions').then(r => setDbDirections(r.data)).catch(() => {})
     api.get('/employees/autocomplete/departements').then(r => setDbDepartements(r.data)).catch(() => {})
+    loadTeamSpacePosts()
   }, [user])
+
+  const splitTeamPosts = (posts) => {
+    const nextShoutouts = []
+    const nextKudos = []
+    const nextPolls = []
+    ;(Array.isArray(posts) ? posts : []).forEach((p) => {
+      const base = {
+        id: p.id,
+        from: p.from,
+        date: p.date,
+        destinataire: p.destinataire || '',
+        message: p.message || '',
+        valeur: p.valeur || '',
+        raison: p.raison || '',
+        question: p.question || '',
+        options: Array.isArray(p.options) ? p.options : [],
+        votedBy: Array.isArray(p.votedBy) ? p.votedBy : [],
+        likes: Number(p.likes || 0),
+        audience: p.audience || { type: 'all', selected: [] }
+      }
+      if (p.type === 'shoutout') nextShoutouts.push(base)
+      if (p.type === 'kudos') nextKudos.push(base)
+      if (p.type === 'poll') nextPolls.push(base)
+    })
+    setShoutouts(nextShoutouts)
+    setKudos(nextKudos)
+    setPolls(nextPolls)
+  }
+
+  const loadTeamSpacePosts = async () => {
+    try {
+      const res = await api.get('/api/team-space/posts', { params: { limit: 150 } })
+      splitTeamPosts(res.data)
+    } catch (_) {
+      setShoutouts([])
+      setKudos([])
+      setPolls([])
+    }
+  }
 
   const calculateAnciennete = (dateEmbauche) => {
     if (!dateEmbauche) return 'N/A'
@@ -127,6 +164,28 @@ export default function Home() {
     if (hour < 12) return 'Bonjour'
     if (hour < 18) return 'Bonsoir'
     return 'Bonne nuit'
+  }
+
+  const handleLeaveModalSubmit = async (e) => {
+    e.preventDefault()
+    setLeaveModalMsg(null)
+    try {
+      await api.post('/api/conges/demande', null, {
+        params: {
+          matricule: user?.matricule,
+          matricule_createur: user?.matricule,
+          date_debut: leaveModalForm.date_debut,
+          date_fin: leaveModalForm.date_fin,
+          ...(leaveModalForm.motif ? { motif: leaveModalForm.motif } : {})
+        }
+      })
+      setLeaveModalForm({ date_debut: '', date_fin: '', motif: '' })
+      setLeaveModalMsg(null)
+      setShowLeaveModal(false)
+      setLeaveSuccess('Votre demande de congé a été soumise avec succès.')
+    } catch (err) {
+      setLeaveModalMsg(err?.response?.data?.detail || 'Erreur lors de la soumission.')
+    }
   }
 
   const createAdminItem = async (e) => {
@@ -171,6 +230,35 @@ export default function Home() {
       .sort((a, b) => a.daysUntil - b.daysUntil)
       .slice(0, 20)
   }, [allEmployees])
+
+  const normalizeAvatarKey = (value) => String(value || '').trim().toLowerCase()
+
+  const employeeAvatarIndex = useMemo(() => {
+    const index = new Map()
+    allEmployees.forEach((emp) => {
+      const fullName = normalizeAvatarKey(`${emp.prenom || ''} ${emp.nom || ''}`)
+      const prenom = normalizeAvatarKey(emp.prenom)
+      const matricule = normalizeAvatarKey(emp.matricule)
+      if (fullName) index.set(fullName, emp)
+      if (prenom && !index.has(prenom)) index.set(prenom, emp)
+      if (matricule) index.set(matricule, emp)
+    })
+    return index
+  }, [allEmployees])
+
+  const resolvePhotoUrl = (identity) => {
+    const key = normalizeAvatarKey(identity)
+    if (!key) return null
+
+    const currentMatricule = normalizeAvatarKey(user?.matricule || user?.sub)
+    if (key === currentMatricule) return employe?.photo_url || null
+
+    const fullCurrentName = normalizeAvatarKey(`${employe?.prenom || user?.prenom || ''} ${employe?.nom || user?.nom || ''}`)
+    if (key === fullCurrentName) return employe?.photo_url || null
+
+    const found = employeeAvatarIndex.get(key)
+    return found?.photo_url || null
+  }
 
   // ── Employees currently on leave / permission / mission / sortie ──
   const employeesAbsent = useMemo(() => {
@@ -227,49 +315,96 @@ export default function Home() {
   const resetAudience = () => { setAudienceType('all'); setAudienceSelected([]); setAudienceOpen(false) }
 
   // Engagement handlers
-  const submitShoutout = (e) => {
+  const submitShoutout = async (e) => {
     e.preventDefault()
     if (!shoutoutForm.destinataire.trim() || !shoutoutForm.message.trim()) return
-    const updated = [{ id: Date.now(), ...shoutoutForm, from: employe?.prenom || user?.prenom || 'Moi', date: new Date().toLocaleDateString('fr-FR'), likes: 0, audience: { type: audienceType, selected: [...audienceSelected] } }, ...shoutouts].slice(0, 20)
-    setShoutouts(updated); saveLS(SHOUTOUTS_KEY, updated)
-    setShoutoutForm({ destinataire: '', message: '' }); setShowShoutoutForm(false); resetAudience()
+    try {
+      await api.post('/api/team-space/posts', {
+        type: 'shoutout',
+        from: employe?.prenom || user?.prenom || 'Moi',
+        from_matricule: Number(user?.matricule || user?.sub || 0) || null,
+        destinataire: shoutoutForm.destinataire,
+        message: shoutoutForm.message,
+        likes: 0,
+        audience: { type: audienceType, selected: [...audienceSelected] }
+      })
+      await loadTeamSpacePosts()
+      setShoutoutForm({ destinataire: '', message: '' })
+      setShowShoutoutForm(false)
+      resetAudience()
+    } catch (_) {}
   }
-  const likePost = (type, id) => {
-    if (type === 'shoutout') {
-      const updated = shoutouts.map(s => s.id === id ? { ...s, likes: (s.likes || 0) + 1 } : s)
-      setShoutouts(updated); saveLS(SHOUTOUTS_KEY, updated)
-    } else if (type === 'kudos') {
-      const updated = kudos.map(k => k.id === id ? { ...k, likes: (k.likes || 0) + 1 } : k)
-      setKudos(updated); saveLS(KUDOS_KEY, updated)
-    } else if (type === 'poll') {
-      const updated = polls.map(p => p.id === id ? { ...p, likes: (p.likes || 0) + 1 } : p)
-      setPolls(updated); saveLS(POLLS_KEY, updated)
-    }
+  const likePost = async (type, id) => {
+    try {
+      const res = await api.patch(`/api/team-space/posts/${id}/like`)
+      const updated = {
+        id: res.data?.id,
+        likes: Number(res.data?.likes || 0)
+      }
+      if (type === 'shoutout') {
+        setShoutouts((prev) => prev.map((s) => s.id === updated.id ? { ...s, likes: updated.likes } : s))
+      } else if (type === 'kudos') {
+        setKudos((prev) => prev.map((k) => k.id === updated.id ? { ...k, likes: updated.likes } : k))
+      } else if (type === 'poll') {
+        setPolls((prev) => prev.map((p) => p.id === updated.id ? { ...p, likes: updated.likes } : p))
+      }
+    } catch (_) {}
   }
-  const submitKudos = (e) => {
+  const submitKudos = async (e) => {
     e.preventDefault()
     if (!kudosForm.destinataire.trim()) return
-    const updated = [{ id: Date.now(), ...kudosForm, from: employe?.prenom || user?.prenom || 'Moi', date: new Date().toLocaleDateString('fr-FR'), audience: { type: audienceType, selected: [...audienceSelected] } }, ...kudos].slice(0, 20)
-    setKudos(updated); saveLS(KUDOS_KEY, updated)
-    setKudosForm({ destinataire: '', raison: '', valeur: 'Excellence' }); setShowKudosForm(false); resetAudience()
+    try {
+      await api.post('/api/team-space/posts', {
+        type: 'kudos',
+        from: employe?.prenom || user?.prenom || 'Moi',
+        from_matricule: Number(user?.matricule || user?.sub || 0) || null,
+        destinataire: kudosForm.destinataire,
+        raison: kudosForm.raison || '',
+        valeur: kudosForm.valeur || 'Excellence',
+        likes: 0,
+        audience: { type: audienceType, selected: [...audienceSelected] }
+      })
+      await loadTeamSpacePosts()
+      setKudosForm({ destinataire: '', raison: '', valeur: 'Excellence' })
+      setShowKudosForm(false)
+      resetAudience()
+    } catch (_) {}
   }
-  const submitPoll = (e) => {
+  const submitPoll = async (e) => {
     e.preventDefault()
     if (!pollForm.question.trim() || pollForm.options.filter(o => o.trim()).length < 2) return
     const options = pollForm.options.filter(o => o.trim()).map(o => ({ texte: o, votes: 0 }))
-    const updated = [{ id: Date.now(), question: pollForm.question, options, from: employe?.prenom || user?.prenom || 'Moi', date: new Date().toLocaleDateString('fr-FR'), votedBy: [], audience: { type: audienceType, selected: [...audienceSelected] } }, ...polls].slice(0, 10)
-    setPolls(updated); saveLS(POLLS_KEY, updated)
-    setPollForm({ question: '', options: ['', ''] }); setShowPollForm(false); resetAudience()
+    try {
+      await api.post('/api/team-space/posts', {
+        type: 'poll',
+        from: employe?.prenom || user?.prenom || 'Moi',
+        from_matricule: Number(user?.matricule || user?.sub || 0) || null,
+        question: pollForm.question,
+        options,
+        votedBy: [],
+        likes: 0,
+        audience: { type: audienceType, selected: [...audienceSelected] }
+      })
+      await loadTeamSpacePosts()
+      setPollForm({ question: '', options: ['', ''] })
+      setShowPollForm(false)
+      resetAudience()
+    } catch (_) {}
   }
-  const votePoll = (pollId, optionIdx) => {
-    const voterId = String(user?.matricule)
-    const updated = polls.map(p => {
-      if (p.id !== pollId) return p
-      if (p.votedBy?.includes(voterId)) return p
-      const opts = p.options.map((o, i) => i === optionIdx ? { ...o, votes: o.votes + 1 } : o)
-      return { ...p, options: opts, votedBy: [...(p.votedBy || []), voterId] }
-    })
-    setPolls(updated); saveLS(POLLS_KEY, updated)
+  const votePoll = async (pollId, optionIdx) => {
+    try {
+      const voterId = String(user?.matricule || user?.sub || '')
+      const res = await api.patch(`/api/team-space/posts/${pollId}/vote`, {
+        voter_matricule: voterId,
+        option_index: optionIdx
+      })
+      const updatedPoll = {
+        id: res.data?.id,
+        options: Array.isArray(res.data?.options) ? res.data.options : [],
+        votedBy: Array.isArray(res.data?.votedBy) ? res.data.votedBy : []
+      }
+      setPolls((prev) => prev.map((p) => p.id === updatedPoll.id ? { ...p, options: updatedPoll.options, votedBy: updatedPoll.votedBy } : p))
+    } catch (_) {}
   }
 
   return (
@@ -307,7 +442,7 @@ export default function Home() {
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 18, alignItems: 'center' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
-                <Avatar photo={employe?.photo} letter={(employe?.prenom || user?.prenom || 'U')[0]} size={72} borderWidth={2} />
+                <AvatarCircle photoUrl={employe?.photo_url} letter={(employe?.prenom || user?.prenom || 'U')[0]} size={72} borderWidth={2} />
                 <h2 style={{ fontSize: '1.45rem', margin: 0, color: '#021630' }}>
                   {getGreeting()}, {employe?.prenom || user?.prenom || 'Utilisateur'}
                 </h2>
@@ -544,7 +679,7 @@ export default function Home() {
           {/* ── Compose bar ── */}
           <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: (showShoutoutForm || showKudosForm || showPollForm) ? 14 : 0 }}>
-              <Avatar photo={employe?.photo} letter={(employe?.prenom || user?.prenom || 'U')[0]} size={38} />
+              <AvatarCircle photoUrl={employe?.photo_url} letter={(employe?.prenom || user?.prenom || 'U')[0]} size={38} />
               {!showShoutoutForm && !showKudosForm && !showPollForm && (
                 <div
                   onClick={() => { setShowShoutoutForm(true); setShowKudosForm(false); setShowPollForm(false) }}
@@ -718,7 +853,7 @@ export default function Home() {
 
                     {/* Post header */}
                     <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <Avatar letter={(item.from || 'U')[0]} size={36} />
+                      <AvatarCircle photoUrl={resolvePhotoUrl(item.from)} letter={(item.from || 'U')[0]} size={36} />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 700, color: '#021630', fontSize: '0.88rem', lineHeight: 1.2 }}>{item.from}</div>
                         <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
@@ -756,9 +891,16 @@ export default function Home() {
                             <div key={i} style={{ position:'absolute', top:`${d.t}%`, left:`${d.l}%`, width:d.s, height:d.s, borderRadius:'50%', background:`rgba(255,255,255,${d.o})`, pointerEvents:'none' }} />
                           ))}
                           <div style={{ position: 'relative', zIndex: 1 }}>
-                            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'transparent', border: '2px solid rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 800, color: 'rgba(255,255,255,0.9)', margin: '0 auto 12px', overflow: 'hidden' }}>
-                              {((item.destinataire || '?')[0]).toUpperCase()}
-                            </div>
+                            <AvatarCircle
+                              photoUrl={resolvePhotoUrl(item.destinataire)}
+                              letter={(item.destinataire || '?')[0]}
+                              size={48}
+                              borderWidth={2}
+                              borderColor='rgba(255,255,255,0.4)'
+                              textColor='rgba(255,255,255,0.9)'
+                              fallbackBackground='transparent'
+                              style={{ margin: '0 auto 12px' }}
+                            />
                             <div style={{ fontSize: '2rem', fontWeight: 900, color: 'white', letterSpacing: 4, textShadow: '0 3px 10px rgba(0,0,0,0.25)' }}>KUDOS!</div>
                             <div style={{ fontSize: '0.88rem', color: 'rgba(255,255,255,0.9)', fontWeight: 600, marginTop: 5 }}>{item.valeur}</div>
                             {item.raison && <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.72)', marginTop: 6, fontStyle: 'italic' }}>"{item.raison}"</div>}
@@ -849,12 +991,12 @@ export default function Home() {
           {/* Profile Card */}
           <div style={{ background: 'white', borderRadius: 10, border: '1px solid #e2e8f0', padding: '12px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <Avatar photo={employe?.photo} letter={(employe?.prenom || user?.prenom || 'U')[0]} size={36} />
+              <AvatarCircle photoUrl={employe?.photo_url} letter={(employe?.prenom || user?.prenom || 'U')[0]} size={36} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, color: '#021630', fontSize: '0.82rem', lineHeight: 1.2 }}>{employe?.prenom || user?.prenom} {employe?.nom || user?.nom}</div>
                 <div style={{ color: '#94a3b8', fontSize: '0.68rem' }}>{employe?.fonction || employe?.poste || roleAffiche}</div>
               </div>
-              <Link to="/profile" style={{ color: '#64748b', fontSize: '0.68rem', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+              <Link to="/rh/profile" style={{ color: '#64748b', fontSize: '0.68rem', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                 Voir profil →
               </Link>
             </div>
@@ -863,10 +1005,18 @@ export default function Home() {
                 <span style={{ fontSize: '0.68rem', color: '#64748b' }}>Solde congés</span>
                 <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#021630' }}>{soldeCp !== null ? `${soldeCp} j` : 'N/A'}</span>
               </div>
-              <Link to="/operations" style={{ padding: '6px 12px', borderRadius: 6, background: '#021630', color: 'white', textDecoration: 'none', fontWeight: 600, fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setLeaveSuccess('')
+                  setShowLeaveModal(true)
+                }}
+                style={{ padding: '6px 12px', borderRadius: 6, background: '#021630', color: 'white', textDecoration: 'none', fontWeight: 600, fontSize: '0.7rem', whiteSpace: 'nowrap', border: 'none', cursor: 'pointer' }}
+              >
                 Demander un congé
-              </Link>
+              </button>
             </div>
+            {leaveSuccess && <div style={{ marginTop: 8, color: '#16a34a', fontSize: '0.74rem', fontWeight: 600 }}>{leaveSuccess}</div>}
           </div>
 
           {/* Disponibilité aujourd'hui */}
@@ -905,10 +1055,10 @@ export default function Home() {
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, marginLeft: 8 }}>
                             {people.slice(0, 4).map((p, i) => (
-                              <Avatar key={i} letter={(p.prenom || '?')[0]} size={26} style={{ marginLeft: i === 0 ? 0 : -6, zIndex: 5 - i }} />
+                              <AvatarCircle key={i} photoUrl={p.photo_url} letter={(p.prenom || '?')[0]} size={26} style={{ marginLeft: i === 0 ? 0 : -6, zIndex: 5 - i }} />
                             ))}
                             {people.length > 4 && (
-                              <Avatar letter={`+${people.length - 4}`} size={26} style={{ marginLeft: -6, zIndex: 0 }} />
+                              <AvatarCircle letter={`+${people.length - 4}`} size={26} style={{ marginLeft: -6, zIndex: 0 }} />
                             )}
                           </div>
                         </div>
@@ -942,15 +1092,16 @@ export default function Home() {
                     const dateStr = bdDate ? bdDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : ''
                     return (
                       <div key={b.matricule} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
-                        <Avatar letter={(b.prenom || '?')[0]} size={30} borderWidth={isToday ? 2 : 1.5} />
+                        <AvatarCircle photoUrl={b.photo_url} letter={(b.prenom || '?')[0]} size={30} borderWidth={isToday ? 2 : 1.5} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600, color: '#021630', fontSize: '0.75rem', lineHeight: 1.2 }}>{b.prenom} {b.nom}</div>
                           <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{dateStr} • {isToday ? 'Aujourd\'hui' : `Dans ${b.daysUntil}j`}</div>
                         </div>
                         <button
                           onClick={() => sendWishes(b.matricule)}
-                          disabled={wished}
-                          style={{ padding: '4px 10px', borderRadius: 4, border: wished ? '1px solid #d1d5db' : '1px solid #021630', background: wished ? '#f8fafc' : '#021630', color: wished ? '#6b7280' : 'white', fontSize: '0.65rem', fontWeight: 600, cursor: wished ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
+                          disabled={wished || !isToday}
+                          title={!isToday ? `Dans ${b.daysUntil} jour(s)` : undefined}
+                          style={{ padding: '4px 10px', borderRadius: 4, border: (wished || !isToday) ? '1px solid #d1d5db' : '1px solid #021630', background: (wished || !isToday) ? '#f8fafc' : '#021630', color: (wished || !isToday) ? '#6b7280' : 'white', fontSize: '0.65rem', fontWeight: 600, cursor: (wished || !isToday) ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
                         >
                           {wished ? 'Envoyé' : 'Voeux'}
                         </button>
@@ -969,6 +1120,68 @@ export default function Home() {
           <p style={{ margin: 0 }}>© 2026 ELITE CAPITAL Group. Tous droits réservés.</p>
           <p style={{ margin: '6px 0 0 0', opacity: 0.8 }}>Extranet securisé </p>
         </div>
+
+        {showLeaveModal && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(2,22,48,0.5)',
+              zIndex: 1200,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 16,
+            }}
+            onClick={() => setShowLeaveModal(false)}
+          >
+            <div
+              style={{
+                width: '100%',
+                maxWidth: 640,
+                background: 'white',
+                borderRadius: 12,
+                boxShadow: '0 16px 40px rgba(2,22,48,0.28)',
+                padding: 16,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20, paddingBottom: 14, borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ width: 4, height: 20, background: '#ce2b2b', borderRadius: 2, marginRight: 10, flexShrink: 0 }} />
+                <span style={{ fontWeight: 700, fontSize: '0.97rem', color: '#0f172a', flex: 1 }}>Nouvelle demande de congé</span>
+                <button type="button" onClick={() => { setShowLeaveModal(false); setLeaveModalMsg(null) }} style={{ border: 'none', background: '#f1f5f9', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: '0.82rem' }}>✕</button>
+              </div>
+              {leaveModalMsg && <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 7, background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', fontSize: '0.85rem' }}>{leaveModalMsg}</div>}
+              <form onSubmit={handleLeaveModalSubmit} style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: 4, display: 'block' }}>Date de début</label>
+                  <input type="date" value={leaveModalForm.date_debut} min={new Date().toISOString().split('T')[0]} onChange={e => setLeaveModalForm(f => ({ ...f, date_debut: e.target.value }))} style={{ padding: '9px 12px', borderRadius: 7, border: '1.5px solid #d1d5db', width: '100%', boxSizing: 'border-box', fontSize: '0.9rem' }} required />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: 4, display: 'block' }}>Date de fin</label>
+                  <input type="date" value={leaveModalForm.date_fin} min={leaveModalForm.date_debut || new Date().toISOString().split('T')[0]} onChange={e => setLeaveModalForm(f => ({ ...f, date_fin: e.target.value }))} style={{ padding: '9px 12px', borderRadius: 7, border: '1.5px solid #d1d5db', width: '100%', boxSizing: 'border-box', fontSize: '0.9rem' }} required />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Durée (jours)</label>
+                  <div style={{ padding: '9px 12px', borderRadius: 7, border: '1.5px solid #e2e8f0', background: '#f8fafc', fontSize: '0.9rem', fontWeight: 700, color: '#0f766e', minHeight: 38, display: 'flex', alignItems: 'center' }}>
+                    {leaveModalForm.date_debut && leaveModalForm.date_fin ? `${Math.ceil((new Date(leaveModalForm.date_fin) - new Date(leaveModalForm.date_debut)) / 86400000) + 1} jour(s)` : '--'}
+                  </div>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: 4, display: 'block' }}>Motif <span style={{ fontWeight: 400, color: '#94a3b8', fontSize: '0.76rem' }}>(optionnel)</span></label>
+                  <textarea value={leaveModalForm.motif} onChange={e => setLeaveModalForm(f => ({ ...f, motif: e.target.value }))} placeholder="Précisez le motif de votre demande..." rows={2} style={{ padding: '9px 12px', borderRadius: 7, border: '1.5px solid #d1d5db', width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', resize: 'vertical', fontFamily: 'inherit' }} />
+                </div>
+                <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4, borderTop: '1px solid #f1f5f9', marginTop: 4 }}>
+                  <button type="button" onClick={() => { setShowLeaveModal(false); setLeaveModalMsg(null); setLeaveModalForm({ date_debut: '', date_fin: '', motif: '' }) }} style={{ padding: '9px 18px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 7, fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' }}>Annuler</button>
+                  <button type="submit" style={{ padding: '9px 22px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>Soumettre la demande</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

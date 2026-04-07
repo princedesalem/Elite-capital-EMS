@@ -14,7 +14,8 @@ export default function WorkflowPage() {
     Promise.all([
       api.get('/conges').catch(() => ({data: []})),
       api.get('/leaves').catch(() => ({data: []})),
-      api.get('/api/sorties').catch(() => ({data: []})),
+      // Sorties handled in their own page via workflow boite
+      Promise.resolve({data: []}),
       api.get('/api/missions').catch(() => ({data: []})),
     ]).then(([congesRes, permRes, sortiesRes, missionsRes]) => {
       setPendingRequests({

@@ -13,10 +13,6 @@ const COMPETENCES = [
   'Respect des délais', 'Attitude & Engagement',
 ]
 
-const STORAGE_KEY = 'ems_perf_reviews_v1'
-const loadReviews = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] } }
-const saveReviews = (r) => localStorage.setItem(STORAGE_KEY, JSON.stringify(r))
-
 function StarRating({ value, onChange, size = 20 }) {
   const [hovered, setHovered] = useState(0)
   return (
@@ -103,7 +99,7 @@ export default function PerformanceReviews() {
   const { user } = useAuth()
   const isAdmin = ['RH', 'DG', 'PCA', 'ADMIN'].includes(user?.role || '')
   const [employees, setEmployees] = useState([])
-  const [reviews, setReviews] = useState(() => loadReviews())
+  const [reviews, setReviews] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [searchQ, setSearchQ] = useState('')
   const [filterReviewee, setFilterReviewee] = useState('tous')
@@ -116,14 +112,19 @@ export default function PerformanceReviews() {
   const [pointsAmelioration, setPointsAmelioration] = useState('')
 
   useEffect(() => {
-    api.get('/employees').then(r => setEmployees(r.data || [])).catch(() => {})
+    api.get('/employees/').then(r => setEmployees(r.data || [])).catch(() => {})
+    loadReviews()
   }, [])
 
-  const handleSubmit = (e) => {
+  async function loadReviews() {
+    const res = await api.get('/api/module-store/performance_reviews').catch(() => ({ data: [] }))
+    setReviews(Array.isArray(res.data) ? res.data : [])
+  }
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!revieweeId) return
     const newReview = {
-      id: Date.now(),
       reviewer_id: user?.matricule,
       reviewee_id: revieweeId,
       scores,
@@ -132,15 +133,18 @@ export default function PerformanceReviews() {
       points_amelioration: pointsAmelioration,
       created_at: new Date().toISOString(),
     }
-    const updated = [newReview, ...reviews]
-    setReviews(updated); saveReviews(updated)
+    await api.post('/api/module-store/performance_reviews', {
+      ...newReview,
+      _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
+    }).catch(() => null)
+    await loadReviews()
     setShowForm(false); setRevieweeId(''); setScores(Array(COMPETENCES.length).fill(3)); setCommentaire(''); setPointsForts(''); setPointsAmelioration('')
   }
 
-  const deleteReview = (id) => {
+  const deleteReview = async (id) => {
     if (!window.confirm('Supprimer cette évaluation ?')) return
-    const updated = reviews.filter(r => r.id !== id)
-    setReviews(updated); saveReviews(updated)
+    await api.delete(`/api/module-store/performance_reviews/${id}`).catch(() => null)
+    await loadReviews()
   }
 
   const visibleEmployees = employees.filter(e => String(e.matricule) !== String(user?.matricule))

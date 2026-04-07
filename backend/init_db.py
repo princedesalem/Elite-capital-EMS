@@ -266,17 +266,18 @@ def create_or_get_direction(db, direction_name, entity_id, localisation_id=None)
     return direction
 
 def create_or_get_department(db, dept_name, entity_id, localisation_id=None, direction_id=None):
-    """Create or retrieve department by name, entity, city and optional direction"""
+    """Create or retrieve department by name, entity and optional direction"""
+    # Note: localisation_id parameter kept for backward compatibility but not used
+    # Departments now inherit location from Direction (which has id_localisation)
     department = db.query(models.Departement).filter(
         models.Departement.nom == dept_name,
         models.Departement.id_entite == entity_id,
-        models.Departement.id_localisation == localisation_id,
+        models.Departement.id_direction == direction_id,
     ).first()
     if not department:
         department = models.Departement(
             nom=dept_name,
             id_entite=entity_id,
-            id_localisation=localisation_id,
             id_direction=direction_id,
         )
         db.add(department)
@@ -406,17 +407,24 @@ def cleanup_city_specific_org(db, entities, localisations_by_city):
                 if direction.nom not in allowed:
                     db.query(models.Departement).filter(
                         models.Departement.id_direction == direction.id_direction,
-                        models.Departement.id_localisation == localisation.id_localisation,
                     ).delete(synchronize_session=False)
                     db.delete(direction)
 
-    # Clean departments for demo entities on managed cities
+    # Clean departments for demo entities
+    # Note: Departments no longer have id_localisation directly, they inherit from Direction
     for city_name, localisation in localisations_by_city.items():
         for entity_id in entity_ids:
             allowed = allowed_departements.get((entity_id, city_name), set())
+            # Find departments in this entity whose directions are in this localisation
+            directions_in_loc = db.query(models.Direction).filter(
+                models.Direction.id_localisation == localisation.id_localisation,
+                models.Direction.id_entite == entity_id,
+            ).all()
+            direction_ids = [d.id_direction for d in directions_in_loc]
+            
             departments = db.query(models.Departement).filter(
                 models.Departement.id_entite == entity_id,
-                models.Departement.id_localisation == localisation.id_localisation,
+                models.Departement.id_direction.in_(direction_ids) if direction_ids else False,
             ).all()
             for department in departments:
                 if department.nom not in allowed:

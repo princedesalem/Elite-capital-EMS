@@ -61,6 +61,11 @@ class CategorieEnum(str, enum.Enum):
     STAGIAIRE = 'Stagiaire'
 
 
+class StatutMatrimonialEnum(str, enum.Enum):
+    CELIBATAIRE = 'Celibataire'
+    MARIE = 'Marie'
+
+
 class Pays(Base):
     __tablename__ = 'PAYS'
     id_pays = Column(Integer, primary_key=True, autoincrement=True)
@@ -92,6 +97,8 @@ class FonctionReference(Base):
     __tablename__ = 'FONCTION_REFERENCE'
     id_fonction = Column(Integer, primary_key=True, autoincrement=True)
     libelle = Column(String(200), unique=True, nullable=False)
+    id_direction = Column(Integer, ForeignKey('DIRECTION.id_direction'), nullable=True)
+    dept_id = Column(Integer, ForeignKey('DEPARTEMENT.dept_id'), nullable=True)
 
 
 class Employe(Base):
@@ -113,6 +120,7 @@ class Employe(Base):
     categorie = Column(Enum(CategorieEnum), nullable=True)
     anciennete = Column(String(100), nullable=True)  # "X ans Y mois"
     dept_id = Column(Integer, ForeignKey('DEPARTEMENT.dept_id'))
+    id_localisation = Column(Integer, ForeignKey('LOCALISATION.id_localisation'), nullable=True)
     id_direction = Column(Integer, ForeignKey('DIRECTION.id_direction'), nullable=True)
     id_role = Column(Integer, ForeignKey('roles.id'))
     id_entite = Column(Integer, ForeignKey('ENTITE.id_entite'))
@@ -123,6 +131,11 @@ class Employe(Base):
     absence_until = Column(Date, nullable=True)
     backup_matricule = Column(Integer, nullable=True)
     n1 = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    n1_fonction = Column(String(255), nullable=True)
+    photo_url = Column(String(500), nullable=True)
+    contact_urgence = Column(String(30), nullable=True)
+    statut_matrimonial = Column(Enum(StatutMatrimonialEnum), nullable=True)
+    nombre_enfants = Column(Integer, nullable=True, default=0)
     utilisateur = relationship('Utilisateur', back_populates='employe', uselist=False)
 
 
@@ -179,7 +192,6 @@ class Departement(Base):
     dept_id = Column(Integer, primary_key=True, autoincrement=True)
     nom = Column(String(150))
     id_entite = Column(Integer, ForeignKey('ENTITE.id_entite'), nullable=False)
-    id_localisation = Column(Integer, ForeignKey('LOCALISATION.id_localisation'), nullable=True)
     id_direction = Column(Integer, ForeignKey('DIRECTION.id_direction'))
     id_responsable = Column(Integer, ForeignKey('EMPLOYE.matricule'))
 
@@ -251,6 +263,7 @@ class Operation(Base):
     remplacant = Column(Integer, ForeignKey('EMPLOYE.matricule'))
     cree_par = Column(Integer, ForeignKey('EMPLOYE.matricule'))
     est_modifie = Column(Boolean, default=False)
+    solde_deduit = Column(Boolean, default=False)
     date_modification = Column(DateTime)
     retour_anticipe = Column(Boolean, default=False)
     date_retour_anticipe = Column(Date)
@@ -276,6 +289,17 @@ class PermConventionelle(Base):
     preuves_televersees = Column(Boolean, default=False)
     date_telechargement_preuves = Column(DateTime)
     date_limite_preuves = Column(Date)
+    preuves = relationship('PreuvePermission', back_populates='perm_conv', cascade='all, delete-orphan')
+
+
+class PreuvePermission(Base):
+    __tablename__ = 'PREUVE_PERMISSION'
+    id_preuve = Column(Integer, primary_key=True, autoincrement=True)
+    id_perm_c = Column(Integer, ForeignKey('Perm_conventionelle.id_perm_c', name='fk_preuve_perm_c', ondelete='CASCADE'), nullable=False)
+    chemin_fichier = Column(String(500), nullable=False)
+    nom_fichier = Column(String(255), nullable=False)
+    date_upload = Column(DateTime, nullable=False, default=datetime.utcnow)
+    perm_conv = relationship('PermConventionelle', back_populates='preuves')
 
 class PermMaternelle(Base):
     __tablename__ = 'Perm_maternelle'
@@ -310,6 +334,7 @@ class Mission(Base):
     rapport_televerse = Column(Boolean, default=False)
     date_telechargement_rapport = Column(DateTime)
     date_limite_rapport = Column(Date)
+    mission_comment = Column(String(512), nullable=True)
     # Champs pour la gestion du paiement des frais (validation à 2 niveaux)
     frais_valides_missionnaire = Column(Boolean, default=False)
     frais_valides_rh = Column(Boolean, default=False)
@@ -412,6 +437,7 @@ class RemplacantPropose(Base):
     matricule_remplacant = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
     ordre_proposition = Column(Integer)
     est_accepte = Column(Boolean, default=False)
+    demande_envoyee = Column(Boolean, default=False)
 
 class Notification(Base):
     __tablename__ = 'Notification'
@@ -424,6 +450,19 @@ class Notification(Base):
     date_creation = Column(DateTime, default=datetime.utcnow)
     date_lecture = Column(DateTime)
     id_operation = Column(Integer, ForeignKey('OPERATIONS.id_operation'))
+
+
+class PushSubscription(Base):
+    __tablename__ = 'PUSH_SUBSCRIPTION'
+    id_push_subscription = Column(Integer, primary_key=True, autoincrement=True)
+    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    endpoint = Column(String(700), unique=True, nullable=False)
+    p256dh = Column(String(255), nullable=False)
+    auth = Column(String(255), nullable=False)
+    user_agent = Column(String(500), nullable=True)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 class DemandeExplication(Base):
     __tablename__ = 'Demande_explication'
@@ -460,8 +499,52 @@ class Sortie(Base):
     __tablename__ = 'SORTIE'
     id_sortie = Column(Integer, primary_key=True, autoincrement=True)
     matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    id_operation = Column(Integer, ForeignKey('OPERATIONS.id_operation'), nullable=True)
     date_sortie = Column(Date, nullable=False)
     heure_sortie = Column(Time, nullable=False)
     commentaire = Column(Text, nullable=True)
     statut = Column(String(20), default='en attente')
     date_creation = Column(DateTime, default=datetime.utcnow)
+
+
+class Task(Base):
+    __tablename__ = 'TASK'
+    id_task = Column(Integer, primary_key=True, autoincrement=True)
+    titre = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    priorite = Column(String(20), nullable=False, default='moyenne')
+    statut = Column(String(20), nullable=False, default='a_faire')
+    date_echeance = Column(Date, nullable=True)
+    assigne_a = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    cree_par = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    date_creation = Column(DateTime, default=datetime.utcnow, nullable=False)
+    date_modification = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class TeamSpacePost(Base):
+    __tablename__ = 'TEAM_SPACE_POST'
+    id_post = Column(Integer, primary_key=True, autoincrement=True)
+    post_type = Column(String(20), nullable=False)
+    author_matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    author_name = Column(String(150), nullable=False)
+    destinataire = Column(String(150), nullable=True)
+    message = Column(Text, nullable=True)
+    valeur = Column(String(100), nullable=True)
+    raison = Column(Text, nullable=True)
+    question = Column(Text, nullable=True)
+    poll_options = Column(JSON, nullable=True)
+    voted_by = Column(JSON, nullable=True)
+    likes = Column(Integer, default=0, nullable=False)
+    audience_type = Column(String(30), default='all', nullable=False)
+    audience_selected = Column(JSON, nullable=True)
+    date_creation = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ModuleStoreItem(Base):
+    __tablename__ = 'MODULE_STORE_ITEM'
+    id_item = Column(Integer, primary_key=True, autoincrement=True)
+    module_name = Column(String(100), nullable=False)
+    payload = Column(JSON, nullable=False)
+    created_by = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

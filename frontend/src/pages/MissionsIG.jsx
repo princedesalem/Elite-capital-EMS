@@ -1,24 +1,46 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import api from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import dayjs from 'dayjs'
-import { Search, AlertTriangle, CheckCircle } from 'lucide-react'
+import { Search, AlertTriangle, CheckCircle, Lock } from 'lucide-react'
+import MissionDetailModal from '../components/MissionDetailModal'
+import { useAutoRefresh } from '../hooks/useAutoRefresh'
 
 export default function MissionsIG() {
+  const { user } = useAuth()
   const [missions, setMissions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filtre, setFiltre] = useState('tous') // 'tous', 'en_cours', 'terminees', 'sans_rapport'
   const [recherche, setRecherche] = useState('')
+  const [selectedMissionId, setSelectedMissionId] = useState(null)
+  const [userFonction, setUserFonction] = useState(null)
+  const [fonctionLoading, setFonctionLoading] = useState(true)
 
   useEffect(() => {
-    chargerMissions()
-  }, [])
+    const matricule = user?.matricule || user?.sub
+    if (!matricule) { setFonctionLoading(false); return }
+    api.get(`/employees/${matricule}`)
+      .then(r => setUserFonction(r.data?.fonction || ''))
+      .catch(() => setUserFonction(''))
+      .finally(() => setFonctionLoading(false))
+  }, [user])
+
+  useEffect(() => {
+    if (!fonctionLoading && isIG()) chargerMissions()
+    else if (!fonctionLoading) setLoading(false)
+  }, [fonctionLoading])
+
+  // Actualisation automatique toutes les 30 secondes (seulement pour les IG)
+  useAutoRefresh(useCallback(() => { if (isIG()) chargerMissions() }, [userFonction]))
+
+  const isIG = () => String(userFonction || '').toLowerCase().includes('inspecteur')
 
   async function chargerMissions() {
     setLoading(true)
     try {
       const res = await api.get('/api/missions/toutes-missions-ig')
-      setMissions(res.data.missions || [])
+      setMissions((res.data.missions || []).filter(m => m.statut === 'valid\u00e9'))
     } catch (err) {
       setError(err.response?.data?.detail || 'Erreur lors du chargement des missions')
     } finally {
@@ -49,7 +71,15 @@ export default function MissionsIG() {
     return true
   })
 
-  if (loading) return <div style={{ padding: '20px' }}>Chargement...</div>
+  if (fonctionLoading || loading) return <div style={{ padding: '20px' }}>Chargement...</div>
+
+  if (!isIG()) return (
+    <div style={{ padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+      <Lock size={40} color="#dc2626" />
+      <h2 style={{ margin: 0, color: '#dc2626' }}>Accès non autorisé</h2>
+      <p style={{ color: '#6b7280', margin: 0 }}>Cette page est réservée à l'Inspecteur Général.</p>
+    </div>
+  )
 
   return (
     <div style={{ padding: '20px' }}>
@@ -267,16 +297,21 @@ export default function MissionsIG() {
                       )}
                     </td>
                     <td style={{ padding: '12px' }}>
-                      <a
-                        href={`#mission-${mission.id_mission}`}
+                      <button
+                        onClick={() => setSelectedMissionId(mission.id_mission)}
                         style={{
                           color: '#3b82f6',
+                          background: 'none',
+                          border: 'none',
                           textDecoration: 'none',
-                          fontSize: '0.9rem'
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          padding: 0,
+                          fontFamily: 'inherit'
                         }}
                       >
                         Voir détails →
-                      </a>
+                      </button>
                     </td>
                   </tr>
                 )
@@ -285,6 +320,13 @@ export default function MissionsIG() {
           </tbody>
         </table>
       </div>
+
+      {/* Mission Detail Modal */}
+      <MissionDetailModal
+        isOpen={!!selectedMissionId}
+        missionId={selectedMissionId}
+        onClose={() => setSelectedMissionId(null)}
+      />
     </div>
   )
 }

@@ -5,10 +5,12 @@ Selon la Convention Collective Nationale du Commerce
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from typing import Tuple, Dict, Optional
+from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 from ..models import (
     Employe, Permission, PermConventionelle, PermNonConventionelle,
     PermMaternelle, PermDeces, PermMaladie, PermBapteme, PermMariage,
+    PreuvePermission,
     Operation, Notification, TypeNotificationEnum
 )
 
@@ -21,7 +23,7 @@ DUREES_PERMISSIONS_CONVENTIONNELLES = {
         'salarie': 4,           # Mariage du travailleur: 4 jours
         'enfant': 2             # Mariage d'un enfant du travailleur: 2 jours
     },
-    'accouchement': {
+    'paternite': {
         'epouse': 3             # Accouchement de l'épouse du travailleur: 3 jours
     },
     'bapteme': {
@@ -36,6 +38,9 @@ DUREES_PERMISSIONS_CONVENTIONNELLES = {
         'belle_mere': 3,        # Décès de la mère du conjoint légitime: 3 jours
         'frere': 3,             # Décès du frère du travailleur: 3 jours
         'soeur': 3              # Décès de la sœur du travailleur: 3 jours
+    },
+    'maladie': {
+        'certifiee': 3          # Permission maladie sur présentation d'un justificatif médical
     },
     'maternelle': {
         'simple': 112,          # Congé maternité: 16 semaines (Convention Collective)
@@ -57,13 +62,15 @@ def verifier_type_permission_conventionnelle(
     Vérifie si un type de permission est conventionnel et retourne la durée maximale.
     
     Args:
-        type_permission: Type de permission ('deces', 'mariage', 'accouchement', 'bapteme')
+        type_permission: Type de permission ('deces', 'mariage', 'paternite', 'bapteme', 'maladie', 'maternelle')
         sous_type: Sous-type si applicable (ex: 'conjoint', 'enfant', 'pere' pour déces)
     
     Returns:
         Tuple (est_conventionnel, message, duree_max)
     """
-    type_permission = type_permission.lower()
+    type_permission = str(type_permission or '').strip().lower()
+    if type_permission == 'accouchement':
+        type_permission = 'paternite'
     
     if type_permission in DUREES_PERMISSIONS_CONVENTIONNELLES:
         duree = DUREES_PERMISSIONS_CONVENTIONNELLES[type_permission]
@@ -131,13 +138,13 @@ def creer_permission_conventionnelle(
             # Compter les jours de permissions conventionnelles déjà pris cette année
             annee_actuelle = datetime.now().year
             jours_permissions_annee = db.query(
-                db.func.sum(Operation.duree_demandee)
+                func.sum(Operation.duree_jours)
             ).join(
                 PermConventionelle,
                 PermConventionelle.id_perm_c == Operation.id_operation
             ).filter(
                 Operation.matricule == employe.matricule,
-                db.func.year(Operation.date_debut) == annee_actuelle,
+                extract('year', Operation.date_debut) == annee_actuelle,
                 Operation.statut.in_(['VALIDE', 'ACTIVE', 'CLOTUREE'])
             ).scalar() or 0
             
@@ -182,7 +189,7 @@ def creer_permission_conventionnelle(
     elif type_permission == 'bapteme':
         perm_bap = PermBapteme(id_perm_bap=id_operation)
         db.add(perm_bap)
-    elif type_permission in ['mariage', 'accouchement']:
+    elif type_permission in ['mariage', 'paternite', 'accouchement']:
         perm_mar = PermMariage(id_perm_mar=id_operation)
         db.add(perm_mar)
     
@@ -217,14 +224,6 @@ def creer_permission_non_conventionnelle(
     Returns:
         Tuple (succès, message)
     """
-    from .business_logic import verifier_solde_conges
-    
-    # Vérifier le solde
-    solde_ok, message, solde_actuel = verifier_solde_conges(employe, duree)
-    
-    if not solde_ok:
-        return False, message
-    
     # Créer l'entrée Permission
     permission = db.query(Permission).filter(Permission.id_permission == id_operation).first()
     if not permission:
@@ -244,19 +243,14 @@ def creer_permission_non_conventionnelle(
 def televerser_preuves_permission(
     id_operation: int,
     chemin_preuve: str,
-    db: Session
+    db: Session,
+    nom_fichier: Optional[str] = None
 ) -> Tuple[bool, str]:
     """
-    Enregistre le téléversement des preuves pour une permission conventionnelle.
-    
-    Args:
-        id_operation: ID de l'opération
-        chemin_preuve: Chemin du fichier de preuve téléversé
-        db: Session de base de données
-    
-    Returns:
-        Tuple (succès, message)
+    Enregistre le téléversement d'une preuve pour une permission conventionnelle.
+    Supporte plusieurs fichiers par permission (une ligne PreuvePermission par fichier).
     """
+    import os as _os
     perm_conv = db.query(PermConventionelle).filter(
         PermConventionelle.id_perm_c == id_operation
     ).first()
@@ -265,16 +259,28 @@ def televerser_preuves_permission(
         return False, "Permission conventionnelle introuvable"
     
     # Vérifier si dans le délai
-    if date.today() > perm_conv.date_limite_preuves:
+    if perm_conv.date_limite_preuves and date.today() > perm_conv.date_limite_preuves:
         return False, f"Délai dépassé. Date limite était le {perm_conv.date_limite_preuves}"
     
-    perm_conv.preuve = chemin_preuve
+    fichier_nom = nom_fichier or _os.path.basename(chemin_preuve)
+    now = datetime.now()
+    
+    # Ajouter une ligne dans la table des preuves multiples
+    nouvelle_preuve = PreuvePermission(
+        id_perm_c=id_operation,
+        chemin_fichier=chemin_preuve,
+        nom_fichier=fichier_nom,
+        date_upload=now,
+    )
+    db.add(nouvelle_preuve)
+    
+    # Mettre à jour les champs de synthèse sur PermConventionelle
     perm_conv.preuves_televersees = True
-    perm_conv.date_telechargement_preuves = datetime.now()
+    perm_conv.date_telechargement_preuves = now
     
     db.commit()
     
-    return True, "Preuves téléversées avec succès"
+    return True, "Preuve téléversée avec succès"
 
 
 def verifier_delai_preuves_permission(
@@ -318,7 +324,7 @@ def verifier_delai_soumission_demande(
     Vérifie les délais de soumission des demandes selon le Décret n°75/29 du 10 Janvier 1975 (Article 3).
     
     Article 3 du Décret:
-    - 48h APRÈS l'événement pour: décès, accouchement
+    - 48h APRÈS l'événement pour: décès, paternité
     - 72h À L'AVANCE pour: tous les autres cas
     
     Args:
@@ -334,7 +340,7 @@ def verifier_delai_soumission_demande(
         date_demande = date.today()
     
     # Types qui nécessitent 48h APRÈS l'événement
-    types_apres_48h = ['deces', 'accouchement']
+    types_apres_48h = ['deces', 'paternite', 'accouchement']
     
     if type_permission.lower() in types_apres_48h:
         delai_min = timedelta(hours=0)  # Peut demander le jour même ou après

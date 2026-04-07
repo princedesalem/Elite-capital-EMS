@@ -14,3 +14,12 @@ email-validator
 pymysql
 apscheduler
 requests
+pywebpush
+pytest
+httpx
+pandas
+openpyxl
+xlrd
+xlwt
+pyodbc>=4.0.35,<6
+Pillow>=10.0.0

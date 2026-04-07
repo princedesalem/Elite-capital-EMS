@@ -4,12 +4,14 @@ Système de notifications et d'alertes
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, event, select, delete
 from ..models import (
-    Employe, Operation, Notification, TypeNotificationEnum,
-    AlerteCongesAnnuelle, Activation, TypeActionEnum, StatutFinalEnum
+    Employe, Operation, Notification, TypeNotificationEnum, Validation,
+    AlerteCongesAnnuelle, Activation, TypeActionEnum, StatutFinalEnum,
+    PushSubscription
 )
 from decimal import Decimal
+from . import webpush
 
 
 def envoyer_alerte_conges_fin_annee(db: Session):
@@ -73,8 +75,8 @@ def envoyer_alerte_conges_fin_annee(db: Session):
         from .activation_cloture import creer_notification_rh
         creer_notification_rh(
             None,
-            f"Congés restants: {employe.nom} {employe.prenom}",
-            f"L'employé {employe.matricule} a encore {employe.solde_conges} jour(s) de congés",
+            f"Congés restants: {employe.prenom} {employe.nom}",
+            f"{employe.prenom} {employe.nom} a encore {employe.solde_conges} jour(s) de congés restants",
             db
         )
     
@@ -112,9 +114,8 @@ def envoyer_rappel_depart_conges(db: Session):
             from .activation_cloture import creer_notification_rh
             creer_notification_rh(
                 operation.id_operation,
-                f"Rappel départ: {employe.nom} {employe.prenom}",
-                f"L'employé {employe.matricule} ({employe.nom} {employe.prenom}) "
-                f"part en opération demain ({demain})",
+                f"Rappel départ: {employe.prenom} {employe.nom}",
+                f"{employe.prenom} {employe.nom} part en opération demain ({demain})",
                 db
             )
     
@@ -159,9 +160,8 @@ def envoyer_rappel_retour_conges(db: Session):
             from .activation_cloture import creer_notification_rh
             creer_notification_rh(
                 operation.id_operation,
-                f"Rappel retour: {employe.nom} {employe.prenom}",
-                f"L'employé {employe.matricule} ({employe.nom} {employe.prenom}) "
-                f"revient demain ({demain}) de son opération",
+                f"Rappel retour: {employe.prenom} {employe.nom}",
+                f"{employe.prenom} {employe.nom} revient demain ({demain}) de son opération",
                 db
             )
             
@@ -219,13 +219,15 @@ def notifier_validation_operation(
     
     # Notifier le RH
     from .activation_cloture import creer_notification_rh
+    _emp = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
+    _nom_employe = f"{_emp.prenom} {_emp.nom}" if _emp else f"Employé #{operation.matricule}"
     creer_notification_rh(
         id_operation,
         f"Opération {statut}",
-        f"L'opération de l'employé {operation.matricule} a été {statut} par le {validateur_role}",
+        f"L'opération de {_nom_employe} a été {statut} par le {validateur_role}",
         db
     )
-    
+
     db.commit()
     
     # TODO: Envoyer emails
@@ -451,3 +453,93 @@ def creer_notification(
     except Exception as e:
         db.rollback()
         return False, f"Erreur lors de la création de la notification: {str(e)}"
+
+
+def ajouter_notifications_annulation_operation(
+    operation: Operation,
+    actor_matricule: Optional[int],
+    db: Session
+) -> None:
+    if not operation:
+        return
+
+    recipients = {operation.matricule}
+    validations = db.query(Validation).filter(
+        Validation.id_operation == operation.id_operation
+    ).all()
+    for validation in validations:
+        if validation.matricule_validateur:
+            recipients.add(validation.matricule_validateur)
+
+    actor = None
+    if actor_matricule:
+        actor = db.query(Employe).filter(Employe.matricule == actor_matricule).first()
+
+    actor_label = f"{actor.prenom} {actor.nom}" if actor else f"l'utilisateur {actor_matricule}" if actor_matricule else 'un utilisateur autorisé'
+    type_demande = operation.type_demande or 'demande'
+    titre = f"{type_demande} annulée"
+    message = (
+        f"La demande #{operation.id_operation} ({type_demande}) a été annulée par {actor_label}."
+    )
+
+    for matricule in recipients:
+        db.add(Notification(
+            matricule=matricule,
+            type_notification=TypeNotificationEnum.AUTRE,
+            titre=titre,
+            message=message,
+            id_operation=None
+        ))
+
+
+@event.listens_for(Notification, 'after_insert')
+def _dispatch_webpush_after_notification_insert(mapper, connection, target):
+    """Send web push for each inserted notification when VAPID is configured."""
+    if not webpush.is_webpush_configured():
+        return
+
+    try:
+        stmt = select(
+            PushSubscription.id_push_subscription,
+            PushSubscription.endpoint,
+            PushSubscription.p256dh,
+            PushSubscription.auth,
+        ).where(
+            PushSubscription.matricule == target.matricule,
+            PushSubscription.active == True  # noqa: E712
+        )
+        subscriptions = connection.execute(stmt).mappings().all()
+        if not subscriptions:
+            return
+
+        stale_ids = []
+        for sub in subscriptions:
+            subscription_info = {
+                'endpoint': sub['endpoint'],
+                'keys': {
+                    'p256dh': sub['p256dh'],
+                    'auth': sub['auth'],
+                },
+            }
+            sent, reason = webpush.send_webpush(
+                subscription_info=subscription_info,
+                title=target.titre or 'Nouvelle notification EMS',
+                body=target.message or '',
+                data={
+                    'id_notification': target.id_notification,
+                    'id_operation': target.id_operation,
+                    'url': '/rh/notifications',
+                },
+            )
+            if not sent and reason == 'gone':
+                stale_ids.append(sub['id_push_subscription'])
+
+        if stale_ids:
+            connection.execute(
+                delete(PushSubscription).where(
+                    PushSubscription.id_push_subscription.in_(stale_ids)
+                )
+            )
+    except Exception:
+        # Push failures must never block business transactions.
+        return

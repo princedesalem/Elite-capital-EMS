@@ -10,6 +10,42 @@ from datetime import date, datetime, timedelta
 router = APIRouter(prefix='/dashboard', tags=['dashboard'])
 
 
+def _normalize_sexe(value):
+    raw = value.value if hasattr(value, 'value') else value
+    txt = str(raw or '').strip().upper()
+    if txt == 'M':
+        return 'M'
+    if txt == 'F':
+        return 'F'
+    return 'X'
+
+
+def _normalize_operation_type(operation: models.Operation) -> str:
+    type_demande = str(operation.type_demande or '').strip()
+    if type_demande:
+        return type_demande
+    titre = str(operation.titre or '').strip()
+    return titre or 'NON_RENSEIGNE'
+
+
+def _get_department_localisation(db: Session, dept: models.Departement):
+    """Resolve department localisation via direction first, then entity implantation."""
+    if not dept:
+        return None
+
+    if dept.id_direction:
+        direction = db.query(models.Direction).filter(models.Direction.id_direction == dept.id_direction).first()
+        if direction and direction.id_localisation:
+            return db.query(models.Localisation).filter(models.Localisation.id_localisation == direction.id_localisation).first()
+
+    if dept.id_entite:
+        implantation = db.query(models.Implantation).filter(models.Implantation.id_entite == dept.id_entite).first()
+        if implantation and implantation.id_localisation:
+            return db.query(models.Localisation).filter(models.Localisation.id_localisation == implantation.id_localisation).first()
+
+    return None
+
+
 @router.get('/analytics/{matricule}')
 def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_db)):
     """
@@ -34,6 +70,7 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
     is_dg = role == 'DG'
     is_directeur = role == 'DIRECTEUR'
     is_responsable = role == 'RESPONSABLE'
+    scope_level = 'personnel'
     
     # === MES OPÉRATIONS PERSONNELLES (pour tous) ===
     mes_operations = db.query(models.Operation).filter(
@@ -42,7 +79,7 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
     
     mes_ops_by_type = {}
     for op in mes_operations:
-        type_op = op.titre or op.type_demande or 'Non renseigné'
+        type_op = _normalize_operation_type(op)
         mes_ops_by_type[type_op] = mes_ops_by_type.get(type_op, 0) + 1
     
     mes_ops_by_statut = {}
@@ -66,6 +103,7 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
         perimetre_operations = db.query(models.Operation).all()
         perimetre_employes = db.query(models.Employe).all()
         show_org_stats = True
+        scope_level = 'global'
     elif is_dg:
         # Voir toute l'entité
         perimetre_employes = db.query(models.Employe).filter(
@@ -76,6 +114,7 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
             models.Operation.matricule.in_(matricules_entite)
         ).all()
         show_org_stats = True
+        scope_level = 'entite'
     elif is_directeur:
         # Voir toute la direction
         perimetre_employes = db.query(models.Employe).filter(
@@ -86,6 +125,7 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
             models.Operation.matricule.in_(matricules_direction)
         ).all()
         show_org_stats = True
+        scope_level = 'direction'
     elif is_responsable:
         # Voir tout le département
         perimetre_employes = db.query(models.Employe).filter(
@@ -96,6 +136,7 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
             models.Operation.matricule.in_(matricules_dept)
         ).all()
         show_org_stats = True
+        scope_level = 'departement'
     else:
         # EMPLOYE: seulement ses opérations (déjà dans mes_operations_stats)
         perimetre_operations = []
@@ -105,7 +146,7 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
     # Stats périmètre
     perimetre_ops_by_type = {}
     for op in perimetre_operations:
-        type_op = op.titre or op.type_demande or 'Non renseigné'
+        type_op = _normalize_operation_type(op)
         perimetre_ops_by_type[type_op] = perimetre_ops_by_type.get(type_op, 0) + 1
     
     perimetre_ops_by_statut = {}
@@ -119,16 +160,20 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
         total = len(perimetre_employes)
         
         # ===== SEXE =====
-        hommes = sum(1 for e in perimetre_employes if e.sexe == 'M')
-        femmes = sum(1 for e in perimetre_employes if e.sexe == 'F')
+        hommes = sum(1 for e in perimetre_employes if _normalize_sexe(e.sexe) == 'M')
+        femmes = sum(1 for e in perimetre_employes if _normalize_sexe(e.sexe) == 'F')
+        indetermine = total - hommes - femmes
         perimetre_kpis['effectif_total'] = total
         perimetre_kpis['hommes'] = hommes
         perimetre_kpis['femmes'] = femmes
+        perimetre_kpis['indetermine'] = indetermine
         perimetre_kpis['hommes_pct'] = round((hommes / total * 100), 1) if total > 0 else 0
         perimetre_kpis['femmes_pct'] = round((femmes / total * 100), 1) if total > 0 else 0
+        perimetre_kpis['indetermine_pct'] = round((indetermine / total * 100), 1) if total > 0 else 0
         perimetre_kpis['by_sexe'] = [
             {'sexe': 'M', 'count': hommes, 'pct': perimetre_kpis['hommes_pct']},
             {'sexe': 'F', 'count': femmes, 'pct': perimetre_kpis['femmes_pct']},
+            {'sexe': 'X', 'count': indetermine, 'pct': perimetre_kpis['indetermine_pct']},
         ]
         
         # ===== CATÉGORIES =====
@@ -157,14 +202,13 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
             country = 'Non renseigné'
             if e.dept_id:
                 dept = db.query(models.Departement).filter(models.Departement.dept_id == e.dept_id).first()
-                if dept and dept.id_localisation:
-                    loc = db.query(models.Localisation).filter(models.Localisation.id_localisation == dept.id_localisation).first()
-                    if loc:
-                        city = loc.ville or 'Non renseigné'
-                        if loc.id_pays:
-                            pays = db.query(models.Pays).filter(models.Pays.id_pays == loc.id_pays).first()
-                            if pays:
-                                country = pays.nom_pays or 'Non renseigné'
+                loc = _get_department_localisation(db, dept)
+                if loc:
+                    city = loc.ville or 'Non renseigné'
+                    if loc.id_pays:
+                        pays = db.query(models.Pays).filter(models.Pays.id_pays == loc.id_pays).first()
+                        if pays:
+                            country = pays.nom_pays or 'Non renseigné'
             cities[city] = cities.get(city, 0) + 1
             countries[country] = countries.get(country, 0) + 1
         perimetre_kpis['by_ville'] = [{'ville': k, 'count': v, 'pct': round((v/total*100), 1)} for k, v in sorted(cities.items(), key=lambda x: x[1], reverse=True)]
@@ -193,22 +237,23 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
         perimetre_kpis['by_age'] = [{'tranche': k, 'count': v, 'pct': round((v/total*100), 1)} for k, v in tranches_age.items() if v > 0]
         
         # ===== OPÉRATIONS PAR SEXE =====
-        ops_by_sexe = {'M': 0, 'F': 0}
+        ops_by_sexe = {'M': 0, 'F': 0, 'X': 0}
         for op in perimetre_operations:
             emp = db.query(models.Employe).filter(models.Employe.matricule == op.matricule).first()
-            if emp and emp.sexe:
-                ops_by_sexe[emp.sexe] = ops_by_sexe.get(emp.sexe, 0) + 1
+            sexe_key = _normalize_sexe(emp.sexe) if emp else 'X'
+            ops_by_sexe[sexe_key] = ops_by_sexe.get(sexe_key, 0) + 1
         perimetre_kpis['operations_by_sexe'] = [
             {'sexe': 'M', 'count': ops_by_sexe.get('M', 0)},
             {'sexe': 'F', 'count': ops_by_sexe.get('F', 0)},
+            {'sexe': 'X', 'count': ops_by_sexe.get('X', 0)},
         ]
         
         # ===== OPÉRATIONS PAR TYPE ET SEXE =====
         ops_type_sexe = {}
         for op in perimetre_operations:
-            type_op = op.titre or 'NON_RENSEIGNE'
+            type_op = _normalize_operation_type(op)
             emp = db.query(models.Employe).filter(models.Employe.matricule == op.matricule).first()
-            sexe = emp.sexe if emp else 'X'
+            sexe = _normalize_sexe(emp.sexe) if emp else 'X'
             key = f"{type_op}_{sexe}"
             ops_type_sexe[key] = ops_type_sexe.get(key, 0) + 1
         
@@ -241,32 +286,30 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
         # Trouver les départements de cette direction
         depts = db.query(models.Departement).filter(models.Departement.id_direction == direction.id_direction).all()
         for dept in depts:
-            if dept.id_localisation:
-                loc = db.query(models.Localisation).filter(models.Localisation.id_localisation == dept.id_localisation).first()
-                if loc:
-                    ville = loc.ville or 'Non renseigné'
-                    directions_by_ville[ville] = set(directions_by_ville.get(ville, set())) | {direction.id_direction}
-                    if loc.id_pays:
-                        pays = db.query(models.Pays).filter(models.Pays.id_pays == loc.id_pays).first()
-                        if pays:
-                            pays_name = pays.nom_pays
-                            directions_by_pays[pays_name] = set(directions_by_pays.get(pays_name, set())) | {direction.id_direction}
+            loc = _get_department_localisation(db, dept)
+            if loc:
+                ville = loc.ville or 'Non renseigné'
+                directions_by_ville[ville] = set(directions_by_ville.get(ville, set())) | {direction.id_direction}
+                if loc.id_pays:
+                    pays = db.query(models.Pays).filter(models.Pays.id_pays == loc.id_pays).first()
+                    if pays:
+                        pays_name = pays.nom_pays
+                        directions_by_pays[pays_name] = set(directions_by_pays.get(pays_name, set())) | {direction.id_direction}
     
     # Départements par ville/pays
     departments_by_ville = {}
     departments_by_pays = {}
     all_depts = db.query(models.Departement).all()
     for dept in all_depts:
-        if dept.id_localisation:
-            loc = db.query(models.Localisation).filter(models.Localisation.id_localisation == dept.id_localisation).first()
-            if loc:
-                ville = loc.ville or 'Non renseigné'
-                departments_by_ville[ville] = departments_by_ville.get(ville, 0) + 1
-                if loc.id_pays:
-                    pays = db.query(models.Pays).filter(models.Pays.id_pays == loc.id_pays).first()
-                    if pays:
-                        pays_name = pays.nom_pays
-                        departments_by_pays[pays_name] = departments_by_pays.get(pays_name, 0) + 1
+        loc = _get_department_localisation(db, dept)
+        if loc:
+            ville = loc.ville or 'Non renseigné'
+            departments_by_ville[ville] = departments_by_ville.get(ville, 0) + 1
+            if loc.id_pays:
+                pays = db.query(models.Pays).filter(models.Pays.id_pays == loc.id_pays).first()
+                if pays:
+                    pays_name = pays.nom_pays
+                    departments_by_pays[pays_name] = departments_by_pays.get(pays_name, 0) + 1
     
     # Entités par ville/pays
     entities_by_ville = {}
@@ -278,16 +321,15 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
         for direction in dirs:
             depts = db.query(models.Departement).filter(models.Departement.id_direction == direction.id_direction).all()
             for dept in depts:
-                if dept.id_localisation:
-                    loc = db.query(models.Localisation).filter(models.Localisation.id_localisation == dept.id_localisation).first()
-                    if loc:
-                        ville = loc.ville or 'Non renseigné'
-                        entities_by_ville[ville] = set(entities_by_ville.get(ville, set())) | {entity.id_entite}
-                        if loc.id_pays:
-                            pays = db.query(models.Pays).filter(models.Pays.id_pays == loc.id_pays).first()
-                            if pays:
-                                pays_name = pays.nom_pays
-                                entities_by_pays[pays_name] = set(entities_by_pays.get(pays_name, set())) | {entity.id_entite}
+                loc = _get_department_localisation(db, dept)
+                if loc:
+                    ville = loc.ville or 'Non renseigné'
+                    entities_by_ville[ville] = set(entities_by_ville.get(ville, set())) | {entity.id_entite}
+                    if loc.id_pays:
+                        pays = db.query(models.Pays).filter(models.Pays.id_pays == loc.id_pays).first()
+                        if pays:
+                            pays_name = pays.nom_pays
+                            entities_by_pays[pays_name] = set(entities_by_pays.get(pays_name, set())) | {entity.id_entite}
     
     org_structure_by_geo['directions_by_ville'] = [
         {'ville': k, 'count': len(v)} for k, v in sorted(directions_by_ville.items())
@@ -399,6 +441,7 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
     return {
         'matricule': matricule,
         'role': role,
+        'scope_level': scope_level,
         'mes_operations': mes_operations_stats,
         'perimetre': perimetre_stats,
         'organisation': org_stats,
@@ -479,29 +522,129 @@ def get_dashboard_analytics(db: Session = Depends(get_db)):
         for ville, count in employes_par_ville_rows
     ]
 
-    # === Tranches d'âge ===
+    # === Tranches d'âge (pas de 5 ans, à partir de 18) ===
     today = date.today()
     employes_avec_age = db.query(models.Employe).filter(models.Employe.date_naissance.isnot(None)).all()
-    
-    tranches_age = {'<25': 0, '25-34': 0, '35-44': 0, '45-54': 0, '55+': 0}
+
+    tranches_age = {}
+
+    def _bucket_age(age: int) -> str:
+        if age < 18:
+            return '<18'
+        start = 18 + ((age - 18) // 5) * 5
+        end = start + 4
+        if start >= 58:
+            return '58+'
+        return f'{start}-{end}'
+
     for emp in employes_avec_age:
         if emp.date_naissance:
             age = today.year - emp.date_naissance.year
             if today.month < emp.date_naissance.month or (today.month == emp.date_naissance.month and today.day < emp.date_naissance.day):
                 age -= 1
-            
-            if age < 25:
-                tranches_age['<25'] += 1
-            elif age < 35:
-                tranches_age['25-34'] += 1
-            elif age < 45:
-                tranches_age['35-44'] += 1
-            elif age < 55:
-                tranches_age['45-54'] += 1
-            else:
-                tranches_age['55+'] += 1
 
-    repartition_age = [{'tranche': k, 'count': v} for k, v in tranches_age.items() if v > 0]
+            bucket = _bucket_age(age)
+            tranches_age[bucket] = tranches_age.get(bucket, 0) + 1
+
+    repartition_age = [
+        {'tranche': k, 'count': v}
+        for k, v in sorted(tranches_age.items(), key=lambda item: (999 if item[0] == '58+' else int(item[0].split('-')[0]) if '-' in item[0] else -1))
+        if v > 0
+    ]
+
+    # === Top demandeurs + ventilations organisationnelles ===
+    top_demandeurs_rows = db.query(
+        models.Operation.matricule,
+        models.Employe.prenom,
+        models.Employe.nom,
+        models.Entite.nom,
+        models.Direction.nom,
+        models.Departement.nom,
+        func.count(models.Operation.id_operation).label('total')
+    ).join(
+        models.Employe,
+        models.Employe.matricule == models.Operation.matricule,
+        isouter=True
+    ).join(
+        models.Entite,
+        models.Entite.id_entite == models.Employe.id_entite,
+        isouter=True
+    ).join(
+        models.Direction,
+        models.Direction.id_direction == models.Employe.id_direction,
+        isouter=True
+    ).join(
+        models.Departement,
+        models.Departement.dept_id == models.Employe.dept_id,
+        isouter=True
+    ).group_by(
+        models.Operation.matricule,
+        models.Employe.prenom,
+        models.Employe.nom,
+        models.Entite.nom,
+        models.Direction.nom,
+        models.Departement.nom,
+    ).order_by(func.count(models.Operation.id_operation).desc()).limit(10).all()
+
+    top_demandeurs = [
+        {
+            'matricule': matricule,
+            'nom_complet': f"{prenom or ''} {nom or ''}".strip() or f"Employé {matricule}",
+            'entite': entite or 'Non renseigné',
+            'direction': direction or 'Non renseignée',
+            'departement': departement or 'Non renseigné',
+            'total_demandes': int(total),
+        }
+        for matricule, prenom, nom, entite, direction, departement, total in top_demandeurs_rows
+    ]
+
+    operations_by_entite = [
+        {'entite': entite or 'Non renseigné', 'count': int(count)}
+        for entite, count in db.query(
+            models.Entite.nom,
+            func.count(models.Operation.id_operation)
+        ).select_from(models.Operation).join(
+            models.Employe,
+            models.Employe.matricule == models.Operation.matricule,
+            isouter=True
+        ).join(
+            models.Entite,
+            models.Entite.id_entite == models.Employe.id_entite,
+            isouter=True
+        ).group_by(models.Entite.nom).all()
+    ]
+
+    operations_by_direction = [
+        {'direction': direction or 'Non renseignée', 'count': int(count)}
+        for direction, count in db.query(
+            models.Direction.nom,
+            func.count(models.Operation.id_operation)
+        ).select_from(models.Operation).join(
+            models.Employe,
+            models.Employe.matricule == models.Operation.matricule,
+            isouter=True
+        ).join(
+            models.Direction,
+            models.Direction.id_direction == models.Employe.id_direction,
+            isouter=True
+        ).group_by(models.Direction.nom).all()
+    ]
+
+    operations_by_departement = [
+        {'departement': dept or 'Non renseigné', 'count': int(count)}
+        for dept, count in db.query(
+            models.Departement.nom,
+            func.count(models.Operation.id_operation)
+        ).select_from(models.Operation).join(
+            models.Employe,
+            models.Employe.matricule == models.Operation.matricule,
+            isouter=True
+        ).join(
+            models.Departement,
+            models.Departement.dept_id == models.Employe.dept_id,
+            isouter=True
+        ).group_by(models.Departement.nom).all()
+    ]
 
     # === Répartition par rôle ===
     role_rows = db.query(
@@ -587,21 +730,18 @@ def get_dashboard_analytics(db: Session = Depends(get_db)):
     ]
 
     # === Départements par ville ===
-    departments_by_city_rows = db.query(
-        models.Localisation.ville,
-        func.count(models.Departement.dept_id)
-    ).join(
-        models.Departement,
-        models.Departement.id_localisation == models.Localisation.id_localisation,
-        isouter=True
-    ).group_by(models.Localisation.ville).all()
+    departments_by_city_map = {}
+    for dept in db.query(models.Departement).all():
+        loc = _get_department_localisation(db, dept)
+        ville = (loc.ville if loc else None) or 'Non renseigné'
+        departments_by_city_map[ville] = departments_by_city_map.get(ville, 0) + 1
 
     departments_by_city = [
         {
             'ville': ville,
             'count': int(count),
         }
-        for ville, count in departments_by_city_rows
+        for ville, count in sorted(departments_by_city_map.items())
     ]
 
     return {
@@ -622,6 +762,10 @@ def get_dashboard_analytics(db: Session = Depends(get_db)):
         'employes_par_ville': employes_par_ville,
         'recrues_par_mois': recrues_par_mois,
         'operations_by_type': operations_by_type,
+        'top_demandeurs': top_demandeurs,
+        'operations_by_entite': operations_by_entite,
+        'operations_by_direction': operations_by_direction,
+        'operations_by_departement': operations_by_departement,
         'validations_by_status': validations_by_status,
         'employes_by_entite': employes_by_entite,
         'departments_by_city': departments_by_city,

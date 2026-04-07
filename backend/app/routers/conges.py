@@ -1,13 +1,13 @@
 """
 Router pour la gestion des congés avec toutes les règles métier
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, datetime
 from ..db import get_db
 from .. import models, schemas
-from ..utils import business_logic, activation_cloture, workflow, notifications
+from ..utils import business_logic, activation_cloture, workflow, notifications, access_control
 
 router = APIRouter(prefix='/api/conges', tags=['conges'])
 
@@ -69,7 +69,10 @@ def creer_demande_conge(
         statut='en attente',
         date_debut=date_debut,
         date_fin=date_fin,
+        date_depart=date_debut,
+        date_retour=date_fin,
         duree_jours=duree,
+        duree=duree,
         motif=motif,
         date_demande=datetime.now(),
         cree_par=createur
@@ -77,7 +80,17 @@ def creer_demande_conge(
     db.add(operation)
     db.commit()
     db.refresh(operation)
-    
+
+    # Auto-valider immédiatement si PCA/AG (séquence vide)
+    if workflow.auto_valider_si_sequence_vide(operation.id_operation, matricule, db):
+        return {
+            "id_operation": operation.id_operation,
+            "duree_jours": duree,
+            "solde_restant": solde_actuel - duree,
+            "prochain_validateur": None,
+            "message": "Demande de congé créée et approuvée automatiquement."
+        }
+
     # Déterminer le premier validateur et notifier
     prochain_role, prochain_matricule = workflow.obtenir_prochain_validateur(operation.id_operation, db)
     
@@ -139,7 +152,7 @@ def obtenir_solde(matricule: int, db: Session = Depends(get_db)):
 @router.post('/calculer-duree')
 def calculer_duree_conge(date_debut: date, date_fin: date):
     """
-    Calculer la durée en jours ouvrables (exclut vendredi et samedi).
+    Calculer la durée en jours ouvrables (exclut samedi et dimanche).
     """
     duree = business_logic.calculer_jours_ouvrables(date_debut, date_fin)
     
@@ -147,7 +160,87 @@ def calculer_duree_conge(date_debut: date, date_fin: date):
         "date_debut": date_debut,
         "date_fin": date_fin,
         "duree_jours_ouvrables": duree,
-        "note": "Les week-ends (vendredi et samedi) sont exclus selon la Convention Collective"
+        "note": "Les week-ends (samedi et dimanche) sont exclus"
+    }
+
+
+@router.put('/{id_operation}/modifier')
+def modifier_demande_conge(
+    id_operation: int,
+    date_debut: date,
+    date_fin: date,
+    motif: Optional[str] = None,
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    operation = db.query(models.Operation).filter(
+        models.Operation.id_operation == id_operation,
+        models.Operation.type_demande == 'Congé'
+    ).first()
+
+    if not operation:
+        raise HTTPException(status_code=404, detail="Demande de congé introuvable")
+
+    if request is not None:
+        actor_matricule, actor_role = access_control.get_actor_from_request(request)
+        if operation.matricule != actor_matricule and not access_control.can_access_globally(str(actor_role or '').upper()):
+            raise HTTPException(status_code=403, detail="Vous n'êtes pas autorisé à modifier cette demande")
+
+    if operation.statut and str(operation.statut).lower() != 'en attente':
+        raise HTTPException(status_code=400, detail="Seules les demandes en attente peuvent être modifiées")
+
+    if workflow.operation_a_deja_ete_validee(id_operation, db):
+        raise HTTPException(status_code=400, detail="Impossible de modifier une demande après la première validation")
+
+    employe = db.query(models.Employe).filter(models.Employe.matricule == operation.matricule).first()
+    if not employe:
+        raise HTTPException(status_code=404, detail="Employé introuvable")
+
+    duree = business_logic.calculer_jours_ouvrables(date_debut, date_fin)
+    if duree <= 0:
+        raise HTTPException(status_code=400, detail="La durée des congés doit être positive")
+
+    chevauchement, message_chevauchement = business_logic.verifier_chevauchement_operations(
+        employe, date_debut, date_fin, db, operation_id=id_operation
+    )
+    if chevauchement:
+        autres_ops = db.query(models.Operation).filter(
+            models.Operation.matricule == operation.matricule,
+            models.Operation.id_operation != id_operation,
+            models.Operation.type_demande.in_(['Congé', 'Permission', 'Mission'])
+        ).all()
+        conflit = any(
+            op.date_debut and op.date_fin and not (date_fin < op.date_debut or date_debut > op.date_fin)
+            for op in autres_ops
+        )
+        if conflit:
+            raise HTTPException(status_code=400, detail=message_chevauchement)
+
+    solde_ok, message_solde, _ = business_logic.verifier_solde_conges(employe, duree)
+    if not solde_ok:
+        raise HTTPException(status_code=400, detail=message_solde)
+
+    operation.date_debut = date_debut
+    operation.date_fin = date_fin
+    operation.date_depart = date_debut
+    operation.date_retour = date_fin
+    operation.duree_jours = duree
+    operation.duree = duree
+    operation.motif = motif
+    operation.commentaire = motif
+    operation.est_modifie = True
+    operation.date_modification = datetime.now()
+
+    db.commit()
+    db.refresh(operation)
+
+    return {
+        "message": "Demande de congé modifiée avec succès",
+        "id_operation": operation.id_operation,
+        "date_debut": operation.date_debut,
+        "date_fin": operation.date_fin,
+        "duree_jours": operation.duree_jours,
+        "motif": operation.motif,
     }
 
 

@@ -1,15 +1,155 @@
 """
 Router pour le système de notifications
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+from pydantic import BaseModel
 from ..db import get_db
 from .. import models
 from ..utils import notifications as notif_utils
+from ..utils import security
+from ..utils import webpush as webpush_utils
 
 router = APIRouter(prefix='/api/notifications', tags=['notifications'])
+
+
+class PushKeysPayload(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionPayload(BaseModel):
+    endpoint: str
+    keys: PushKeysPayload
+
+
+class PushSubscribePayload(BaseModel):
+    matricule: int
+    subscription: PushSubscriptionPayload
+
+
+class PushUnsubscribePayload(BaseModel):
+    matricule: Optional[int] = None
+    endpoint: str
+
+
+def _get_token_context(request: Request):
+    auth = request.headers.get('authorization')
+    if not auth or not auth.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail='Token manquant')
+
+    token = auth.split(None, 1)[1]
+    try:
+        payload = security.jwt.decode(token, security.SECRET_KEY, algorithms=[security.ALGORITHM])
+    except Exception:
+        raise HTTPException(status_code=401, detail='Token invalide')
+
+    role = str(payload.get('role') or '').strip().upper()
+    matricule = payload.get('matricule') or payload.get('sub')
+    try:
+        matricule = int(matricule)
+    except Exception:
+        raise HTTPException(status_code=401, detail='Token sans matricule valide')
+
+    return matricule, role
+
+
+@router.get('/push/vapid-public-key')
+def get_vapid_public_key():
+    """Expose VAPID public key for browser push subscription."""
+    return {
+        'configured': webpush_utils.is_webpush_configured(),
+        'public_key': webpush_utils.vapid_public_key(),
+    }
+
+
+@router.post('/push/subscribe')
+def subscribe_push(
+    payload: PushSubscribePayload,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    requester_matricule, requester_role = _get_token_context(request)
+    if requester_role not in {'ADMIN', 'RH', 'DG', 'PCA', 'AG'} and requester_matricule != payload.matricule:
+        raise HTTPException(status_code=403, detail='Action non autorisée pour ce matricule')
+
+    employe = db.query(models.Employe).filter(models.Employe.matricule == payload.matricule).first()
+    if not employe:
+        raise HTTPException(status_code=404, detail='Employé introuvable')
+
+    existing = db.query(models.PushSubscription).filter(
+        models.PushSubscription.endpoint == payload.subscription.endpoint
+    ).first()
+
+    if existing:
+        existing.matricule = payload.matricule
+        existing.p256dh = payload.subscription.keys.p256dh
+        existing.auth = payload.subscription.keys.auth
+        existing.user_agent = request.headers.get('user-agent')
+        existing.active = True
+        existing.updated_at = datetime.utcnow()
+    else:
+        db.add(models.PushSubscription(
+            matricule=payload.matricule,
+            endpoint=payload.subscription.endpoint,
+            p256dh=payload.subscription.keys.p256dh,
+            auth=payload.subscription.keys.auth,
+            user_agent=request.headers.get('user-agent'),
+            active=True,
+        ))
+
+    db.commit()
+    return {'message': 'Abonnement push enregistré'}
+
+
+@router.post('/push/unsubscribe')
+def unsubscribe_push(
+    payload: PushUnsubscribePayload,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    requester_matricule, requester_role = _get_token_context(request)
+    target_matricule = payload.matricule or requester_matricule
+
+    if requester_role not in {'ADMIN', 'RH', 'DG', 'PCA', 'AG'} and requester_matricule != target_matricule:
+        raise HTTPException(status_code=403, detail='Action non autorisée pour ce matricule')
+
+    subscription = db.query(models.PushSubscription).filter(
+        models.PushSubscription.endpoint == payload.endpoint,
+        models.PushSubscription.matricule == target_matricule,
+    ).first()
+
+    if not subscription:
+        return {'message': 'Abonnement déjà supprimé'}
+
+    db.delete(subscription)
+    db.commit()
+    return {'message': 'Abonnement push supprimé'}
+
+
+@router.post('/push/test/{matricule}')
+def push_test_notification(
+    matricule: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    requester_matricule, requester_role = _get_token_context(request)
+    if requester_role not in {'ADMIN', 'RH', 'DG', 'PCA', 'AG'} and requester_matricule != matricule:
+        raise HTTPException(status_code=403, detail='Action non autorisée pour ce matricule')
+
+    success, msg = notif_utils.creer_notification(
+        matricule=matricule,
+        type_notification=models.TypeNotificationEnum.AUTRE,
+        titre='Test notification push',
+        message='Votre navigateur est bien abonné aux notifications push EMS.',
+        db=db,
+    )
+    if not success:
+        raise HTTPException(status_code=400, detail=msg)
+
+    return {'message': 'Notification push de test créée'}
 
 
 @router.get('/non-lues/{matricule}')
@@ -17,16 +157,25 @@ def obtenir_notifications_non_lues(matricule: int, db: Session = Depends(get_db)
     """
     Obtenir toutes les notifications non lues d'un employé.
     """
-    notifications = notif_utils.obtenir_notifications_non_lues(matricule, db)
-    
+    notifications = db.query(models.Notification).filter(
+        models.Notification.matricule == matricule,
+        models.Notification.lue == False  # noqa: E712
+    ).order_by(models.Notification.date_creation.desc()).all()
+
     return [
         {
             "id_notification": n.id_notification,
             "type_notification": n.type_notification,
             "titre": n.titre,
             "message": n.message,
+            "lue": n.lue,
             "date_creation": n.date_creation,
-            "id_operation": n.id_operation
+            "id_operation": n.id_operation,
+            "type_demande": (
+                db.query(models.Operation.type_demande)
+                .filter(models.Operation.id_operation == n.id_operation)
+                .scalar() if n.id_operation else None
+            ),
         }
         for n in notifications
     ]
@@ -54,7 +203,12 @@ def obtenir_toutes_notifications(
             "lue": n.lue,
             "date_creation": n.date_creation,
             "date_lecture": n.date_lecture,
-            "id_operation": n.id_operation
+            "id_operation": n.id_operation,
+            "type_demande": (
+                db.query(models.Operation.type_demande)
+                .filter(models.Operation.id_operation == n.id_operation)
+                .scalar() if n.id_operation else None
+            ),
         }
         for n in notifications
     ]
@@ -65,12 +219,12 @@ def marquer_comme_lue(id_notification: int, db: Session = Depends(get_db)):
     """
     Marquer une notification comme lue.
     """
-    success, message = notif_utils.marquer_notification_comme_lue(id_notification, db)
-    
+    success = notif_utils.marquer_notification_comme_lue(id_notification, db)
+
     if not success:
-        raise HTTPException(status_code=404, detail=message)
-    
-    return {"message": message}
+        raise HTTPException(status_code=404, detail="Notification introuvable")
+
+    return {"message": "Notification marquée comme lue"}
 
 
 @router.put('/marquer-toutes-lues/{matricule}')

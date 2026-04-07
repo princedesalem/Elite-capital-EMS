@@ -6,10 +6,6 @@ import '../styles/Operations.css'
 
 const ACCENT = '#ce2b2b'
 const DARK = '#021630'
-const MEETINGS_KEY = 'ems_talent_meetings_v1'
-const GOALS_KEY = 'ems_talent_goals_v1'
-const loadLS = (k, def = []) => { try { return JSON.parse(localStorage.getItem(k) || JSON.stringify(def)) } catch { return def } }
-const saveLS = (k, v) => localStorage.setItem(k, JSON.stringify(v))
 
 const GOAL_STATUTS = { a_faire: { label: 'À faire', color: '#64748b' }, en_cours: { label: 'En cours', color: '#021630' }, atteint: { label: 'Atteint', color: '#021630' }, abandonne: { label: 'Abandonné', color: '#94a3b8' } }
 const GOAL_TYPES = ['Développement', 'Performance', 'Formation', 'Leadership', 'Technique', 'Personnel']
@@ -90,8 +86,8 @@ export default function TalentManagement() {
   const { user } = useAuth()
   const isAdmin = ['RH', 'DG', 'PCA', 'ADMIN'].includes(user?.role || '')
   const [employees, setEmployees] = useState([])
-  const [meetings, setMeetings] = useState(() => loadLS(MEETINGS_KEY))
-  const [goals, setGoals] = useState(() => loadLS(GOALS_KEY))
+  const [meetings, setMeetings] = useState([])
+  const [goals, setGoals] = useState([])
   const [activeTab, setActiveTab] = useState('meetings')
   const [showMeetForm, setShowMeetForm] = useState(false)
   const [showGoalForm, setShowGoalForm] = useState(false)
@@ -102,8 +98,18 @@ export default function TalentManagement() {
   const [goalForm, setGoalForm] = useState({ titre: '', description: '', type: 'Développement', echeance: '', statut: 'a_faire', employee_id: '' })
 
   useEffect(() => {
-    api.get('/employees').then(r => setEmployees(r.data || [])).catch(() => {})
+    api.get('/employees/').then(r => setEmployees(r.data || [])).catch(() => {})
+    loadTalentData()
   }, [])
+
+  async function loadTalentData() {
+    const [meetingsRes, goalsRes] = await Promise.all([
+      api.get('/api/module-store/talent_meetings').catch(() => ({ data: [] })),
+      api.get('/api/module-store/talent_goals').catch(() => ({ data: [] })),
+    ])
+    setMeetings(Array.isArray(meetingsRes.data) ? meetingsRes.data : [])
+    setGoals(Array.isArray(goalsRes.data) ? goalsRes.data : [])
+  }
 
   const visibleEmployees = useMemo(() => {
     if (isAdmin) return employees
@@ -127,41 +133,53 @@ export default function TalentManagement() {
     })
   }, [goals, isAdmin, user, filterEmp])
 
-  const submitMeeting = (e) => {
+  const submitMeeting = async (e) => {
     e.preventDefault()
     if (!meetForm.titre.trim()) return
     if (editMeeting) {
-      const updated = meetings.map(m => m.id === editMeeting.id ? { ...m, ...meetForm } : m)
-      setMeetings(updated); saveLS(MEETINGS_KEY, updated)
+      await api.put(`/api/module-store/talent_meetings/${editMeeting.id}`, { ...meetForm }).catch(() => null)
     } else {
-      const nm = { ...meetForm, id: Date.now(), created_at: new Date().toISOString() }
-      const updated = [nm, ...meetings]
-      setMeetings(updated); saveLS(MEETINGS_KEY, updated)
+      await api.post('/api/module-store/talent_meetings', {
+        ...meetForm,
+        created_at: new Date().toISOString(),
+        _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
+      }).catch(() => null)
     }
+    await loadTalentData()
     setMeetForm({ titre: '', manager_id: '', employee_id: '', date: '', agenda: '', notes: '', actions: '', statut: 'planifie' })
     setEditMeeting(null); setShowMeetForm(false)
   }
 
-  const submitGoal = (e) => {
+  const submitGoal = async (e) => {
     e.preventDefault()
     if (!goalForm.titre.trim()) return
-    const ng = { ...goalForm, id: Date.now(), employee_id: goalForm.employee_id || String(user?.matricule), created_at: new Date().toISOString() }
-    const updated = [ng, ...goals]
-    setGoals(updated); saveLS(GOALS_KEY, updated); setShowGoalForm(false)
+    await api.post('/api/module-store/talent_goals', {
+      ...goalForm,
+      employee_id: goalForm.employee_id || String(user?.matricule),
+      created_at: new Date().toISOString(),
+      _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
+    }).catch(() => null)
+    await loadTalentData()
+    setShowGoalForm(false)
     setGoalForm({ titre: '', description: '', type: 'Développement', echeance: '', statut: 'a_faire', employee_id: '' })
   }
 
-  const deleteMeeting = (id) => {
+  const deleteMeeting = async (id) => {
     if (!window.confirm('Supprimer cette réunion ?')) return
-    const updated = meetings.filter(m => m.id !== id); setMeetings(updated); saveLS(MEETINGS_KEY, updated)
+    await api.delete(`/api/module-store/talent_meetings/${id}`).catch(() => null)
+    await loadTalentData()
   }
 
-  const deleteGoal = (id) => {
-    const updated = goals.filter(g => g.id !== id); setGoals(updated); saveLS(GOALS_KEY, updated)
+  const deleteGoal = async (id) => {
+    await api.delete(`/api/module-store/talent_goals/${id}`).catch(() => null)
+    await loadTalentData()
   }
 
-  const updateGoalStatus = (id, statut) => {
-    const updated = goals.map(g => g.id === id ? { ...g, statut } : g); setGoals(updated); saveLS(GOALS_KEY, updated)
+  const updateGoalStatus = async (id, statut) => {
+    const goal = goals.find((g) => g.id === id)
+    if (!goal) return
+    await api.put(`/api/module-store/talent_goals/${id}`, { ...goal, statut }).catch(() => null)
+    await loadTalentData()
   }
 
   const startEditMeeting = (m) => {

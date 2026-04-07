@@ -17,7 +17,14 @@ EMAIL_FROM = os.getenv('EMAIL_FROM', 'no-reply@elitecapital.com')
 SMTP_ENABLED = os.getenv('SMTP_ENABLED', 'false').lower() == 'true'
 
 
-def send_email(to: str, subject: str, body: str, html: bool = False):
+def send_email(
+    to: str,
+    subject: str,
+    body: str,
+    html: bool = False,
+    cc: Optional[List[str]] = None,
+    reply_to: Optional[str] = None,
+):
     """
     Envoyer un email simple en texte brut ou HTML.
     
@@ -27,11 +34,17 @@ def send_email(to: str, subject: str, body: str, html: bool = False):
         body: Corps de l'email
         html: Si True, envoie en HTML, sinon en texte brut
     """
+    cc = [addr for addr in (cc or []) if str(addr or '').strip()]
+
     if html:
         msg = MIMEMultipart('alternative')
         msg['Subject'] = subject
         msg['From'] = EMAIL_FROM
         msg['To'] = to
+        if cc:
+            msg['Cc'] = ', '.join(cc)
+        if reply_to:
+            msg['Reply-To'] = reply_to
         
         html_part = MIMEText(body, 'html')
         msg.attach(html_part)
@@ -40,19 +53,24 @@ def send_email(to: str, subject: str, body: str, html: bool = False):
         msg['Subject'] = subject
         msg['From'] = EMAIL_FROM
         msg['To'] = to
+        if cc:
+            msg['Cc'] = ', '.join(cc)
+        if reply_to:
+            msg['Reply-To'] = reply_to
         msg.set_content(body)
     
     # Si SMTP non configuré, afficher dans les logs
     if not SMTP_ENABLED or not SMTP_HOST or not SMTP_USER:
-        print(f"[EMAIL NOT SENT - SMTP Disabled] to={to} subject={subject}\n{body}")
+        print(f"[EMAIL NOT SENT - SMTP Disabled] to={to} cc={cc} subject={subject}\n{body}")
         return False
     
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
-        print(f"[EMAIL SENT] to={to} subject={subject}")
+            all_recipients = [to] + cc
+            server.send_message(msg, to_addrs=all_recipients)
+        print(f"[EMAIL SENT] to={to} cc={cc} subject={subject}")
         return True
     except Exception as e:
         print(f"[EMAIL ERROR] to={to} subject={subject} error={str(e)}")

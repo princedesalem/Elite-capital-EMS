@@ -6,9 +6,6 @@ import '../styles/Operations.css'
 
 const ACCENT = '#ce2b2b'
 const DARK = '#021630'
-const PLAN_KEY = 'ems_workforce_plan_v1'
-const loadPlan = () => { try { return JSON.parse(localStorage.getItem(PLAN_KEY) || '[]') } catch { return [] } }
-const savePlan = (p) => localStorage.setItem(PLAN_KEY, JSON.stringify(p))
 
 const QUARTERS = ['T1', 'T2', 'T3', 'T4']
 const PRIORITIES = { haute: { label: 'Haute', color: ACCENT }, moyenne: { label: 'Moyenne', color: '#d97706' }, basse: { label: 'Basse', color: '#64748b' } }
@@ -25,7 +22,7 @@ export default function WorkforcePlanning() {
   const { user } = useAuth()
   const isAdmin = ['RH', 'DG', 'PCA', 'ADMIN'].includes(user?.role || '')
   const [employees, setEmployees] = useState([])
-  const [positions, setPositions] = useState(() => loadPlan())
+  const [positions, setPositions] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [editPos, setEditPos] = useState(null)
   const [activeTab, setActiveTab] = useState('overview')
@@ -34,8 +31,14 @@ export default function WorkforcePlanning() {
   const [formData, setFormData] = useState({ titre: '', direction: '', entite: '', trimestre: 'T1', annee: String(new Date().getFullYear()), budget: '', priorite: 'moyenne', statut: 'planifie', notes: '' })
 
   useEffect(() => {
-    api.get('/employees').then(r => setEmployees(r.data || [])).catch(() => {})
+    api.get('/employees/').then(r => setEmployees(r.data || [])).catch(() => {})
+    loadPositions()
   }, [])
+
+  async function loadPositions() {
+    const res = await api.get('/api/module-store/workforce_positions').catch(() => ({ data: [] }))
+    setPositions(Array.isArray(res.data) ? res.data : [])
+  }
 
   const entites = useMemo(() => [...new Set(employees.map(e => e.entite?.nom || e.entite).filter(Boolean))], [employees])
   const directions = useMemo(() => [...new Set(employees.map(e => e.direction?.nom || e.direction).filter(Boolean))], [employees])
@@ -71,29 +74,33 @@ export default function WorkforcePlanning() {
     setEditPos(null); setShowForm(false)
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!formData.titre.trim()) return
     if (editPos) {
-      const updated = positions.map(p => p.id === editPos.id ? { ...p, ...formData } : p)
-      setPositions(updated); savePlan(updated)
+      await api.put(`/api/module-store/workforce_positions/${editPos.id}`, { ...formData }).catch(() => null)
     } else {
-      const newPos = { ...formData, id: Date.now(), created_at: new Date().toISOString() }
-      const updated = [newPos, ...positions]
-      setPositions(updated); savePlan(updated)
+      await api.post('/api/module-store/workforce_positions', {
+        ...formData,
+        created_at: new Date().toISOString(),
+        _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
+      }).catch(() => null)
     }
+    await loadPositions()
     resetForm()
   }
 
-  const deletePosition = (id) => {
+  const deletePosition = async (id) => {
     if (!window.confirm('Supprimer ce poste planifié ?')) return
-    const updated = positions.filter(p => p.id !== id)
-    setPositions(updated); savePlan(updated)
+    await api.delete(`/api/module-store/workforce_positions/${id}`).catch(() => null)
+    await loadPositions()
   }
 
-  const markFilled = (id) => {
-    const updated = positions.map(p => p.id === id ? { ...p, statut: 'pourvu' } : p)
-    setPositions(updated); savePlan(updated)
+  const markFilled = async (id) => {
+    const pos = positions.find((p) => p.id === id)
+    if (!pos) return
+    await api.put(`/api/module-store/workforce_positions/${id}`, { ...pos, statut: 'pourvu' }).catch(() => null)
+    await loadPositions()
   }
 
   const startEdit = (pos) => {

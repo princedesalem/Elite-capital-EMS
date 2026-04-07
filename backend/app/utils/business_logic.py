@@ -12,12 +12,12 @@ from ..models import Employe, Operation, Notification, DemandeExplication, TypeN
 def calculer_jours_ouvrables(date_debut: date, date_fin: date, exclure_vendredi_samedi: bool = True) -> int:
     """
     Calcule le nombre de jours ouvrables entre deux dates.
-    Selon la Convention Collective, les weekends sont vendredi et samedi.
+    Exclut les jours non ouvrables (samedi et dimanche) par défaut.
     
     Args:
         date_debut: Date de début
         date_fin: Date de fin (incluse)
-        exclure_vendredi_samedi: Si True, exclut vendredi (4) et samedi (5)
+        exclure_vendredi_samedi: Si True, exclut samedi (5) et dimanche (6)
     
     Returns:
         Nombre de jours ouvrables
@@ -29,9 +29,9 @@ def calculer_jours_ouvrables(date_debut: date, date_fin: date, exclure_vendredi_
     current_date = date_debut
     
     while current_date <= date_fin:
-        # weekday(): Lundi=0, Mardi=1, Mercredi=2, Jeudi=3, Vendredi=4, Samedi=5, Dimanche=6
+        # weekday(): Lundi=0 ... Samedi=5, Dimanche=6
         if exclure_vendredi_samedi:
-            if current_date.weekday() not in [4, 5]:  # Exclure vendredi et samedi
+            if current_date.weekday() not in [5, 6]:  # Exclure samedi et dimanche
                 jours += 1
         else:
             jours += 1
@@ -289,17 +289,29 @@ def verifier_chevauchement_operations(employe: Employe, date_debut: date, date_f
         Tuple (chevauchement_trouve, message)
     """
     operations = db.query(Operation).filter(
-        Operation.matricule == employe.matricule
+        Operation.matricule == employe.matricule,
+        ~Operation.statut.in_(['refusé', 'rejeté', 'annulé'])
     )
     
     if operation_id:
         operations = operations.filter(Operation.id_operation != operation_id)
     
     for op in operations:
+        op_date_debut = op.date_debut or op.date_depart
+        op_date_fin = op.date_fin or op.date_retour
+
+        if not op_date_debut or not op_date_fin:
+            continue
+
         # Vérifier si les dates se chevauchent
-        if not (date_fin < op.date_depart or date_debut > op.date_retour):
-            type_operation = op.type_demande or op.titre or "opération"
-            return True, f"❌ Impossible : Une {type_operation.lower()} est déjà en cours sur cette période (opération #{op.id_operation} du {op.date_depart.strftime('%d/%m/%Y')} au {op.date_retour.strftime('%d/%m/%Y')}). Veuillez choisir d'autres dates ou annuler l'opération existante."
+        if not (date_fin < op_date_debut or date_debut > op_date_fin):
+            type_operation = op.type_demande or op.titre or "operation"
+            return True, (
+                f"Impossible: une {type_operation.lower()} est deja en cours sur cette periode "
+                f"(operation #{op.id_operation} du {op_date_debut.strftime('%d/%m/%Y')} "
+                f"au {op_date_fin.strftime('%d/%m/%Y')}). "
+                "Veuillez choisir d'autres dates ou annuler l'operation existante."
+            )
     
     return False, "Aucun chevauchement détecté"
 

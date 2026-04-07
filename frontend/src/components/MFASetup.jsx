@@ -1,7 +1,9 @@
 import React, {useState} from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 
 export default function MFASetup(){
+  const navigate = useNavigate()
   const [mat, setMat] = useState('')
   const [secret, setSecret] = useState(null)
   const [otpauth, setOtpauth] = useState(null)
@@ -20,6 +22,7 @@ export default function MFASetup(){
         <form onSubmit={setup} style={{display:'grid',gap:8}}>
           <input className="input" placeholder="Votre matricule" value={mat} onChange={e=>setMat(e.target.value)} />
           <button className="button" type="submit">Générer secret</button>
+          <button className="button" type="button" onClick={() => navigate(-1)} style={{background:'#64748b'}}>Annuler</button>
         </form>
         {secret && (
           <div style={{marginTop:12}}>

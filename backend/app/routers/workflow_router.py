@@ -12,6 +12,91 @@ from ..utils import workflow as wf_utils
 router = APIRouter(prefix='/api/workflow', tags=['workflow'])
 
 
+def _serialize_operation_with_demandeur(operation: models.Operation, db: Session) -> Dict:
+    demandeur = db.query(models.Employe).filter(
+        models.Employe.matricule == operation.matricule
+    ).first()
+    prochain_role, _ = wf_utils.obtenir_prochain_validateur(operation.id_operation, db)
+
+    # Activation record
+    act = db.query(models.Activation).filter(
+        models.Activation.id_operation == operation.id_operation,
+        models.Activation.type_action == models.TypeActionEnum.ACTIVATION
+    ).first()
+
+    # Clôture record
+    clo = db.query(models.Activation).filter(
+        models.Activation.id_operation == operation.id_operation,
+        models.Activation.type_action == models.TypeActionEnum.CLOTURE
+    ).first()
+
+    # Last validation record (for status tooltip)
+    last_val = db.query(models.Validation).filter(
+        models.Validation.id_operation == operation.id_operation
+    ).order_by(models.Validation.timestamp_action.desc()).first()
+    dernier_validateur_nom = None
+    if last_val:
+        v_emp = db.query(models.Employe).filter(
+            models.Employe.matricule == last_val.matricule_validateur
+        ).first()
+        dernier_validateur_nom = (
+            f"{v_emp.prenom} {v_emp.nom}" if v_emp else f"#{last_val.matricule_validateur}"
+        )
+
+    # Permission fields (for preuves visibility in validator views)
+    perm_conv = db.query(models.PermConventionelle).filter(
+        models.PermConventionelle.id_perm_c == operation.id_operation
+    ).first() if (operation.type_demande or '').lower() == 'permission' else None
+    preuves_count = 0
+    if perm_conv:
+        preuves_count = db.query(models.PreuvePermission).filter(
+            models.PreuvePermission.id_perm_c == operation.id_operation
+        ).count()
+
+    return {
+        'id_operation': operation.id_operation,
+        'type_demande': operation.type_demande,
+        'titre': operation.titre,
+        'statut': operation.statut,
+        'date_debut': str(operation.date_debut) if operation.date_debut else None,
+        'date_fin': str(operation.date_fin) if operation.date_fin else None,
+        'date_depart': str(operation.date_depart) if operation.date_depart else None,
+        'date_retour': str(operation.date_retour) if operation.date_retour else None,
+        'duree_jours': operation.duree_jours,
+        'motif': operation.motif,
+        'date_demande': str(operation.date_demande) if operation.date_demande else None,
+        'est_modifie': bool(operation.est_modifie),
+        'date_modification': str(operation.date_modification) if operation.date_modification else None,
+        'prochain_validateur_role': prochain_role,
+        'validation_terminee': prochain_role is None,
+        'demandeur': {
+            'matricule': demandeur.matricule,
+            'nom': f"{demandeur.prenom} {demandeur.nom}",
+            'nom_complet': f"{demandeur.prenom} {demandeur.nom}",
+            'fonction': demandeur.fonction,
+            'departement_id': demandeur.dept_id,
+        } if demandeur else None,
+        # Activation data
+        'activation_demandeur_fait': bool(act.demandeur_fait) if act else False,
+        'activation_date_demandeur': str(act.date_demandeur) if act and act.date_demandeur else None,
+        'activation_rh_fait': bool(act.rh_fait) if act else False,
+        'activation_date_rh': str(act.date_rh) if act and act.date_rh else None,
+        'activation_complete': bool(act and act.statut_final == models.StatutFinalEnum.COMPLETE),
+        # Clôture data
+        'cloture_demandeur_fait': bool(clo.demandeur_fait) if clo else False,
+        'cloture_date_demandeur': str(clo.date_demandeur) if clo and clo.date_demandeur else None,
+        'cloture_rh_fait': bool(clo.rh_fait) if clo else False,
+        'cloture_date_rh': str(clo.date_rh) if clo and clo.date_rh else None,
+        'cloture_complete': bool(clo and clo.statut_final == models.StatutFinalEnum.COMPLETE),
+        # Last validation data (for status tooltip)
+        'derniere_validation_date': str(last_val.timestamp_action) if last_val and last_val.timestamp_action else None,
+        'dernier_validateur_nom': dernier_validateur_nom,
+        # Permission preuves info (so validators can view proofs)
+        'est_conventionnelle': bool(perm_conv) if perm_conv is not None else None,
+        'preuves_televersees': preuves_count > 0 if perm_conv else None,
+    }
+
+
 @router.get('/mes-demandes/{matricule}')
 def obtenir_mes_demandes(matricule: int, db: Session = Depends(get_db)):
     """
@@ -21,22 +106,7 @@ def obtenir_mes_demandes(matricule: int, db: Session = Depends(get_db)):
         models.Operation.matricule == matricule
     ).order_by(models.Operation.date_demande.desc()).all()
     
-    return [
-        {
-            'id_operation': op.id_operation,
-            'type_demande': op.type_demande,
-            'titre': op.titre,
-            'statut': op.statut,
-            'date_debut': str(op.date_debut) if op.date_debut else None,
-            'date_fin': str(op.date_fin) if op.date_fin else None,
-            'date_depart': str(op.date_depart) if op.date_depart else None,
-            'date_retour': str(op.date_retour) if op.date_retour else None,
-            'duree_jours': op.duree_jours,
-            'motif': op.motif,
-            'date_demande': str(op.date_demande) if op.date_demande else None,
-        }
-        for op in operations
-    ]
+    return [_serialize_operation_with_demandeur(op, db) for op in operations]
 
 
 @router.get('/a-valider/{matricule}')
@@ -44,46 +114,22 @@ def obtenir_demandes_a_valider(matricule: int, db: Session = Depends(get_db)):
     """
     Obtenir toutes les opérations en attente de validation par cet employé.
     """
-    # Trouver toutes les validations en attente pour ce matricule
-    validations_en_attente = db.query(models.Validation).filter(
-        models.Validation.matricule_validateur == matricule,
-        models.Validation.statut_validation == 'en attente'
-    ).all()
-    
-    operations = []
-    for validation in validations_en_attente:
-        operation = db.query(models.Operation).filter(
-            models.Operation.id_operation == validation.id_operation
-        ).first()
-        
-        if operation:
-            # Récupérer les infos du demandeur
-            demandeur = db.query(models.Employe).filter(
-                models.Employe.matricule == operation.matricule
-            ).first()
-            
-            operations.append({
-                'id_operation': operation.id_operation,
-                'id_validation': validation.id_validation,
-                'type_demande': operation.type_demande,
-                'titre': operation.titre,
-                'statut': operation.statut,
-                'date_debut': str(operation.date_debut) if operation.date_debut else None,
-                'date_fin': str(operation.date_fin) if operation.date_fin else None,
-                'date_depart': str(operation.date_depart) if operation.date_depart else None,
-                'date_retour': str(operation.date_retour) if operation.date_retour else None,
-                'duree_jours': operation.duree_jours,
-                'motif': operation.motif,
-                'date_demande': str(operation.date_demande) if operation.date_demande else None,
-                'demandeur': {
-                    'matricule': demandeur.matricule,
-                    'nom': f"{demandeur.prenom} {demandeur.nom}",
-                    'fonction': demandeur.fonction
-                } if demandeur else None,
-                'role_validateur': validation.role_validateur
-            })
-    
-    return operations
+    role_validateur = wf_utils.obtenir_role_validateur(matricule, db)
+    operations = db.query(models.Operation).order_by(models.Operation.date_demande.desc()).all()
+
+    _TERMINAUX = {'PCA', 'AG'}
+    operations_a_valider = []
+    for operation in operations:
+        prochain_role, prochain_matricule = wf_utils.obtenir_prochain_validateur(operation.id_operation, db)
+        role_ok = (prochain_role == role_validateur) or (
+            role_validateur in _TERMINAUX and prochain_role in _TERMINAUX
+        )
+        if role_ok and prochain_matricule == matricule:
+            data = _serialize_operation_with_demandeur(operation, db)
+            data['role_validateur'] = role_validateur
+            operations_a_valider.append(data)
+
+    return operations_a_valider
 
 
 @router.get('/sequence/{matricule}')
@@ -231,8 +277,8 @@ def obtenir_historique_validations(id_operation: int, db: Session = Depends(get_
     return result
 
 
-@router.get('/mes-demandes/{matricule}')
-def obtenir_mes_demandes(matricule: int, db: Session = Depends(get_db)):
+@router.get('/mes-demandes-detail/{matricule}')
+def obtenir_mes_demandes_detail(matricule: int, db: Session = Depends(get_db)):
     """
     Obtenir toutes les demandes créées par un employé avec leur statut de validation.
     """
@@ -267,7 +313,7 @@ def obtenir_mes_demandes(matricule: int, db: Session = Depends(get_db)):
     return result
 
 
-@router.get('/a-valider/{matricule_validateur}')
+@router.get('/a-valider-detail/{matricule_validateur}')
 def obtenir_operations_a_valider(matricule_validateur: int, db: Session = Depends(get_db)):
     """
     Obtenir toutes les opérations en attente de validation par un validateur.
@@ -408,31 +454,14 @@ def obtenir_mes_validations(matricule_validateur: int, db: Session = Depends(get
         ).first()
         
         if operation:
-            demandeur = db.query(models.Employe).filter(
-                models.Employe.matricule == operation.matricule
-            ).first()
-            
-            operations_validees.append({
-                'id_operation': operation.id_operation,
+            data = _serialize_operation_with_demandeur(operation, db)
+            data.update({
                 'id_validation': validation.id_validation,
-                'type_demande': operation.type_demande,
-                'titre': operation.titre,
-                'date_debut': str(operation.date_debut) if operation.date_debut else None,
-                'date_fin': str(operation.date_fin) if operation.date_fin else None,
-                'date_depart': str(operation.date_depart) if operation.date_depart else None,
-                'date_retour': str(operation.date_retour) if operation.date_retour else None,
-                'duree_jours': operation.duree_jours,
-                'motif': operation.motif,
-                'date_demande': str(operation.date_demande) if operation.date_demande else None,
                 'date_validation': str(validation.timestamp_action) if validation.timestamp_action else None,
                 'commentaire_validation': validation.commentaire,
-                'demandeur': {
-                    'matricule': demandeur.matricule,
-                    'nom': f"{demandeur.prenom} {demandeur.nom}",
-                    'fonction': demandeur.fonction
-                } if demandeur else None,
                 'role_validateur': validation.role_validateur
             })
+            operations_validees.append(data)
     
     return operations_validees
 
@@ -454,33 +483,63 @@ def obtenir_mes_refus(matricule_validateur: int, db: Session = Depends(get_db)):
         ).first()
         
         if operation:
-            demandeur = db.query(models.Employe).filter(
-                models.Employe.matricule == operation.matricule
-            ).first()
-            
-            operations_refusees.append({
-                'id_operation': operation.id_operation,
+            data = _serialize_operation_with_demandeur(operation, db)
+            data.update({
                 'id_validation': validation.id_validation,
-                'type_demande': operation.type_demande,
-                'titre': operation.titre,
-                'date_debut': str(operation.date_debut) if operation.date_debut else None,
-                'date_fin': str(operation.date_fin) if operation.date_fin else None,
-                'date_depart': str(operation.date_depart) if operation.date_depart else None,
-                'date_retour': str(operation.date_retour) if operation.date_retour else None,
-                'duree_jours': operation.duree_jours,
-                'motif': operation.motif,
-                'date_demande': str(operation.date_demande) if operation.date_demande else None,
                 'date_refus': str(validation.timestamp_action) if validation.timestamp_action else None,
                 'motif_refus': validation.commentaire,
-                'demandeur': {
-                    'matricule': demandeur.matricule,
-                    'nom': f"{demandeur.prenom} {demandeur.nom}",
-                    'fonction': demandeur.fonction
-                } if demandeur else None,
                 'role_validateur': validation.role_validateur
             })
+            operations_refusees.append(data)
     
     return operations_refusees
+
+
+@router.get('/boite/{matricule}')
+def obtenir_boite_workflow(matricule: int, db: Session = Depends(get_db)):
+    """
+    Retourne la boite workflow complete d'un utilisateur:
+    - envoye: demandes creees par l'utilisateur
+    - recu: demandes actuellement en attente de sa validation
+    - valide: demandes qu'il a validees
+    - refuse: demandes qu'il a refusees
+    - recu_pca_ag: (RH seulement) toutes les demandes validées des PCA/AG, pour information
+    """
+    envoye = obtenir_mes_demandes(matricule, db)
+    recu = obtenir_demandes_a_valider(matricule, db)
+    valide = obtenir_mes_validations(matricule, db)
+    refuse = obtenir_mes_refus(matricule, db)
+
+    recu_pca_ag = []
+    role_utilisateur = wf_utils.obtenir_role_validateur(matricule, db)
+    if role_utilisateur == 'RH':
+        # Trouver tous les employés PCA/AG
+        pca_ag_roles = db.query(models.Role).filter(
+            models.Role.name.in_(['PCA', 'AG'])
+        ).all()
+        pca_ag_role_ids = [r.id for r in pca_ag_roles]
+
+        if pca_ag_role_ids:
+            pca_ag_users = db.query(models.Utilisateur).filter(
+                models.Utilisateur.role_id.in_(pca_ag_role_ids)
+            ).all()
+            pca_ag_matricules = [u.matricule for u in pca_ag_users]
+
+            if pca_ag_matricules:
+                ops_pca_ag = db.query(models.Operation).filter(
+                    models.Operation.matricule.in_(pca_ag_matricules),
+                    models.Operation.statut == 'validé'
+                ).order_by(models.Operation.date_demande.desc()).all()
+
+                recu_pca_ag = [_serialize_operation_with_demandeur(op, db) for op in ops_pca_ag]
+
+    return {
+        'envoye': envoye,
+        'recu': recu,
+        'valide': valide,
+        'refuse': refuse,
+        'recu_pca_ag': recu_pca_ag,
+    }
 
 
 @router.get('/progression/{id_operation}')
@@ -510,18 +569,50 @@ def obtenir_progression_validation(id_operation: int, db: Session = Depends(get_
     
     # Inverser la séquence pour afficher AG en haut
     sequence = list(reversed(sequence))
-    
+
+    # Cas spécial : séquence vide (PCA/AG) et opération validée → 100%
+    if not sequence and (operation.statut or '').lower() in ('validé', 'valide'):
+        role_dem = wf_utils.obtenir_role_validateur(operation.matricule, db)
+        return {
+            'id_operation': id_operation,
+            'type_demande': operation.type_demande,
+            'est_modifie': bool(operation.est_modifie),
+            'date_modification': operation.date_modification.isoformat() if operation.date_modification else None,
+            'demandeur': {
+                'matricule': employe.matricule,
+                'nom_complet': f'{employe.prenom} {employe.nom}',
+                'fonction': employe.fonction
+            } if employe else None,
+            'date_demande': operation.date_demande.isoformat() if operation.date_demande else None,
+            'sequence': [role_dem],
+            'etapes': [{
+                'numero': 1, 'role': role_dem, 'statut': 'validé',
+                'validateur': f'{employe.prenom} {employe.nom}' if employe else 'Inconnu',
+                'matricule_validateur': operation.matricule,
+                'date': operation.date_demande.isoformat() if operation.date_demande else None,
+                'commentaire': None, 'icone': '✅'
+            }],
+            'progression': 100, 'statut_final': 'APPROUVÉE',
+            'total_etapes': 1, 'etapes_validees': 1, 'etapes_refusees': 0
+        }
+
     # Obtenir les validations réalisées
     validations = db.query(models.Validation).filter(
         models.Validation.id_operation == id_operation
     ).order_by(models.Validation.timestamp_action).all()
     
+    _TERMINAUX_PROG = {'PCA', 'AG'}
     validations_dict = {v.role_validateur: v for v in validations}
     
     # Construire les étapes
     etapes = []
     for idx, role in enumerate(sequence):
         validation = validations_dict.get(role)
+        # Backward-compat: si le rôle terminal a été stocké avec l'alias opposé
+        # (données créées avant la correction du stockage entity-aware)
+        if validation is None and role in _TERMINAUX_PROG:
+            _alt = 'AG' if role == 'PCA' else 'PCA'
+            validation = validations_dict.get(_alt)
         
         if validation:
             statut = validation.statut_validation  # 'validé' ou 'refusé'
@@ -568,6 +659,8 @@ def obtenir_progression_validation(id_operation: int, db: Session = Depends(get_
     return {
         "id_operation": id_operation,
         "type_demande": operation.type_demande,
+        "est_modifie": bool(operation.est_modifie),
+        "date_modification": operation.date_modification.isoformat() if operation.date_modification else None,
         "demandeur": {
             "matricule": employe.matricule,
             "nom_complet": f"{employe.prenom} {employe.nom}",

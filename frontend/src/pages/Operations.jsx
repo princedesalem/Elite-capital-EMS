@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { useSearchParams } from 'react-router-dom'
 import ProgressionValidation from '../components/ProgressionValidation'
 import CommentairesMission from '../components/CommentairesMission'
+import WorkflowModal from '../components/WorkflowModal'
+import AutocompleteInput from '../components/AutocompleteInput'
 import '../styles/Operations.css'
 import {
   Target, Home, FileText, BarChart2, Users, ClipboardList, AlertTriangle,
@@ -22,10 +24,10 @@ const PERMISSIONS_CONVENTIONNELLES = {
       { value: 'enfant', label: 'Mariage d\'un enfant du travailleur', duree: 2 }
     ]
   },
-  'accouchement': {
-    label: 'Accouchement',
+  'paternite': {
+    label: 'Paternité',
     sousTypes: [
-      { value: 'epouse', label: 'Accouchement de l\'épouse du travailleur', duree: 3 }
+      { value: 'epouse', label: 'Naissance de l\'enfant (conjointe)', duree: 3 }
     ]
   },
   'bapteme': {
@@ -47,6 +49,12 @@ const PERMISSIONS_CONVENTIONNELLES = {
       { value: 'soeur', label: 'Décès de la sœur du travailleur', duree: 3 }
     ]
   },
+  'maladie': {
+    label: 'Maladie',
+    sousTypes: [
+      { value: 'certifiee', label: 'Maladie (avec justificatif médical)', duree: 3 }
+    ]
+  },
   'maternelle': {
     label: 'Maternité',
     sousTypes: [
@@ -66,10 +74,10 @@ const DOCUMENTS_REQUIS = {
     ],
     delai: '72h à l\'avance'
   },
-  'accouchement': {
-    titre: 'Accouchement',
+  'paternite': {
+    titre: 'Paternité',
     documents: [
-      { label: 'Accouchement de l\'épouse (3j)', doc: 'Certificat médical ou acte de naissance' }
+      { label: 'Naissance de l\'enfant (3j)', doc: 'Certificat médical ou acte de naissance' }
     ],
     delai: '48h après l\'événement'
   },
@@ -91,6 +99,13 @@ const DOCUMENTS_REQUIS = {
     ],
     delai: '48h après l\'événement'
   },
+  'maladie': {
+    titre: 'Maladie',
+    documents: [
+      { label: 'Maladie (3j)', doc: 'Certificat médical' }
+    ],
+    delai: '48h après l\'événement'
+  },
   'maternelle': {
     titre: 'Maternité',
     documents: [
@@ -105,7 +120,8 @@ function normaliserTypePermission(typePermission) {
   if (!brut) return ''
 
   if (brut.includes('mariage')) return 'mariage'
-  if (brut.includes('accouchement')) return 'accouchement'
+  if (brut.includes('accouchement') || brut.includes('paternit')) return 'paternite'
+  if (brut.includes('malad')) return 'maladie'
   if (brut.includes('bapteme') || brut.includes('baptême')) return 'bapteme'
   if (brut.includes('deces') || brut.includes('décès')) return 'deces'
   if (brut.includes('matern')) return 'maternelle'
@@ -126,7 +142,7 @@ function infererTypePermissionDepuisPermission(permission) {
   const duree = Number(permission.duree_jours || permission.duree || 0)
 
   if (['conjoint', 'pere', 'mere', 'beau_pere', 'belle_mere', 'frere', 'soeur'].includes(sousType)) return 'deces'
-  if (sousType === 'epouse') return 'accouchement'
+  if (sousType === 'epouse') return 'paternite'
   if (['simple', 'pathologique'].includes(sousType)) return 'maternelle'
   if (sousType === 'salarie') return 'mariage'
   if (sousType === 'enfant') {
@@ -136,6 +152,17 @@ function infererTypePermissionDepuisPermission(permission) {
   }
 
   return ''
+}
+
+function addWorkingDays(startDate, days) {
+  const result = new Date(startDate)
+  let added = 1
+  while (added < days) {
+    result.setDate(result.getDate() + 1)
+    const day = result.getDay()
+    if (day !== 0 && day !== 6) added += 1
+  }
+  return result
 }
 
 // Configuration des frais de mission
@@ -178,6 +205,8 @@ export default function Operations() {
   const [workflowDecisionComment, setWorkflowDecisionComment] = useState('')
   const [showWorkflowInDetail, setShowWorkflowInDetail] = useState(false)
   const [selectedOperationDetails, setSelectedOperationDetails] = useState(null)
+  const [selectedOperationForWorkflow, setSelectedOperationForWorkflow] = useState(null)
+  const [validationRefreshKey, setValidationRefreshKey] = useState(0)
 
   const [conges, setConges] = useState([])
   const [permissions, setPermissions] = useState([])
@@ -194,16 +223,18 @@ export default function Operations() {
 
   // Filtrer les permissions éligibles pour téléversement (validées et activées)
   const permissionsEligibles = useMemo(() => {
-    return permissions.filter(p => 
-      p.statut === 'VALIDE' && 
-      p.statut_activation === 'ACTIVE' &&
-      !p.statut_cloture // Pas encore clôturée
-    )
+    return permissions.filter(p => {
+      const statutNorm = String(p.statut || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      return (statutNorm === 'valide' || statutNorm === 'validé') &&
+        p.statut_activation === 'ACTIVE' &&
+        !p.cloture_complete
+    })
   }, [permissions])
 
   const [mesRemplacements, setMesRemplacements] = useState([])
   const [propositions, setPropositions] = useState([])
   const [operationRecherche, setOperationRecherche] = useState('')
+  const [operationsDisponibles, setOperationsDisponibles] = useState([])
 
   const [evaluations, setEvaluations] = useState([])
   const [fichePoste, setFichePoste] = useState(null)
@@ -222,14 +253,25 @@ export default function Operations() {
     motif: ''
   })
   const [permNonConvForm, setPermNonConvForm] = useState({ date_debut: '', date_fin: '', motif: '' })
+  
+  // Edit mode states for absences
+  const [congeEditMode, setCongeEditMode] = useState(false)
+  const [congeEditId, setCongeEditId] = useState(null)
+  const [permissionEditMode, setPermissionEditMode] = useState(false)
+  const [permissionEditId, setPermissionEditId] = useState(null)
+  const [permNonConvEditMode, setPermNonConvEditMode] = useState(false)
+  const [permNonConvEditId, setPermNonConvEditId] = useState(null)
+  
   const [matriculeCible, setMatriculeCible] = useState('')
   const [missionForm, setMissionForm] = useState({
     motif: '',
-    email_contact: ''
+    email_contact: '',
+    mission_comment: ''
   })
   const [missionSegments, setMissionSegments] = useState([{
     id: 1,
     pays: '',
+    country_code: '',
     ville: '',
     date_debut: '',
     date_fin: '',
@@ -238,6 +280,8 @@ export default function Operations() {
     heure_retour: '18:00:00',
     moyen_transport: 'aerien'
   }])
+  const [countryOptionsBySegment, setCountryOptionsBySegment] = useState({})
+  const [cityOptionsBySegment, setCityOptionsBySegment] = useState({})
   const [missionEditMode, setMissionEditMode] = useState(false)
   const [missionEditId, setMissionEditId] = useState(null)
   const [missionMissionnaires, setMissionMissionnaires] = useState([])  // Liste des missionnaires sélectionnés
@@ -304,7 +348,7 @@ export default function Operations() {
 
   useEffect(() => {
     if (!matricule) return
-    if (activeTab === 'workflow') loadWorkflow()
+    if (activeTab === 'workflow' || activeTab === 'demandes') loadWorkflow()
     if (activeTab === 'remplacants') loadRemplacants()
     if (activeTab === 'demandes') loadEmploye()
   }, [activeTab, matricule])
@@ -318,6 +362,12 @@ export default function Operations() {
     if (type && ['conges', 'permissions', 'missions', 'frais'].includes(type)) {
       setDemandeType(type)
     }
+    // Navigation depuis une notification : ouvrir directement l'opération
+    const operationId = searchParams.get('operationId')
+    if (operationId) {
+      setSelectedOperation(Number(operationId))
+      if (!tab) setActiveTab('demandes')
+    }
   }, [searchParams])
 
   // Calcul automatique de la date de fin et durée pour permissions conventionnelles
@@ -327,10 +377,9 @@ export default function Operations() {
       if (typeConfig && typeConfig.sousTypes.length > 0) {
         const sousTypeConfig = typeConfig.sousTypes.find(st => st.value === permForm.sous_type)
         if (sousTypeConfig && sousTypeConfig.duree) {
-          // Calculer la date de fin
+          // Calculer la date de fin en jours ouvrables (lundi-vendredi)
           const dateDebut = new Date(permForm.date_debut)
-          const dateFin = new Date(dateDebut)
-          dateFin.setDate(dateFin.getDate() + sousTypeConfig.duree - 1) // -1 car le premier jour est inclus
+          const dateFin = addWorkingDays(dateDebut, sousTypeConfig.duree)
           
           const dateFinStr = dateFin.toISOString().split('T')[0]
           setPermForm(prev => ({
@@ -348,6 +397,15 @@ export default function Operations() {
     const typeConfig = PERMISSIONS_CONVENTIONNELLES[permForm.type_permission]
     return typeConfig ? typeConfig.sousTypes : []
   }, [permForm.type_permission])
+
+  const filteredPermissionTypes = useMemo(() => {
+    const sex = String(employe?.sexe || '').toUpperCase()
+    return Object.entries(PERMISSIONS_CONVENTIONNELLES).filter(([key]) => {
+      if (key === 'maternelle' && sex === 'M') return false
+      if (key === 'paternite' && sex === 'F') return false
+      return true
+    })
+  }, [employe?.sexe])
 
   // Calcul des durées et totaux pour les frais de mission
   const fraisMissionCalculs = useMemo(() => {
@@ -446,16 +504,25 @@ export default function Operations() {
     setLoading(true)
     setError('')
     try {
-      const [mes, valider, validations, refus] = await Promise.all([
-        api.get(`/api/workflow/mes-demandes/${matricule}`).catch(() => ({ data: [] })),
-        api.get(`/api/workflow/a-valider/${matricule}`).catch(() => ({ data: [] })),
-        api.get(`/api/workflow/mes-validations/${matricule}`).catch(() => ({ data: [] })),
-        api.get(`/api/workflow/mes-refus/${matricule}`).catch(() => ({ data: [] }))
-      ])
-      setMesDemandes(Array.isArray(mes.data) ? mes.data : [])
-      setAValider(Array.isArray(valider.data) ? valider.data : [])
-      setMesValidations(Array.isArray(validations.data) ? validations.data : [])
-      setMesRefus(Array.isArray(refus.data) ? refus.data : [])
+      const boite = await api.get(`/api/workflow/boite/${matricule}`).catch(() => null)
+
+      if (boite?.data && typeof boite.data === 'object') {
+        setMesDemandes(Array.isArray(boite.data.envoye) ? boite.data.envoye : [])
+        setAValider(Array.isArray(boite.data.recu) ? boite.data.recu : [])
+        setMesValidations(Array.isArray(boite.data.valide) ? boite.data.valide : [])
+        setMesRefus(Array.isArray(boite.data.refuse) ? boite.data.refuse : [])
+      } else {
+        const [mes, valider, validations, refus] = await Promise.all([
+          api.get(`/api/workflow/mes-demandes/${matricule}`).catch(() => ({ data: [] })),
+          api.get(`/api/workflow/a-valider/${matricule}`).catch(() => ({ data: [] })),
+          api.get(`/api/workflow/mes-validations/${matricule}`).catch(() => ({ data: [] })),
+          api.get(`/api/workflow/mes-refus/${matricule}`).catch(() => ({ data: [] }))
+        ])
+        setMesDemandes(Array.isArray(mes.data) ? mes.data : [])
+        setAValider(Array.isArray(valider.data) ? valider.data : [])
+        setMesValidations(Array.isArray(validations.data) ? validations.data : [])
+        setMesRefus(Array.isArray(refus.data) ? refus.data : [])
+      }
     } catch (e) {
       setError(e.response?.data?.detail || 'Erreur de chargement du workflow')
     } finally {
@@ -491,10 +558,21 @@ export default function Operations() {
     try {
       const res = await api.get(`/api/remplacants/mes-remplacements/${matricule}`).catch(() => ({ data: [] }))
       setMesRemplacements(Array.isArray(res.data) ? res.data : [])
+      // Also load available operations
+      await loadOperationsDisponibles()
     } catch (e) {
       setError(e.response?.data?.detail || 'Erreur de chargement des remplaçants')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadOperationsDisponibles() {
+    try {
+      const res = await api.get('/api/remplacants/operations-disponibles').catch(() => ({ data: [] }))
+      setOperationsDisponibles(Array.isArray(res.data) ? res.data : [])
+    } catch (e) {
+      console.error('Erreur de chargement des opérations disponibles:', e)
     }
   }
 
@@ -540,20 +618,32 @@ export default function Operations() {
         return
       }
 
-      await api.post('/api/conges/demande', null, {
-        params: {
-          matricule: matriculeDemande,
-          matricule_createur: matricule,
+      if (congeEditMode && congeEditId) {
+        // Mode édition - PUT
+        await api.put(`/api/operations/${congeEditId}`, {
           date_debut: congeForm.date_debut,
           date_fin: congeForm.date_fin,
           motif: congeForm.motif || null
-        }
-      })
-      setSuccess('Demande de congé soumise')
-      setCongeForm({ date_debut: '', date_fin: '', motif: '' })
+        })
+        setSuccess('Congé modifié avec succès')
+        cancelEditConge()
+      } else {
+        // Mode création - POST
+        await api.post('/api/conges/demande', null, {
+          params: {
+            matricule: matriculeDemande,
+            matricule_createur: matricule,
+            date_debut: congeForm.date_debut,
+            date_fin: congeForm.date_fin,
+            motif: congeForm.motif || null
+          }
+        })
+        setSuccess('Demande de congé soumise')
+        setCongeForm({ date_debut: '', date_fin: '', motif: '' })
+      }
       loadAll()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Erreur création congé')
+      setError(err.response?.data?.detail || 'Erreur création/modification congé')
     }
   }
 
@@ -570,23 +660,38 @@ export default function Operations() {
         return
       }
 
-      await api.post('/api/permissions/conventionnelle', null, {
-        params: {
-          matricule: matriculeDemande,
-          matricule_createur: matricule,
+      if (permissionEditMode && permissionEditId) {
+        // Mode édition - PUT
+        await api.put(`/api/operations/${permissionEditId}`, {
           type_permission: permForm.type_permission,
           sous_type: permForm.sous_type || null,
           duree: Number(permForm.duree || 1),
           date_debut: permForm.date_debut,
           date_fin: permForm.date_fin,
           motif: permForm.motif || null
-        }
-      })
-      setSuccess('Demande de permission conventionnelle soumise')
-      setPermForm({ type_permission: 'maladie', sous_type: '', duree: 1, date_debut: '', date_fin: '', motif: '' })
+        })
+        setSuccess('Permission modifiée avec succès')
+        cancelEditPermission()
+      } else {
+        // Mode création - POST
+        await api.post('/api/permissions/conventionnelle', null, {
+          params: {
+            matricule: matriculeDemande,
+            matricule_createur: matricule,
+            type_permission: permForm.type_permission,
+            sous_type: permForm.sous_type || null,
+            duree: Number(permForm.duree || 1),
+            date_debut: permForm.date_debut,
+            date_fin: permForm.date_fin,
+            motif: permForm.motif || null
+          }
+        })
+        setSuccess('Demande de permission conventionnelle soumise')
+        setPermForm({ type_permission: 'maladie', sous_type: '', duree: 1, date_debut: '', date_fin: '', motif: '' })
+      }
       loadAll()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Erreur création permission')
+      setError(err.response?.data?.detail || 'Erreur création/modification permission')
     }
   }
 
@@ -603,21 +708,33 @@ export default function Operations() {
         return
       }
 
-      await api.post('/api/conges/demande', null, {
-        params: {
-          matricule: matriculeDemande,
-          matricule_createur: matricule,
+      if (permNonConvEditMode && permNonConvEditId) {
+        // Mode édition - PUT
+        await api.put(`/api/operations/${permNonConvEditId}`, {
           date_debut: permNonConvForm.date_debut,
           date_fin: permNonConvForm.date_fin,
           motif: permNonConvForm.motif ? `Permission non-conventionnelle: ${permNonConvForm.motif}` : 'Permission non-conventionnelle'
-        }
-      })
-      setSuccess('Demande de permission non-conventionnelle soumise (déduit du solde de congés)')
-      setPermNonConvForm({ date_debut: '', date_fin: '', motif: '' })
+        })
+        setSuccess('Permission non-conventionnelle modifiée avec succès')
+        cancelEditPermNonConv()
+      } else {
+        // Mode création - POST
+        await api.post('/api/conges/demande', null, {
+          params: {
+            matricule: matriculeDemande,
+            matricule_createur: matricule,
+            date_debut: permNonConvForm.date_debut,
+            date_fin: permNonConvForm.date_fin,
+            motif: permNonConvForm.motif ? `Permission non-conventionnelle: ${permNonConvForm.motif}` : 'Permission non-conventionnelle'
+          }
+        })
+        setSuccess('Demande de permission non-conventionnelle soumise (déduit du solde de congés)')
+        setPermNonConvForm({ date_debut: '', date_fin: '', motif: '' })
+      }
       loadAll()
       loadEmploye()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Erreur création permission non-conventionnelle')
+      setError(err.response?.data?.detail || 'Erreur création/modification permission non-conventionnelle')
     }
   }
 
@@ -665,7 +782,7 @@ export default function Operations() {
     
     // Valider que tous les segments sont remplis
     const segmentsInvalides = missionSegments.filter(seg => 
-      !seg.pays || !seg.ville || !seg.date_debut || !seg.date_fin
+      !seg.pays || !seg.country_code || !seg.ville || !seg.date_debut || !seg.date_fin
     )
     if (segmentsInvalides.length > 0) {
       setError('Veuillez remplir tous les champs de chaque destination')
@@ -709,6 +826,7 @@ export default function Operations() {
         await api.put(`/api/missions/${missionEditId}/modifier`, null, {
           params: {
             pays: premierSegment.pays,
+            country_code: premierSegment.country_code || null,
             ville: premierSegment.ville,
             date_debut: premierSegment.date_debut,
             date_fin: premierSegment.date_fin,
@@ -730,8 +848,10 @@ export default function Operations() {
           matricules_missionnaires: matriculesMissionnaires,
           email_contact: missionForm.email_contact || null,
           motif: missionForm.motif || null,
+          mission_comment: missionForm.mission_comment || null,
           segments: missionSegments.map(seg => ({
             pays: seg.pays,
+            country_code: seg.country_code || null,
             ville: seg.ville,
             date_debut: seg.date_debut,
             date_fin: seg.date_fin,
@@ -749,11 +869,13 @@ export default function Operations() {
       // Réinitialiser le formulaire
       setMissionForm({
         motif: '',
-        email_contact: ''
+        email_contact: '',
+        mission_comment: ''
       })
       setMissionSegments([{
         id: 1,
         pays: '',
+        country_code: '',
         ville: '',
         date_debut: '',
         date_fin: '',
@@ -762,6 +884,8 @@ export default function Operations() {
         heure_retour: '18:00:00',
         moyen_transport: 'aerien'
       }])
+      setCountryOptionsBySegment({})
+      setCityOptionsBySegment({})
       setMissionMissionnaires([])
       setRechercheEmploye('')
       setEmployesTrouves([])
@@ -771,27 +895,77 @@ export default function Operations() {
     }
   }
 
-  function editMission(mission) {
-    setMissionForm({
-      motif: mission.motif || '',
-      email: mission.email || '',
-      moyens_transport: mission.moyens_transport || ['aerien']
-    })
-    setMissionSegments([{
-      id: 1,
-      pays: mission.pays || '',
-      ville: mission.ville || '',
-      date_debut: mission.date_debut ? mission.date_debut.split('T')[0] : '',
-      date_fin: mission.date_fin ? mission.date_fin.split('T')[0] : '',
-      heure_depart: mission.heure_depart || '08:00:00',
-      heure_arrivee: mission.heure_arrivee || '18:00:00',
-      heure_retour: mission.heure_retour || '18:00:00',
-      moyen_transport: 'aerien'
-    }])
+  async function editMission(mission) {
     setMissionEditMode(true)
     setMissionEditId(mission.id_operation)
     setSuccess('')
     setError('')
+    try {
+      // Charger les données complètes depuis le backend
+      const res = await api.get(`/api/missions/${mission.id_operation}`)
+      const detail = res.data
+      setMissionForm({
+        motif: detail.motif || mission.motif || '',
+        email_contact: detail.email_contact || mission.email_contact || '',
+        mission_comment: detail.mission_comment || ''
+      })
+      // Précharger les segments si disponibles
+      if (detail.segments && detail.segments.length > 0) {
+        setMissionSegments(detail.segments.map((seg, idx) => ({
+          id: idx + 1,
+          pays: seg.pays || '',
+          country_code: '',
+          ville: seg.ville || '',
+          date_debut: seg.date_debut || '',
+          date_fin: seg.date_fin || '',
+          heure_depart: seg.heure_depart || '08:00:00',
+          heure_arrivee: seg.heure_arrivee || '18:00:00',
+          heure_retour: seg.heure_retour || '18:00:00',
+          moyen_transport: seg.moyen_transport || 'aerien'
+        })))
+      } else {
+        setMissionSegments([{
+          id: 1,
+          pays: mission.pays || '',
+          country_code: '',
+          ville: mission.ville || '',
+          date_debut: mission.date_debut ? String(mission.date_debut).split('T')[0] : '',
+          date_fin: mission.date_fin ? String(mission.date_fin).split('T')[0] : '',
+          heure_depart: '08:00:00',
+          heure_arrivee: '18:00:00',
+          heure_retour: '18:00:00',
+          moyen_transport: 'aerien'
+        }])
+      }
+      // Précharger les missionnaires
+      if (detail.missionnaires && detail.missionnaires.length > 0) {
+        setMissionMissionnaires(detail.missionnaires.map(mm => ({
+          matricule: mm.matricule,
+          nom_complet: mm.nom_complet,
+          fonction: mm.fonction,
+          email: mm.email
+        })))
+      }
+    } catch {
+      // Fallback: utiliser les données disponibles
+      setMissionForm({
+        motif: mission.motif || '',
+        email_contact: mission.email_contact || '',
+        mission_comment: ''
+      })
+      setMissionSegments([{
+        id: 1,
+        pays: mission.pays || '',
+        country_code: '',
+        ville: mission.ville || '',
+        date_debut: mission.date_debut ? String(mission.date_debut).split('T')[0] : '',
+        date_fin: mission.date_fin ? String(mission.date_fin).split('T')[0] : '',
+        heure_depart: '08:00:00',
+        heure_arrivee: '18:00:00',
+        heure_retour: '18:00:00',
+        moyen_transport: 'aerien'
+      }])
+    }
   }
 
   function cancelEditMission() {
@@ -799,11 +973,13 @@ export default function Operations() {
     setMissionEditId(null)
     setMissionForm({
       motif: '',
-      email_contact: ''
+      email_contact: '',
+      mission_comment: ''
     })
     setMissionSegments([{
       id: 1,
       pays: '',
+      country_code: '',
       ville: '',
       date_debut: '',
       date_fin: '',
@@ -812,6 +988,89 @@ export default function Operations() {
       heure_retour: '18:00:00',
       moyen_transport: 'aerien'
     }])
+    setCountryOptionsBySegment({})
+    setCityOptionsBySegment({})
+    setSuccess('')
+    setError('')
+  }
+
+  function editConge(operation) {
+    const dateDebut = operation.date_debut ? operation.date_debut.split('T')[0] : ''
+    const dateFin = operation.date_fin ? operation.date_fin.split('T')[0] : ''
+    setCongeForm({
+      date_debut: dateDebut,
+      date_fin: dateFin,
+      motif: operation.motif || ''
+    })
+    setCongeEditMode(true)
+    setCongeEditId(operation.id_operation)
+    setDemandeType('conges')
+    setSuccess('')
+    setError('')
+  }
+
+  function cancelEditConge() {
+    setCongeEditMode(false)
+    setCongeEditId(null)
+    setCongeForm({ date_debut: '', date_fin: '', motif: '' })
+    setSuccess('')
+    setError('')
+  }
+
+  function editPermission(operation) {
+    const dateDebut = operation.date_debut ? operation.date_debut.split('T')[0] : ''
+    const dateFin = operation.date_fin ? operation.date_fin.split('T')[0] : ''
+    setPermForm({
+      type_permission: operation.type_permission || 'maladie',
+      sous_type: operation.sous_type || '',
+      duree: operation.duree_jours || 1,
+      date_debut: dateDebut,
+      date_fin: dateFin,
+      motif: operation.motif || ''
+    })
+    setPermissionEditMode(true)
+    setPermissionEditId(operation.id_operation)
+    setDemandeType('permissions')
+    setPermissionType('conventionnelle')
+    setSuccess('')
+    setError('')
+  }
+
+  function cancelEditPermission() {
+    setPermissionEditMode(false)
+    setPermissionEditId(null)
+    setPermForm({
+      type_permission: 'maladie',
+      sous_type: '',
+      duree: 1,
+      date_debut: '',
+      date_fin: '',
+      motif: ''
+    })
+    setSuccess('')
+    setError('')
+  }
+
+  function editPermissionNonConv(operation) {
+    const dateDebut = operation.date_debut ? operation.date_debut.split('T')[0] : ''
+    const dateFin = operation.date_fin ? operation.date_fin.split('T')[0] : ''
+    setPermNonConvForm({
+      date_debut: dateDebut,
+      date_fin: dateFin,
+      motif: operation.motif || ''
+    })
+    setPermNonConvEditMode(true)
+    setPermNonConvEditId(operation.id_operation)
+    setDemandeType('permissions')
+    setPermissionType('non_conventionnelle')
+    setSuccess('')
+    setError('')
+  }
+
+  function cancelEditPermNonConv() {
+    setPermNonConvEditMode(false)
+    setPermNonConvEditId(null)
+    setPermNonConvForm({ date_debut: '', date_fin: '', motif: '' })
     setSuccess('')
     setError('')
   }
@@ -821,6 +1080,7 @@ export default function Operations() {
     setMissionSegments([...missionSegments, {
       id: nouveauId,
       pays: '',
+      country_code: '',
       ville: '',
       date_debut: '',
       date_fin: '',
@@ -837,12 +1097,64 @@ export default function Operations() {
       return
     }
     setMissionSegments(missionSegments.filter(s => s.id !== id))
+    setCountryOptionsBySegment(prev => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+    setCityOptionsBySegment(prev => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
   }
 
   function updateSegmentMission(id, field, value) {
-    setMissionSegments(missionSegments.map(seg => 
-      seg.id === id ? { ...seg, [field]: value } : seg
-    ))
+    setMissionSegments(missionSegments.map(seg => {
+      if (seg.id !== id) return seg
+      if (field === 'pays') {
+        return { ...seg, pays: value, country_code: '', ville: '' }
+      }
+      return { ...seg, [field]: value }
+    }))
+    if (field === 'pays') {
+      setCityOptionsBySegment(prev => ({ ...prev, [id]: [] }))
+    }
+  }
+
+  async function searchCountriesForSegment(segmentId, query) {
+    const q = String(query || '').trim()
+    if (q.length < 2) {
+      setCountryOptionsBySegment(prev => ({ ...prev, [segmentId]: [] }))
+      return
+    }
+    try {
+      const res = await api.get('/employees/world-countries/search', { params: { q } })
+      const options = (res.data || []).map(c => ({
+        value: c.code,
+        label: `${c.flag || ''} ${c.name}`.trim(),
+        name: c.name,
+        code: c.code,
+      }))
+      setCountryOptionsBySegment(prev => ({ ...prev, [segmentId]: options }))
+    } catch {
+      setCountryOptionsBySegment(prev => ({ ...prev, [segmentId]: [] }))
+    }
+  }
+
+  async function searchCitiesForSegment(segmentId, countryCode, query) {
+    const q = String(query || '').trim()
+    if (!countryCode || q.length < 2) {
+      setCityOptionsBySegment(prev => ({ ...prev, [segmentId]: [] }))
+      return
+    }
+    try {
+      const res = await api.get('/employees/world-cities/search', { params: { country_code: countryCode, q } })
+      const options = (res.data || []).map(c => ({ value: c.name, label: c.name, name: c.name }))
+      setCityOptionsBySegment(prev => ({ ...prev, [segmentId]: options }))
+    } catch {
+      setCityOptionsBySegment(prev => ({ ...prev, [segmentId]: [] }))
+    }
   }
 
   async function annulerOperation(id_operation, e) {
@@ -896,6 +1208,7 @@ export default function Operations() {
         justificatif: ''
       })
       loadAll()
+      loadWorkflow()
     } catch (err) {
       setError(err.response?.data?.detail || 'Erreur lors de la demande de frais')
     }
@@ -1032,6 +1345,7 @@ export default function Operations() {
       })
       await loadWorkflow()
       await loadAll()
+      setValidationRefreshKey(key => key + 1)
       return true
     } catch (error) {
       if (error.response && error.response.data && error.response.data.detail) {
@@ -1069,6 +1383,22 @@ export default function Operations() {
     }
   }
 
+  async function marquerFraisPaye(idMission) {
+    if (!window.confirm('Vous confirmez que les frais de mission ont été payés ?')) return
+    try {
+      setError('')
+      setSuccess('')
+      await api.post(`/api/missions/${idMission}/marquer-paye`)
+      setSuccess('Frais marqués comme payés.')
+      const statutPaiement = await loadStatutPaiementFrais(idMission)
+      if (statutPaiement) {
+        setStatutsPaiementFrais(prev => ({ ...prev, [idMission]: statutPaiement }))
+      }
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Erreur lors du marquage des frais')
+    }
+  }
+
   async function loadStatutPaiementFrais(idMission) {
     try {
       const res = await api.get(`/api/missions/${idMission}/statut-paiement-frais`)
@@ -1085,6 +1415,144 @@ export default function Operations() {
     const refuses = mesDemandes.filter((d) => String(d.statut || '').toLowerCase().includes('refus'))
     return { enAttente, valides, refuses }
   }, [mesDemandes])
+
+  function typeCorrespond(typeDemande, typeCible) {
+    return String(typeDemande || '').toLowerCase().includes(String(typeCible || '').toLowerCase())
+  }
+
+  function formaterDateOperation(operation) {
+    const valeur = operation?.date_demande || operation?.date_creation || operation?.date_debut || operation?.date_depart
+    if (!valeur) return '-'
+    const d = dayjs(valeur)
+    return d.isValid() ? d.format('DD/MM/YYYY') : '-'
+  }
+
+  function libelleRecu(item) {
+    if (item.__recu_statut) return item.__recu_statut
+    const statut = String(item?.statut || '').toLowerCase()
+    if (statut.includes('refus')) return 'Refusée'
+    if (statut.includes('valid')) return 'Validée'
+    return 'À valider'
+  }
+
+  async function activerOperationRh(idOperation, e) {
+    e.stopPropagation()
+    try {
+      setError('')
+      setSuccess('')
+      await api.post(`/api/conges/activation/${idOperation}/rh`, null, {
+        params: { matricule_rh: matricule }
+      })
+      setSuccess(`Opération #${idOperation} activée avec succès`)
+      await loadWorkflow()
+      await loadAll()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Erreur lors de l\'activation RH')
+    }
+  }
+
+  function renderListesDemandes(typeLabel, typeFiltre) {
+    const envoye = mesDemandes.filter((item) => typeCorrespond(item.type_demande, typeFiltre))
+    const recuAll = [
+      ...aValider.filter((item) => typeCorrespond(item.type_demande, typeFiltre)).map((item) => ({ ...item, __recu_statut: 'À valider' })),
+      ...mesValidations.filter((item) => typeCorrespond(item.type_demande, typeFiltre)).map((item) => ({ ...item, __recu_statut: 'Validée par moi' })),
+      ...mesRefus.filter((item) => typeCorrespond(item.type_demande, typeFiltre)).map((item) => ({ ...item, __recu_statut: 'Refusée par moi' }))
+    ]
+    // Dédupliquer par id_operation (priorité au statut le plus récent)
+    const recuMap = new Map()
+    recuAll.forEach(item => recuMap.set(item.id_operation, item))
+    const recu = [...recuMap.values()]
+
+    return (
+      <>
+        <div className="form-card" style={{ marginTop: '14px' }}>
+          <h3>Envoyé - {typeLabel}</h3>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            {envoye.map((item) => (
+              <div
+                key={`envoye-${typeFiltre}-${item.id_operation}`}
+                onClick={() => setSelectedOperationForWorkflow(item.id_operation)}
+                style={{
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}
+              >
+                <div style={{ display: 'grid', gap: '4px' }}>
+                  <strong style={{ fontSize: '0.9rem' }}>#{item.id_operation} - {item.type_demande || typeLabel}</strong>
+                  <span style={{ fontSize: '0.8rem', color: '#475569' }}>{item.motif || item.titre || 'Sans motif'}</span>
+                </div>
+                <div style={{ textAlign: 'right', display: 'grid', gap: '3px' }}>
+                  <span style={{ fontSize: '0.78rem', color: '#0f172a' }}>{item.statut || 'en attente'}</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{formaterDateOperation(item)}</span>
+                </div>
+              </div>
+            ))}
+            {envoye.length === 0 && (
+              <div style={{ fontSize: '0.82rem', color: '#64748b' }}>Aucune demande envoyée pour cette section.</div>
+            )}
+          </div>
+        </div>
+
+        {estValidateur && (
+          <div className="form-card" style={{ marginTop: '12px' }}>
+            <h3>Reçu - {typeLabel}</h3>
+            <div style={{ display: 'grid', gap: '8px' }}>
+              {recu.map((item) => {
+                const statutItem = String(item?.statut || '').toLowerCase()
+                const estRefuse = statutItem.includes('refus')
+                const estValide = statutItem.includes('valid')
+                const estOperationValidee = estValide && !estRefuse
+                const peutActiver = (roleUtilisateur === 'RH' || roleUtilisateur === 'ADMIN') && estOperationValidee
+                return (
+                  <div
+                    key={`recu-${typeFiltre}-${item.__recu_statut}-${item.id_operation}`}
+                    onClick={() => setSelectedOperationForWorkflow(item.id_operation)}
+                    style={{
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      padding: '10px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '10px'
+                    }}
+                  >
+                    <div style={{ display: 'grid', gap: '4px' }}>
+                      <strong style={{ fontSize: '0.9rem' }}>#{item.id_operation} - {item.type_demande || typeLabel}</strong>
+                      <span style={{ fontSize: '0.8rem', color: '#475569' }}>{item.motif || item.titre || 'Sans motif'}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{libelleRecu(item)}</span>
+                    </div>
+                    <div style={{ textAlign: 'right', display: 'grid', gap: '6px', justifyItems: 'end' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{formaterDateOperation(item)}</span>
+                      {peutActiver && (
+                        <button
+                          className="btn btn-success"
+                          onClick={(e) => activerOperationRh(item.id_operation, e)}
+                          style={{ fontSize: '0.75rem', padding: '4px 8px' }}
+                        >
+                          Activer
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+              {recu.length === 0 && (
+                <div style={{ fontSize: '0.82rem', color: '#64748b' }}>Aucune demande reçue pour cette section.</div>
+              )}
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
 
   const selectedWorkflowData = useMemo(() => {
     if (!selectedOperation) return null
@@ -1357,39 +1825,42 @@ export default function Operations() {
             </div>
 
             {demandeType === 'conges' && (
-              <form className="form-card" onSubmit={submitConge}>
-                <h3>Demande de congé</h3>
-                {peutCreerPourAutrui && (
-                  <div className="form-group">
-                    <label>Matricule cible (optionnel)</label>
-                    <input
-                      type="number"
-                      value={matriculeCible}
-                      onChange={(e) => setMatriculeCible(e.target.value)}
-                      placeholder="Laisser vide pour moi-même"
-                    />
+              <>
+                <form className="form-card" onSubmit={submitConge}>
+                  <h3>Demande de congé</h3>
+                  {peutCreerPourAutrui && (
+                    <div className="form-group">
+                      <label>Matricule cible (optionnel)</label>
+                      <input
+                        type="number"
+                        value={matriculeCible}
+                        onChange={(e) => setMatriculeCible(e.target.value)}
+                        placeholder="Laisser vide pour moi-même"
+                      />
+                    </div>
+                  )}
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Date début</label>
+                      <input type="date" value={congeForm.date_debut} onChange={(e) => setCongeForm({ ...congeForm, date_debut: e.target.value })} required />
+                    </div>
+                    <div className="form-group">
+                      <label>Date fin</label>
+                      <input type="date" value={congeForm.date_fin} onChange={(e) => setCongeForm({ ...congeForm, date_fin: e.target.value })} required />
+                    </div>
+                    <div className="form-group">
+                      <label>Durée (jours)</label>
+                      <input type="number" value={congeForm.date_debut && congeForm.date_fin ? Math.ceil((new Date(congeForm.date_fin) - new Date(congeForm.date_debut)) / (1000 * 60 * 60 * 24)) + 1 : 0} readOnly />
+                    </div>
                   </div>
-                )}
-                <div className="form-row">
                   <div className="form-group">
-                    <label>Date début</label>
-                    <input type="date" value={congeForm.date_debut} onChange={(e) => setCongeForm({ ...congeForm, date_debut: e.target.value })} required />
+                    <label>Motif</label>
+                    <textarea value={congeForm.motif} onChange={(e) => setCongeForm({ ...congeForm, motif: e.target.value })} />
                   </div>
-                  <div className="form-group">
-                    <label>Date fin</label>
-                    <input type="date" value={congeForm.date_fin} onChange={(e) => setCongeForm({ ...congeForm, date_fin: e.target.value })} required />
-                  </div>
-                  <div className="form-group">
-                    <label>Durée (jours)</label>
-                    <input type="number" value={congeForm.date_debut && congeForm.date_fin ? Math.ceil((new Date(congeForm.date_fin) - new Date(congeForm.date_debut)) / (1000 * 60 * 60 * 24)) + 1 : 0} readOnly />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label>Motif</label>
-                  <textarea value={congeForm.motif} onChange={(e) => setCongeForm({ ...congeForm, motif: e.target.value })} />
-                </div>
-                <button className="btn btn-success" type="submit">Soumettre</button>
-              </form>
+                  <button className="btn btn-success" type="submit">Soumettre</button>
+                </form>
+                {renderListesDemandes('Congé', 'congé')}
+              </>
             )}
 
             {demandeType === 'permissions' && (
@@ -1441,11 +1912,9 @@ export default function Operations() {
                             required
                           >
                             <option value="">-- Sélectionner un type --</option>
-                            <option value="mariage">Mariage</option>
-                            <option value="accouchement">Accouchement</option>
-                            <option value="bapteme">Baptême</option>
-                            <option value="deces">Décès</option>
-                            <option value="maternelle">Maternité</option>
+                            {filteredPermissionTypes.map(([key, config]) => (
+                              <option key={key} value={key}>{config.label}</option>
+                            ))}
                           </select>
                         </div>
                       </div>
@@ -1569,11 +2038,9 @@ export default function Operations() {
                             }}
                           >
                             <option value="__all__">Tous les types</option>
-                            <option value="mariage">Mariage</option>
-                            <option value="accouchement">Accouchement</option>
-                            <option value="bapteme">Baptême</option>
-                            <option value="deces">Décès</option>
-                            <option value="maternelle">Maternité</option>
+                            {filteredPermissionTypes.map(([key, config]) => (
+                              <option key={key} value={key}>{config.label}</option>
+                            ))}
                           </select>
                         </div>
                         
@@ -1752,6 +2219,7 @@ export default function Operations() {
                     </form>
                   </>
                 )}
+                {renderListesDemandes('Permission', 'permission')}
               </>
             )}
 
@@ -1777,6 +2245,16 @@ export default function Operations() {
                         <label>Motif / Objet de la mission</label>
                         <input value={missionForm.motif} onChange={(e) => setMissionForm({ ...missionForm, motif: e.target.value })} placeholder="Ex: Formation, Réunion, Audit..." />
                       </div>
+                    </div>
+                    <div className="form-group">
+                      <label>Commentaire / Titre de la demande (optionnel)</label>
+                      <textarea
+                        value={missionForm.mission_comment || ''}
+                        onChange={(e) => setMissionForm({ ...missionForm, mission_comment: e.target.value })}
+                        placeholder="Informations complémentaires sur la mission..."
+                        rows={2}
+                        style={{ resize: 'vertical', minHeight: '60px' }}
+                      />
                     </div>
                   </div>
 
@@ -1931,20 +2409,36 @@ export default function Operations() {
                         <div className="form-row">
                           <div className="form-group">
                             <label>Pays</label>
-                            <input 
-                              value={segment.pays} 
-                              onChange={(e) => updateSegmentMission(segment.id, 'pays', e.target.value)} 
-                              required 
-                              placeholder="Ex: Cameroun"
+                            <AutocompleteInput
+                              value={segment.pays}
+                              onChange={(v) => updateSegmentMission(segment.id, 'pays', v)}
+                              onInputChange={(v) => searchCountriesForSegment(segment.id, v)}
+                              onSelectOption={(opt) => {
+                                if (!opt) return
+                                setMissionSegments(prev => prev.map(seg => seg.id === segment.id ? { ...seg, pays: opt.name || opt.label, country_code: opt.code || opt.value, ville: '' } : seg))
+                                setCityOptionsBySegment(prev => ({ ...prev, [segment.id]: [] }))
+                              }}
+                              options={countryOptionsBySegment[segment.id] || []}
+                              strictSelection={true}
+                              required
+                              placeholder="Rechercher un pays..."
                             />
                           </div>
                           <div className="form-group">
                             <label>Ville</label>
-                            <input 
-                              value={segment.ville} 
-                              onChange={(e) => updateSegmentMission(segment.id, 'ville', e.target.value)} 
-                              required 
-                              placeholder="Ex: Douala"
+                            <AutocompleteInput
+                              value={segment.ville}
+                              onChange={(v) => updateSegmentMission(segment.id, 'ville', v)}
+                              onInputChange={(v) => searchCitiesForSegment(segment.id, segment.country_code, v)}
+                              onSelectOption={(opt) => {
+                                if (!opt) return
+                                setMissionSegments(prev => prev.map(seg => seg.id === segment.id ? { ...seg, ville: opt.name || opt.label } : seg))
+                              }}
+                              options={cityOptionsBySegment[segment.id] || []}
+                              strictSelection={true}
+                              required
+                              disabled={!segment.country_code}
+                              placeholder={segment.country_code ? 'Rechercher une ville...' : 'Sélectionnez d\'abord un pays'}
                             />
                           </div>
                         </div>
@@ -2163,6 +2657,18 @@ export default function Operations() {
                                     <CheckCircle size={12}/> Confirmer paiement
                                   </button>
                                 )}
+
+                                {/* Bouton Marquer comme payé (raccourci RH/ADMIN) */}
+                                {estRH && !statutPaiement.frais_payes && (
+                                  <button
+                                    className="btn btn-success"
+                                    onClick={() => marquerFraisPaye(mission.id_operation)}
+                                    style={{fontSize: '0.85rem', padding: '6px 12px', display:'inline-flex', alignItems:'center', gap:4, background:'#0369a1'}}
+                                    title="Marquer les frais comme payés"
+                                  >
+                                    <CheckCircle size={12}/> Marquer payé
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -2171,90 +2677,94 @@ export default function Operations() {
                     </table>
                   </div>
                 )}
+                {renderListesDemandes('Mission', 'mission')}
               </>
             )}
 
             {demandeType === 'frais' && (
-              <form className="form-card" onSubmit={submitFrais}>
-                <h3>Demande de frais de mission</h3>
-                <div style={{ background: '#fff3cd', padding: '12px', borderRadius: '6px', marginBottom: '15px', border: '1px solid #ffc107', display:'flex', alignItems:'flex-start', gap:6 }}>
-                  <AlertTriangle size={13} style={{flexShrink:0, marginTop:2}}/> <span><strong>Important:</strong> Vous ne pouvez demander les frais qu'après validation complète de votre mission par tous les validateurs.</span>
-                </div>
-                <div className="form-group">
-                  <label>Mission (ID opération)</label>
-                  <select 
-                    value={fraisForm.id_operation} 
-                    onChange={(e) => setFraisForm({ ...fraisForm, id_operation: e.target.value })} 
-                    required
-                  >
-                    <option value="">Sélectionner une mission</option>
-                    {missions.filter(m => {
-                      const statut = missionStatuts[m.id_operation]
-                      return statut?.validation_complete && !statut?.frais_deja_demandes
-                    }).map(m => (
-                      <option key={m.id_operation} value={m.id_operation}>
-                        #{m.id_operation} - {m.pays}, {m.ville || 'N/A'} (Validée)
-                      </option>
-                    ))}
-                  </select>
-                  {missions.filter(m => missionStatuts[m.id_operation]?.validation_complete).length === 0 && (
-                    <p style={{ fontSize: '0.85em', color: '#666', marginTop: '8px' }}>
-                      Aucune mission validée disponible
-                    </p>
-                  )}
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Frais transport (prix unitaire en FCFA)</label>
-                    <input type="number" step="0.01" value={fraisForm.frais_transport_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_transport_unitaire: e.target.value })} placeholder="Entrez le montant" />
-                    <p style={{fontSize: '0.85rem', color: '#666', margin: '5px 0 0 0'}}>
-                      <strong>Total:</strong> {fraisMissionCalculs.frais_transport_total.toFixed(2)} FCFA (payé une fois)
-                    </p>
+              <>
+                <form className="form-card" onSubmit={submitFrais}>
+                  <h3>Demande de frais de mission</h3>
+                  <div style={{ background: '#fff3cd', padding: '12px', borderRadius: '6px', marginBottom: '15px', border: '1px solid #ffc107', display:'flex', alignItems:'flex-start', gap:6 }}>
+                    <AlertTriangle size={13} style={{flexShrink:0, marginTop:2}}/> <span><strong>Important:</strong> Vous ne pouvez demander les frais qu'après validation complète de votre mission par tous les validateurs.</span>
                   </div>
                   <div className="form-group">
-                    <label>Frais hôtel (prix unitaire/nuit en FCFA)</label>
-                    <input type="number" step="0.01" value={fraisForm.frais_hotel_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_hotel_unitaire: e.target.value })} placeholder="Entrez le montant" />
-                    <p style={{fontSize: '0.85rem', color: '#666', margin: '5px 0 0 0'}}>
-                      <strong>Total:</strong> {fraisMissionCalculs.frais_hotel_total.toFixed(2)} FCFA pour {fraisMissionCalculs.nuits} nuit{fraisMissionCalculs.nuits > 1 ? 's' : ''}
-                    </p>
+                    <label>Mission (ID opération)</label>
+                    <select 
+                      value={fraisForm.id_operation} 
+                      onChange={(e) => setFraisForm({ ...fraisForm, id_operation: e.target.value })} 
+                      required
+                    >
+                      <option value="">Sélectionner une mission</option>
+                      {missions.filter(m => {
+                        const statut = missionStatuts[m.id_operation]
+                        return statut?.validation_complete && !statut?.frais_deja_demandes
+                      }).map(m => (
+                        <option key={m.id_operation} value={m.id_operation}>
+                          #{m.id_operation} - {m.pays}, {m.ville || 'N/A'} (Validée)
+                        </option>
+                      ))}
+                    </select>
+                    {missions.filter(m => missionStatuts[m.id_operation]?.validation_complete).length === 0 && (
+                      <p style={{ fontSize: '0.85em', color: '#666', marginTop: '8px' }}>
+                        Aucune mission validée disponible
+                      </p>
+                    )}
                   </div>
-                </div>
-                <div className="form-row">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Frais transport (prix unitaire en FCFA)</label>
+                      <input type="number" step="0.01" value={fraisForm.frais_transport_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_transport_unitaire: e.target.value })} placeholder="Entrez le montant" />
+                      <p style={{fontSize: '0.85rem', color: '#666', margin: '5px 0 0 0'}}>
+                        <strong>Total:</strong> {fraisMissionCalculs.frais_transport_total.toFixed(2)} FCFA (payé une fois)
+                      </p>
+                    </div>
+                    <div className="form-group">
+                      <label>Frais hôtel (prix unitaire/nuit en FCFA)</label>
+                      <input type="number" step="0.01" value={fraisForm.frais_hotel_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_hotel_unitaire: e.target.value })} placeholder="Entrez le montant" />
+                      <p style={{fontSize: '0.85rem', color: '#666', margin: '5px 0 0 0'}}>
+                        <strong>Total:</strong> {fraisMissionCalculs.frais_hotel_total.toFixed(2)} FCFA pour {fraisMissionCalculs.nuits} nuit{fraisMissionCalculs.nuits > 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Frais déplacement (prix unitaire/jour en FCFA)</label>
+                      <input type="number" step="0.01" value={fraisForm.frais_deplacement_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_deplacement_unitaire: e.target.value })} placeholder="Entrez le montant" />
+                      <p style={{fontSize: '0.85rem', color: '#666', margin: '5px 0 0 0'}}>
+                        <strong>Total:</strong> {fraisMissionCalculs.frais_deplacement_total.toFixed(2)} FCFA pour {fraisMissionCalculs.durationDays} jour{fraisMissionCalculs.durationDays > 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    <div className="form-group">
+                      <label>Frais mission (prix unitaire/jour en FCFA)</label>
+                      <input type="number" step="0.01" value={fraisForm.frais_mission_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_mission_unitaire: e.target.value })} placeholder="Entrez le montant" />
+                      <p style={{fontSize: '0.85rem', color: '#666', margin: '5px 0 0 0'}}>
+                        <strong>Total:</strong> {fraisMissionCalculs.frais_mission_total.toFixed(2)} FCFA pour {fraisMissionCalculs.durationDays} jour{fraisMissionCalculs.durationDays > 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </div>
                   <div className="form-group">
-                    <label>Frais déplacement (prix unitaire/jour en FCFA)</label>
-                    <input type="number" step="0.01" value={fraisForm.frais_deplacement_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_deplacement_unitaire: e.target.value })} placeholder="Entrez le montant" />
-                    <p style={{fontSize: '0.85rem', color: '#666', margin: '5px 0 0 0'}}>
-                      <strong>Total:</strong> {fraisMissionCalculs.frais_deplacement_total.toFixed(2)} FCFA pour {fraisMissionCalculs.durationDays} jour{fraisMissionCalculs.durationDays > 1 ? 's' : ''}
-                    </p>
+                    <label>Justificatif</label>
+                    <textarea value={fraisForm.justificatif} onChange={(e) => setFraisForm({ ...fraisForm, justificatif: e.target.value })} placeholder="Description des frais engagés..." />
                   </div>
-                  <div className="form-group">
-                    <label>Frais mission (prix unitaire/jour en FCFA)</label>
-                    <input type="number" step="0.01" value={fraisForm.frais_mission_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_mission_unitaire: e.target.value })} placeholder="Entrez le montant" />
-                    <p style={{fontSize: '0.85rem', color: '#666', margin: '5px 0 0 0'}}>
-                      <strong>Total:</strong> {fraisMissionCalculs.frais_mission_total.toFixed(2)} FCFA pour {fraisMissionCalculs.durationDays} jour{fraisMissionCalculs.durationDays > 1 ? 's' : ''}
-                    </p>
+                  <div style={{ background: '#dbeafe', padding: '15px', borderRadius: '8px', marginBottom: '15px', border: '1px solid #0ea5e9' }}>
+                    <div style={{ marginBottom: '8px' }}>
+                      <p style={{margin: '0 0 8px 0', fontSize: '0.9rem', display:'flex', alignItems:'center', gap:5}}><ClipboardList size={12}/> <strong>Récapitulatif des frais:</strong></p>
+                      <p style={{margin: '4px 0', fontSize: '0.85rem'}}>Transport: <strong>{fraisMissionCalculs.frais_transport_total.toFixed(2)} FCFA</strong></p>
+                      <p style={{margin: '4px 0', fontSize: '0.85rem'}}>Hôtel ({fraisMissionCalculs.nuits} nuit{fraisMissionCalculs.nuits > 1 ? 's' : ''}): <strong>{fraisMissionCalculs.frais_hotel_total.toFixed(2)} FCFA</strong></p>
+                      <p style={{margin: '4px 0', fontSize: '0.85rem'}}>Déplacement ({fraisMissionCalculs.durationDays} jour{fraisMissionCalculs.durationDays > 1 ? 's' : ''}): <strong>{fraisMissionCalculs.frais_deplacement_total.toFixed(2)} FCFA</strong></p>
+                      <p style={{margin: '4px 0', fontSize: '0.85rem'}}>Frais mission ({fraisMissionCalculs.durationDays} jour{fraisMissionCalculs.durationDays > 1 ? 's' : ''}): <strong>{fraisMissionCalculs.frais_mission_total.toFixed(2)} FCFA</strong></p>
+                    </div>
+                    <div style={{borderTop: '1px solid #0ea5e9', paddingTop: '10px', marginTop: '10px'}}>
+                      <p style={{margin: 0, fontSize: '1rem'}}><strong>TOTAL GÉNÉRAL: {fraisMissionCalculs.total_general.toFixed(2)} FCFA</strong></p>
+                    </div>
                   </div>
-                </div>
-                <div className="form-group">
-                  <label>Justificatif</label>
-                  <textarea value={fraisForm.justificatif} onChange={(e) => setFraisForm({ ...fraisForm, justificatif: e.target.value })} placeholder="Description des frais engagés..." />
-                </div>
-                <div style={{ background: '#dbeafe', padding: '15px', borderRadius: '8px', marginBottom: '15px', border: '1px solid #0ea5e9' }}>
-                  <div style={{ marginBottom: '8px' }}>
-                    <p style={{margin: '0 0 8px 0', fontSize: '0.9rem', display:'flex', alignItems:'center', gap:5}}><ClipboardList size={12}/> <strong>Récapitulatif des frais:</strong></p>
-                    <p style={{margin: '4px 0', fontSize: '0.85rem'}}>Transport: <strong>{fraisMissionCalculs.frais_transport_total.toFixed(2)} FCFA</strong></p>
-                    <p style={{margin: '4px 0', fontSize: '0.85rem'}}>Hôtel ({fraisMissionCalculs.nuits} nuit{fraisMissionCalculs.nuits > 1 ? 's' : ''}): <strong>{fraisMissionCalculs.frais_hotel_total.toFixed(2)} FCFA</strong></p>
-                    <p style={{margin: '4px 0', fontSize: '0.85rem'}}>Déplacement ({fraisMissionCalculs.durationDays} jour{fraisMissionCalculs.durationDays > 1 ? 's' : ''}): <strong>{fraisMissionCalculs.frais_deplacement_total.toFixed(2)} FCFA</strong></p>
-                    <p style={{margin: '4px 0', fontSize: '0.85rem'}}>Frais mission ({fraisMissionCalculs.durationDays} jour{fraisMissionCalculs.durationDays > 1 ? 's' : ''}): <strong>{fraisMissionCalculs.frais_mission_total.toFixed(2)} FCFA</strong></p>
-                  </div>
-                  <div style={{borderTop: '1px solid #0ea5e9', paddingTop: '10px', marginTop: '10px'}}>
-                    <p style={{margin: 0, fontSize: '1rem'}}><strong>TOTAL GÉNÉRAL: {fraisMissionCalculs.total_general.toFixed(2)} FCFA</strong></p>
-                  </div>
-                </div>
-                <button className="btn btn-success" type="submit" disabled={!fraisForm.id_operation}>
-                  Soumettre demande de frais
-                </button>
-              </form>
+                  <button className="btn btn-success" type="submit" disabled={!fraisForm.id_operation}>
+                    Soumettre demande de frais
+                  </button>
+                </form>
+                {renderListesDemandes('Frais de mission', 'frais')}
+              </>
             )}
 
             {demandeType === 'missions' && (
@@ -2353,7 +2863,7 @@ export default function Operations() {
         {activeTab === 'workflow' && !loading && (
           <div className="tab-pane">
             <div className="tab-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-              <h2>Workflow (Kanban)</h2>
+              <h2>Workflow</h2>
               {selectedOperation && (
                 <button
                   className="btn btn-primary"
@@ -2405,6 +2915,7 @@ export default function Operations() {
                       </button>
                     </div>
                     <ProgressionValidation
+                      key={`${selectedOperation}-${validationRefreshKey}`}
                       idOperation={selectedOperation}
                       typeDefault="Demande opération"
                     />
@@ -2560,8 +3071,28 @@ export default function Operations() {
 
             {!selectedOperation && (
               <>
+                <div className="form-card" style={{ marginBottom: '12px', padding: '10px 12px' }}>
+                  <div style={{ display: 'grid', gap: '6px', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>Envoye</div>
+                      <div style={{ fontWeight: 700, color: '#0f172a' }}>{mesDemandes.length}</div>
+                    </div>
+                    <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '8px' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#9a3412', textTransform: 'uppercase' }}>Recu a valider</div>
+                      <div style={{ fontWeight: 700, color: '#7c2d12' }}>{aValider.length}</div>
+                    </div>
+                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '8px' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#166534', textTransform: 'uppercase' }}>Valide par moi</div>
+                      <div style={{ fontWeight: 700, color: '#14532d' }}>{mesValidations.length}</div>
+                    </div>
+                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '8px' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#991b1b', textTransform: 'uppercase' }}>Refuse par moi</div>
+                      <div style={{ fontWeight: 700, color: '#7f1d1d' }}>{mesRefus.length}</div>
+                    </div>
+                  </div>
+                </div>
                 <div style={{ marginBottom: '10px' }}>
-                  <h3 style={{ marginBottom: '10px' }}>Mes demandes personnelles</h3>
+                  <h3 style={{ marginBottom: '10px' }}>Boite Envoye</h3>
                 </div>
                 <div className="kanban-grid">
                   <div className="kanban-col orange-light">
@@ -2571,7 +3102,7 @@ export default function Operations() {
                     ) : (
                       workflowCols.enAttente.map((o) => (
                         <div
-                          key={o.id_operation}
+                          key={`envoye-attente-${o.id_operation}`}
                           className="kanban-card"
                           onClick={() => setSelectedOperation(o.id_operation)}
                           style={{ cursor: 'pointer' }}
@@ -2608,7 +3139,7 @@ export default function Operations() {
                     ) : (
                       workflowCols.valides.map((o) => (
                         <div
-                          key={o.id_operation}
+                          key={`envoye-valide-${o.id_operation}`}
                           className="kanban-card"
                           onClick={() => setSelectedOperation(o.id_operation)}
                           style={{ cursor: 'pointer' }}
@@ -2628,7 +3159,7 @@ export default function Operations() {
                     ) : (
                       workflowCols.refuses.map((o) => (
                         <div
-                          key={o.id_operation}
+                          key={`envoye-refuse-${o.id_operation}`}
                           className="kanban-card"
                           onClick={() => setSelectedOperation(o.id_operation)}
                           style={{ cursor: 'pointer' }}
@@ -2645,7 +3176,7 @@ export default function Operations() {
                 {estValidateur && (
                   <>
                     <div style={{ marginTop: '14px', marginBottom: '8px' }}>
-                      <h3 style={{ marginBottom: '8px', display:'flex', alignItems:'center', gap:6 }}><UserCheck size={14}/> Mes actions de validation</h3>
+                      <h3 style={{ marginBottom: '8px', display:'flex', alignItems:'center', gap:6 }}><UserCheck size={14}/> Boite Recu (validateur)</h3>
                     </div>
                     <div className="kanban-grid">
                       <div className="kanban-col orange">
@@ -2655,7 +3186,7 @@ export default function Operations() {
                         ) : (
                           aValider.map((o) => (
                             <div
-                              key={o.id_operation}
+                              key={`recu-avalider-${o.id_operation}`}
                               className="kanban-card"
                               onClick={() => {
                                 setSelectedOperation(o.id_operation)
@@ -2681,7 +3212,7 @@ export default function Operations() {
                         ) : (
                           mesValidations.map((o) => (
                             <div
-                              key={o.id_operation}
+                              key={`recu-valide-${o.id_operation}`}
                               className="kanban-card"
                               onClick={() => setSelectedOperation(o.id_operation)}
                               style={{ cursor: 'pointer' }}
@@ -2704,7 +3235,7 @@ export default function Operations() {
                         ) : (
                           mesRefus.map((o) => (
                             <div
-                              key={o.id_operation}
+                              key={`recu-refuse-${o.id_operation}`}
                               className="kanban-card"
                               onClick={() => setSelectedOperation(o.id_operation)}
                               style={{ cursor: 'pointer' }}
@@ -2741,8 +3272,19 @@ export default function Operations() {
             <div className="form-card">
               <h3>Recherche par opération</h3>
               <div className="form-row">
-                <input value={operationRecherche} onChange={(e) => setOperationRecherche(e.target.value)} placeholder="ID opération" />
-                <button className="btn btn-primary" onClick={rechercherPropositions}>Afficher propositions</button>
+                <select 
+                  value={operationRecherche} 
+                  onChange={(e) => setOperationRecherche(e.target.value)}
+                  style={{padding: '8px 12px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '0.9rem'}}
+                >
+                  <option value="">-- Sélectionner une opération --</option>
+                  {operations.map(op => (
+                    <option key={op.id_operation} value={op.id_operation}>
+                      #{op.id_operation} - {op.type_demande || op.type || 'Opération'} ({op.nom_employe || op.demandeur?.nom_complet || op.demandeur?.nom || '-'}) - {op.date_debut ? dayjs(op.date_debut).format('DD/MM/YYYY') : '-'} à {op.date_fin ? dayjs(op.date_fin).format('DD/MM/YYYY') : '-'}
+                    </option>
+                  ))}
+                </select>
+                <button className="btn btn-primary" onClick={rechercherPropositions} disabled={!operationRecherche}>Afficher propositions</button>
               </div>
             </div>
 
@@ -2783,6 +3325,14 @@ export default function Operations() {
               ))}
             </div>
           </div>
+        )}
+
+        {selectedOperationForWorkflow && (
+          <WorkflowModal 
+            isOpen={!!selectedOperationForWorkflow}
+            operationId={selectedOperationForWorkflow}
+            onClose={() => setSelectedOperationForWorkflow(null)}
+          />
         )}
       </div>
     </div>

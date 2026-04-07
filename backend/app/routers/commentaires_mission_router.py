@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from ..db import get_db
 from .. import models
 from ..utils import notifications
@@ -28,8 +28,7 @@ class CommentaireResponse(BaseModel):
     date_creation: datetime
     lu_par: List[int]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.post('/creer', status_code=status.HTTP_201_CREATED)

@@ -36,9 +36,12 @@ export default function EventsPage() {
   const [filterType, setFilterType] = useState('tous')
   const [searchQ, setSearchQ] = useState('')
 
-  const isAdmin = ['RH', 'DG', 'PCA', 'ADMIN'].includes(user?.role || '')
+  const role = String(user?.role || '').toUpperCase()
+  const isEventManager = ['RH', 'PCA', 'ADMIN', 'AG'].includes(role)
+  const isReadOnlyEvents = !isEventManager
 
   const handleSubmit = (e) => {
+    if (!isEventManager) return
     e.preventDefault()
     let updated
     if (editingId) {
@@ -50,18 +53,20 @@ export default function EventsPage() {
   }
 
   const deleteEvent = (id) => {
+    if (!isEventManager) return
     if (!window.confirm('Supprimer cet événement ?')) return
     const updated = events.filter(ev => ev.id !== id)
     setEvents(updated); saveEvents(updated)
   }
 
   const editEvent = (ev) => {
+    if (!isEventManager) return
     setForm({ titre: ev.titre, type: ev.type || 'Réunion', description: ev.description || '', lieu: ev.lieu || '', date_debut: ev.date_debut || '', date_fin: ev.date_fin || '', organisateur: ev.organisateur || '', capacite: ev.capacite || '', statut: ev.statut })
     setEditingId(ev.id); setShowForm(true)
   }
 
   const changeStatut = (id, statut) => {
-    if (!isAdmin) return
+    if (!isEventManager) return
     const updated = events.map(ev => ev.id === id ? { ...ev, statut, updated_at: new Date().toISOString() } : ev)
     setEvents(updated); saveEvents(updated)
   }
@@ -71,6 +76,7 @@ export default function EventsPage() {
   const getStatut = (v) => STATUTS_EVENT.find(s => s.value === v) || STATUTS_EVENT[0]
 
   const filtered = events.filter(ev => {
+    if (isReadOnlyEvents && !['approuve', 'termine'].includes(String(ev.statut || ''))) return false
     if (filterStatut !== 'tous' && ev.statut !== filterStatut) return false
     if (filterType !== 'tous' && ev.type !== filterType) return false
     if (searchQ && !ev.titre.toLowerCase().includes(searchQ.toLowerCase())) return false
@@ -94,9 +100,11 @@ export default function EventsPage() {
             </h1>
             <p style={{ margin: '4px 0 0', fontSize: '0.85rem', opacity: 0.8 }}>Planifiez et gérez vos événements d'entreprise</p>
           </div>
-          <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(true) }} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Plus size={15} /> Créer un événement
-          </button>
+          {isEventManager && (
+            <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(true) }} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Plus size={15} /> Créer un événement
+            </button>
+          )}
         </div>
       </div>
 
@@ -162,7 +170,7 @@ export default function EventsPage() {
                 <input className="form-control" type="number" min="1" value={form.capacite} onChange={e => setForm({ ...form, capacite: e.target.value })} placeholder="Nb personnes" />
               </div>
             </div>
-            {isAdmin && (
+            {isEventManager && (
               <div className="form-group">
                 <label>Statut</label>
                 <select className="form-control" value={form.statut} onChange={e => setForm({ ...form, statut: e.target.value })}>
@@ -212,10 +220,12 @@ export default function EventsPage() {
                     </div>
                     <h3 style={{ margin: 0, fontSize: '1rem', color: '#1e293b', fontWeight: 700 }}>{ev.titre}</h3>
                   </div>
-                  <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
-                    <button onClick={() => editEvent(ev)} style={{ background: '#f1f5f9', border: 'none', borderRadius: 6, padding: '4px 6px', cursor: 'pointer', color: '#475569' }}><Edit3 size={12} /></button>
-                    <button onClick={() => deleteEvent(ev.id)} style={{ background: '#fef2f2', border: 'none', borderRadius: 6, padding: '4px 6px', cursor: 'pointer', color: '#ce2b2b' }}><Trash2 size={12} /></button>
-                  </div>
+                  {isEventManager && (
+                    <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                      <button onClick={() => editEvent(ev)} style={{ background: '#f1f5f9', border: 'none', borderRadius: 6, padding: '4px 6px', cursor: 'pointer', color: '#475569' }}><Edit3 size={12} /></button>
+                      <button onClick={() => deleteEvent(ev.id)} style={{ background: '#fef2f2', border: 'none', borderRadius: 6, padding: '4px 6px', cursor: 'pointer', color: '#ce2b2b' }}><Trash2 size={12} /></button>
+                    </div>
+                  )}
                 </div>
                 {ev.description && <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 10px', lineHeight: 1.4 }}>{ev.description}</p>}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -235,14 +245,11 @@ export default function EventsPage() {
                     </div>
                   )}
                 </div>
-                {isAdmin && ev.statut === 'en_attente' && (
+                {isEventManager && ev.statut === 'en_attente' && (
                   <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                     <button onClick={() => changeStatut(ev.id, 'approuve')} className="btn btn-success" style={{ flex: 1, fontSize: '0.78rem', padding: '5px 8px' }}>Approuver</button>
                     <button onClick={() => changeStatut(ev.id, 'refuse')} className="btn btn-danger" style={{ flex: 1, fontSize: '0.78rem', padding: '5px 8px' }}>Refuser</button>
                   </div>
-                )}
-                {!isAdmin && ev.statut === 'brouillon' && (
-                  <button onClick={() => changeStatut(ev.id, 'en_attente')} className="btn btn-primary" style={{ width: '100%', marginTop: 12, fontSize: '0.78rem', padding: '6px 8px' }}>Soumettre pour approbation</button>
                 )}
               </div>
             )

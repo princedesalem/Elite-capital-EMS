@@ -76,6 +76,31 @@ def get_villes_by_pays(id_pays: int, db: Session = Depends(get_db)):
     return [{'id_localisation': v.id_localisation, 'ville': v.ville, 'id_pays': v.id_pays, 'flag': get_flag_by_code(pays.code_pays)} for v in villes]
 
 
+@router.get('/pays-avec-entites')
+def get_pays_avec_entites(db: Session = Depends(get_db)):
+    """Récupère tous les pays présents dans la base de données"""
+    from ..utils.world_data import get_flag_by_code
+    try:
+        pays_list = db.query(models.Pays).all()
+        return [{'id_pays': p.id_pays, 'nom_pays': p.nom_pays, 'code_pays': p.code_pays, 'flag': get_flag_by_code(p.code_pays)} for p in pays_list]
+    except Exception:
+        return []
+
+
+@router.get('/pays/{id_pays}/villes-avec-entites')
+def get_villes_avec_entites(id_pays: int, db: Session = Depends(get_db)):
+    """Récupère toutes les villes d'un pays présentes dans la base de données"""
+    from ..utils.world_data import get_flag_by_code
+    pays = db.query(models.Pays).filter(models.Pays.id_pays == id_pays).first()
+    if not pays:
+        raise HTTPException(status_code=404, detail='Pays non trouvé')
+    try:
+        villes = db.query(models.Localisation).filter(models.Localisation.id_pays == id_pays).all()
+        return [{'id_localisation': v.id_localisation, 'ville': v.ville, 'id_pays': v.id_pays, 'flag': get_flag_by_code(pays.code_pays)} for v in villes]
+    except Exception:
+        return []
+
+
 @router.post('/villes')
 def create_ville(payload: schemas.VilleCreate, db: Session = Depends(get_db)):
     """Créer une nouvelle ville"""
@@ -249,23 +274,33 @@ def get_world_countries(db: Session = Depends(get_db)):
 @router.get('/world-countries/search')
 def search_world_countries(q: str, db: Session = Depends(get_db)):
     """Recherche de pays dans la base mondiale"""
-    from ..utils.world_data import search_countries
+    from ..utils.world_geo_service import search_countries
+    from ..utils.world_data import search_countries as fallback_search_countries
     try:
         results = search_countries(q)
         return results
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur recherche: {str(e)}")
+        # Fallback local si l'API externe est indisponible
+        try:
+            return fallback_search_countries(q)
+        except Exception:
+            raise HTTPException(status_code=500, detail=f"Erreur recherche: {str(e)}")
 
 
 @router.get('/world-cities/search')
 def search_world_cities(country_code: str, q: str, db: Session = Depends(get_db)):
     """Recherche de villes pour un pays"""
-    from ..utils.world_data import search_cities
+    from ..utils.world_geo_service import search_cities
+    from ..utils.world_data import search_cities as fallback_search_cities
     try:
         results = search_cities(country_code, q)
         return results
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur recherche: {str(e)}")
+        # Fallback local si l'API externe est indisponible
+        try:
+            return fallback_search_cities(country_code, q)
+        except Exception:
+            raise HTTPException(status_code=500, detail=f"Erreur recherche: {str(e)}")
 
 
 # ==================== ENTITES ====================
@@ -291,8 +326,6 @@ def get_all_entites(id_localisation: int = None, db: Session = Depends(get_db)):
         for d in directions:
             # Count departments for each direction
             dept_query = db.query(models.Departement).filter(models.Departement.id_direction == d.id_direction)
-            if id_localisation:
-                dept_query = dept_query.filter(models.Departement.id_localisation == id_localisation)
             dept_count = dept_query.count()
             directions_list.append({
                 'id_direction': d.id_direction,
@@ -355,8 +388,6 @@ def get_all_directions(id_localisation: int = None, db: Session = Depends(get_db
         entite = db.query(models.Entite).filter(models.Entite.id_entite == d.id_entite).first()
         # Get all departments for this direction
         departements_query = db.query(models.Departement).filter(models.Departement.id_direction == d.id_direction)
-        if id_localisation:
-            departements_query = departements_query.filter(models.Departement.id_localisation == id_localisation)
         departements = departements_query.all()
         departements_list = []
         for dept in departements:
@@ -393,7 +424,12 @@ def create_direction(data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail='Entité invalide')
 
     if not id_localisation:
-        raise HTTPException(status_code=400, detail='id_localisation est requis')
+        # Auto-resolve from entite's implantation
+        impl = db.query(models.Implantation).filter(models.Implantation.id_entite == id_entite).first()
+        if impl:
+            id_localisation = impl.id_localisation
+        else:
+            raise HTTPException(status_code=400, detail='id_localisation est requis (aucune implantation trouvée pour cette entité)')
 
     localisation = db.query(models.Localisation).filter(models.Localisation.id_localisation == id_localisation).first()
     if not localisation:
@@ -418,12 +454,36 @@ def create_direction(data: dict, db: Session = Depends(get_db)):
 # ==================== DEPARTEMENTS ====================
 
 @router.get('/departements')
-def get_all_departements(id_localisation: int = None, db: Session = Depends(get_db)):
-    """Get all departements from database"""
-    departements_query = db.query(models.Departement)
-    if id_localisation:
-        departements_query = departements_query.filter(models.Departement.id_localisation == id_localisation)
-    departements = departements_query.all()
+def get_all_departements(id_localisation: int = None, id_pays: int = None, db: Session = Depends(get_db)):
+    """Get all departements from database, optionally filtered by localisation or pays."""
+    if id_pays is not None:
+        # Filtrer via Pays → Localisation → Implantation → Entité → Département
+        locs = db.query(models.Localisation).filter(models.Localisation.id_pays == id_pays).all()
+        loc_ids = [l.id_localisation for l in locs]
+        if not loc_ids:
+            return []
+        implantations = db.query(models.Implantation).filter(
+            models.Implantation.id_localisation.in_(loc_ids)
+        ).all()
+        entite_ids = [imp.id_entite for imp in implantations]
+        if not entite_ids:
+            return []
+        departements = db.query(models.Departement).filter(
+            models.Departement.id_entite.in_(entite_ids)
+        ).all()
+    elif id_localisation is not None:
+        # Filtrer via Implantation: localisation → entité → département
+        implantations = db.query(models.Implantation).filter(
+            models.Implantation.id_localisation == id_localisation
+        ).all()
+        entite_ids = [imp.id_entite for imp in implantations]
+        if not entite_ids:
+            return []
+        departements = db.query(models.Departement).filter(
+            models.Departement.id_entite.in_(entite_ids)
+        ).all()
+    else:
+        departements = db.query(models.Departement).all()
     result = []
     for d in departements:
         # Get entite and direction names
@@ -431,15 +491,33 @@ def get_all_departements(id_localisation: int = None, db: Session = Depends(get_
         direction = None
         if d.id_direction:
             direction = db.query(models.Direction).filter(models.Direction.id_direction == d.id_direction).first()
-        
+        # Localisation derived from entity implantation
+        localisation_nom = None
+        id_loc = None
+        pays_nom = None
+        pays_id = None
+        impl = db.query(models.Implantation).filter(models.Implantation.id_entite == d.id_entite).first()
+        if impl:
+            loc = db.query(models.Localisation).filter(models.Localisation.id_localisation == impl.id_localisation).first()
+            if loc:
+                localisation_nom = loc.ville
+                id_loc = loc.id_localisation
+                pays = db.query(models.Pays).filter(models.Pays.id_pays == loc.id_pays).first()
+                if pays:
+                    pays_nom = pays.nom_pays
+                    pays_id = pays.id_pays
+
         result.append({
             'dept_id': d.dept_id,
             'nom': d.nom,
             'id_entite': d.id_entite,
             'entite_nom': entite.nom if entite else '',
-            'id_localisation': d.id_localisation,
             'id_direction': d.id_direction,
-            'direction_nom': direction.nom if direction else ''
+            'direction_nom': direction.nom if direction else '',
+            'id_localisation': id_loc,
+            'localisation_nom': localisation_nom or '',
+            'id_pays': pays_id,
+            'pays_nom': pays_nom or '',
         })
     return result
 
@@ -450,7 +528,6 @@ def create_departement(data: dict, db: Session = Depends(get_db)):
     nom = data.get('nom')
     id_entite = data.get('id_entite')
     id_direction = data.get('id_direction')
-    id_localisation = data.get('id_localisation')
     
     if not nom or not id_entite:
         raise HTTPException(status_code=400, detail='Nom et id_entite sont requis')
@@ -460,13 +537,6 @@ def create_departement(data: dict, db: Session = Depends(get_db)):
     if not entite:
         raise HTTPException(status_code=400, detail='Entité invalide')
 
-    if not id_localisation:
-        raise HTTPException(status_code=400, detail='id_localisation est requis')
-
-    localisation = db.query(models.Localisation).filter(models.Localisation.id_localisation == id_localisation).first()
-    if not localisation:
-        raise HTTPException(status_code=400, detail='Localisation invalide')
-    
     # Check if direction exists (if specified)
     direction = None
     if id_direction:
@@ -479,7 +549,6 @@ def create_departement(data: dict, db: Session = Depends(get_db)):
         nom=nom,
         id_entite=id_entite,
         id_direction=id_direction,
-        id_localisation=id_localisation,
     )
     db.add(departement)
     db.commit()
@@ -490,7 +559,6 @@ def create_departement(data: dict, db: Session = Depends(get_db)):
         'nom': departement.nom,
         'id_entite': departement.id_entite,
         'entite_nom': entite.nom,
-        'id_localisation': departement.id_localisation,
         'id_direction': departement.id_direction,
         'direction_nom': direction.nom if direction else ''
     }
@@ -638,7 +706,6 @@ def update_departement(dept_id: int, data: dict, db: Session = Depends(get_db)):
     nom = data.get('nom')
     id_entite = data.get('id_entite')
     id_direction = data.get('id_direction')
-    id_localisation = data.get('id_localisation')
     
     if not nom or not id_entite:
         raise HTTPException(status_code=400, detail='Nom et id_entite sont requis')
@@ -664,11 +731,6 @@ def update_departement(dept_id: int, data: dict, db: Session = Depends(get_db)):
     departement.nom = nom
     departement.id_entite = id_entite
     departement.id_direction = id_direction
-    if id_localisation:
-        localisation = db.query(models.Localisation).filter(models.Localisation.id_localisation == id_localisation).first()
-        if not localisation:
-            raise HTTPException(status_code=400, detail='Localisation invalide')
-        departement.id_localisation = id_localisation
     db.commit()
     db.refresh(departement)
     
@@ -677,7 +739,6 @@ def update_departement(dept_id: int, data: dict, db: Session = Depends(get_db)):
         'nom': departement.nom,
         'id_entite': departement.id_entite,
         'entite_nom': entite.nom,
-        'id_localisation': departement.id_localisation,
         'id_direction': departement.id_direction,
         'direction_nom': direction.nom if direction else ''
     }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import api from '../services/api'
+import AvatarCircle from '../components/AvatarCircle'
 import { Clock, User, Calendar, Briefcase, Award, ArrowRight, Search, TrendingUp, FileText, MapPin } from 'lucide-react'
 
 const ACCENT = '#ce2b2b'
@@ -72,7 +73,7 @@ export default function EmployeeTimeline() {
 
   useEffect(() => {
     if (isAdmin) {
-      api.get('/employees').then(r => setEmployees(r.data || [])).catch(() => {})
+      api.get('/employees/').then(r => setEmployees(r.data || [])).catch(() => {})
     }
   }, [isAdmin])
 
@@ -189,9 +190,14 @@ export default function EmployeeTimeline() {
             <>
               {/* Employee card */}
               <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '18px 20px', marginBottom: 18, display: 'flex', gap: 18, alignItems: 'center' }}>
-                <div style={{ width: 56, height: 56, borderRadius: '50%', background: `${ACCENT}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>
-                  {employee.prenom?.[0]}{employee.nom?.[0]}
-                </div>
+                <AvatarCircle
+                  photoUrl={employee.photo_url}
+                  letter={`${employee.prenom?.[0] || ''}${employee.nom?.[0] || '?'}`}
+                  size={56}
+                  borderWidth={1.5}
+                  borderColor='#fecaca'
+                  fallbackBackground={`${ACCENT}22`}
+                />
                 <div style={{ flex: 1 }}>
                   <h2 style={{ margin: '0 0 4px', color: DARK, fontSize: '1.15rem', fontWeight: 800 }}>{employee.prenom} {employee.nom}</h2>
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: '0.78rem', color: '#64748b' }}>

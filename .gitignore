@@ -12,3 +12,24 @@ coverage/
 # Env
 .env
 .env.*
+
+# Données sensibles / fichiers utilisateurs
+backend/uploads/photos/
+backend/uploads/preuves_permissions/
+backend/uploads/rapports/
+backend/audit.log
+
+# Bases de données de test locales
+*.db
+*.sqlite
+
+# Documents personnels
+*.docx
+*.pdf
+
+# Résultats de tests
+frontend/test-results/
+backend/.coverage
+
+# Logs
+*.log

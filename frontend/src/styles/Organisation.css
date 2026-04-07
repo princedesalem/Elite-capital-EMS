@@ -1054,11 +1054,12 @@
 /* Tabs Header */
 .tabs-header {
   display: flex;
-  gap: 10px;
-  margin-bottom: 25px;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
   border-bottom: 2px solid #e5e7eb;
   background: white;
-  padding: 15px 0;
+  padding: 8px 0;
   border-radius: 8px 8px 0 0;
 }
 
@@ -1066,13 +1067,13 @@
   background: transparent;
   color: #6b7280;
   border: none;
-  padding: 12px 24px;
+  padding: 5px 12px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 1rem;
+  font-size: 0.78rem;
   transition: all 0.3s;
   border-bottom: 3px solid transparent;
-  margin-bottom: -15px;
+  margin-bottom: -8px;
 }
 
 .tab-button:hover {
@@ -1090,7 +1091,7 @@
 /* Tabs Content */
 .tabs-content {
   background: white;
-  padding: 30px;
+  padding: 16px;
   border-radius: 0 0 12px 12px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
 }

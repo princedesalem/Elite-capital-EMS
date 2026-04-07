@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from ..models import (
     Employe, Operation, Departement, Direction, Validation,
-    Utilisateur, Role, Frais
+    Utilisateur, Role, Frais, Notification, TypeNotificationEnum
 )
 from datetime import datetime
 
@@ -19,94 +19,129 @@ def _normaliser_role(role_name: Optional[str]) -> str:
     return role
 
 
+def _doit_deduire_solde(operation: Operation, db: Session) -> bool:
+    type_demande = str(operation.type_demande or '').strip().lower()
+
+    if type_demande == 'conge' or type_demande == 'congé':
+        return True
+
+    if type_demande != 'permission':
+        return False
+
+    from .permissions import obtenir_type_permission
+
+    type_info = obtenir_type_permission(operation.id_operation, db)
+    return type_info.get('est_conventionnelle') is False
+
+
 def determiner_sequence_validation(
     employe: Employe,
     db: Session,
     id_operation: Optional[int] = None
 ) -> List[str]:
-    """
-    Détermine la séquence de validation pour un employé selon sa structure organisationnelle.
-    
-    Règles:
-    1. Si le département a une direction:
-       - Le RESPONSABLE est skippé
-       - Séquence: DIRECTEUR → RH → [DFC si frais] → DG → PCA/AG
-    
-    2. Si le département n'a PAS de direction:
-       - Séquence: RESPONSABLE → RH → [DFC si frais] → DG → PCA/AG
-    
-    3. Si l'entité est ECG:
-       - Le dernier validateur est AG au lieu de PCA
-    
-    4. Si c'est le DG qui fait la demande:
-       - Séquence: RH → [DFC si frais] → PCA/AG
-    
-    5. Si l'opération a des frais de mission:
-       - DFC est ajouté APRÈS RH et AVANT DG
-    
-    Args:
-        employe: Instance de l'employé
-        db: Session de base de données
-        id_operation: ID de l'opération (pour vérifier si frais existent)
-    
-    Returns:
-        Liste ordonnée des rôles validateurs
-    """
-    sequence = []
-    
-    # Vérifier si c'est le DG
-    est_dg = verifier_role_employe(employe.matricule, 'DG', db)
-    
-    if est_dg:
-        # DG: RH → [DFC si frais] → PCA/AG
-        sequence = ['RH']
+    """Détermine la séquence de validation hiérarchique d'une demande."""
+    sequence: List[str] = []
+    role_demandeur = obtenir_role_validateur(employe.matricule, db)
+
+    a_des_frais = False
+    if id_operation is not None:
+        a_des_frais = db.query(Frais).filter(Frais.id_operation == id_operation).first() is not None
+
+    dernier_validateur = 'PCA'
+    is_ecg = False
+    if employe.id_entite:
+        from ..models import Entite
+
+        entite = db.query(Entite).filter(Entite.id_entite == employe.id_entite).first()
+        if entite and entite.nom == 'ECG':
+            is_ecg = True
+            dernier_validateur = 'AG'
+
+    def _dept_rh_shortcut_active() -> bool:
+        if not employe.dept_id:
+            return False
+        dept = db.query(Departement).filter(Departement.dept_id == employe.dept_id).first()
+        if not dept or not dept.id_responsable:
+            return False
+
+        # Shortcut only for RH department employees.
+        dept_name = str(dept.nom or '').strip().lower()
+        if ('rh' not in dept_name) and ('ressource' not in dept_name) and ('resource' not in dept_name):
+            return False
+
+        role_resp = obtenir_role_validateur(dept.id_responsable, db)
+        return role_resp == 'RH'
+
+    rh_shortcut = _dept_rh_shortcut_active()
+
+    def append_role(role_name: Optional[str]):
+        role_normalise = (role_name or '').strip().upper()
+        if not role_normalise:
+            return
+        if role_normalise in sequence:
+            return
+        sequence.append(role_normalise)
+
+    if role_demandeur in {'AG', 'PCA'}:
+        return []
+
+    if role_demandeur == 'DG':
+        append_role('RH')
+        append_role(dernier_validateur)
+    elif role_demandeur == 'RH':
+        if is_ecg:
+            if a_des_frais:
+                append_role('DFC')
+            append_role(dernier_validateur)
+        else:
+            append_role('DG')
+            if a_des_frais:
+                append_role('DFC')
+            append_role(dernier_validateur)
+    elif role_demandeur == 'DIRECTEUR':
+        append_role('RH')
+        if is_ecg:
+            if a_des_frais:
+                append_role('DFC')
+            append_role(dernier_validateur)
+        else:
+            append_role('DG')
+            if a_des_frais:
+                append_role('DFC')
+            append_role(dernier_validateur)
     else:
-        # Récupérer le département
+        departement = None
         if employe.dept_id:
             departement = db.query(Departement).filter(
                 Departement.dept_id == employe.dept_id
             ).first()
 
-            if departement and departement.id_direction:
-                # Département sous une direction: DIRECTEUR en premier
-                sequence = ['DIRECTEUR', 'RH']
-            else:
-                # Département sans direction: RESPONSABLE en premier
-                sequence = ['RESPONSABLE', 'RH']
+        if departement and departement.id_direction:
+            append_role('DIRECTEUR')
+            append_role('RH')
         elif employe.id_direction:
-            # Pas de département mais rattaché à une direction
-            sequence = ['DIRECTEUR', 'RH']
+            append_role('DIRECTEUR')
+            append_role('RH')
         else:
-            # Cas par défaut
-            sequence = ['RESPONSABLE', 'RH']
-    
-    # Vérifier si l'opération a des frais de mission
-    a_des_frais = False
-    if id_operation:
-        frais = db.query(Frais).filter(Frais.id_operation == id_operation).first()
-        if frais:
-            a_des_frais = True
-    
-    # Ajouter DFC AVANT DG si des frais existent
-    if a_des_frais:
-        sequence.append('DFC')
-    
-    # Ajouter DG
-    sequence.append('DG')
-    
-    # Déterminer le dernier validateur selon l'entité
-    if employe.id_entite:
-        from ..models import Entite
-        entite = db.query(Entite).filter(Entite.id_entite == employe.id_entite).first()
-        
-        if entite and entite.nom == 'ECG':
-            sequence.append('AG')
+            if rh_shortcut:
+                # One RH validation should satisfy both RESPONSABLE + RH for RH dept special case.
+                append_role('RH')
+            else:
+                append_role('RESPONSABLE')
+                append_role('RH')
+
+        if is_ecg:
+            if a_des_frais:
+                append_role('DFC')
+            append_role(dernier_validateur)
         else:
-            sequence.append('PCA')
-    else:
-        sequence.append('PCA')  # Par défaut
-    
-    return sequence
+            append_role('DG')
+            if a_des_frais:
+                append_role('DFC')
+            append_role(dernier_validateur)
+
+    role_demandeur_normalise = _normaliser_role(role_demandeur)
+    return [role for role in sequence if _normaliser_role(role) != role_demandeur_normalise]
 
 
 def obtenir_validateur_pour_role(
@@ -177,27 +212,45 @@ def obtenir_validateur_pour_role(
                 return utilisateur.matricule
     
     elif role in ['RH', 'DFC', 'DG', 'PCA', 'AG']:
-        # Chercher un utilisateur avec ce rôle dans la même entité
-        role_obj = db.query(Role).filter(Role.name == role).first()
-        
-        if role_obj:
+        # PCA et AG sont interchangeables : un seul rôle terminal existe généralement
+        roles_candidats = [role]
+        if role == 'AG':
+            roles_candidats.append('PCA')
+        elif role == 'PCA':
+            roles_candidats.append('AG')
+
+        for role_candidat in roles_candidats:
+            role_obj = db.query(Role).filter(Role.name == role_candidat).first()
+            if not role_obj:
+                continue
+
             # Chercher dans la même entité en priorité
             if employe.id_entite:
                 utilisateur = db.query(Utilisateur).join(Employe).filter(
                     Utilisateur.role_id == role_obj.id,
                     Employe.id_entite == employe.id_entite
                 ).first()
-                
                 if utilisateur:
                     return utilisateur.matricule
-            
+
             # Fallback: n'importe quel utilisateur avec ce rôle
             utilisateur = db.query(Utilisateur).filter(
                 Utilisateur.role_id == role_obj.id
             ).first()
-            
             if utilisateur:
                 return utilisateur.matricule
+
+            # Fallback via Employe.id_role
+            if employe.id_entite:
+                emp_v = db.query(Employe).filter(
+                    Employe.id_role == role_obj.id,
+                    Employe.id_entite == employe.id_entite
+                ).first()
+                if emp_v:
+                    return emp_v.matricule
+            emp_v = db.query(Employe).filter(Employe.id_role == role_obj.id).first()
+            if emp_v:
+                return emp_v.matricule
     
     return None
 
@@ -219,6 +272,10 @@ def obtenir_prochain_validateur(
     operation = db.query(Operation).filter(Operation.id_operation == id_operation).first()
     
     if not operation:
+        return None, None
+
+    # Opération déjà terminée → plus de validateur attendu
+    if (operation.statut or '').lower() in ('refusé', 'validé', 'annulé', 'refuse', 'valide', 'annule'):
         return None, None
     
     employe = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
@@ -248,6 +305,55 @@ def obtenir_prochain_validateur(
             return role, matricule
     
     return None, None  # Tous les validateurs ont validé
+
+
+def obtenir_sequence_operation(id_operation: int, db: Session) -> List[str]:
+    operation = db.query(Operation).filter(Operation.id_operation == id_operation).first()
+    if not operation:
+        return []
+
+    employe = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
+    if not employe:
+        return []
+
+    return determiner_sequence_validation(employe, db, id_operation)
+
+
+def obtenir_role_validateur_final(id_operation: int, db: Session) -> Optional[str]:
+    sequence = obtenir_sequence_operation(id_operation, db)
+    if not sequence:
+        return None
+    return sequence[-1]
+
+
+def operation_est_validee_par_validateur_final(id_operation: int, db: Session) -> bool:
+    role_final = obtenir_role_validateur_final(id_operation, db)
+    if not role_final:
+        return False
+
+    _TERMINAUX = {'PCA', 'AG'}
+    if role_final in _TERMINAUX:
+        # PCA et AG sont interchangeables pour la validation terminale
+        validation_finale = db.query(Validation).filter(
+            Validation.id_operation == id_operation,
+            Validation.role_validateur.in_(_TERMINAUX),
+            Validation.statut_validation == 'validé'
+        ).first()
+    else:
+        validation_finale = db.query(Validation).filter(
+            Validation.id_operation == id_operation,
+            Validation.role_validateur == role_final,
+            Validation.statut_validation == 'validé'
+        ).first()
+    return validation_finale is not None
+
+
+def operation_a_deja_ete_validee(id_operation: int, db: Session) -> bool:
+    validation_existante = db.query(Validation).filter(
+        Validation.id_operation == id_operation,
+        Validation.statut_validation == 'validé'
+    ).first()
+    return validation_existante is not None
 
 
 def valider_operation(
@@ -285,10 +391,20 @@ def valider_operation(
     # Vérifier que le validateur a le droit de valider à cette étape
     prochain_role, prochain_matricule = obtenir_prochain_validateur(id_operation, db)
 
-    if prochain_role and prochain_role != role_validateur:
+    _TERMINAUX = {'PCA', 'AG'}
+    role_ok = (prochain_role == role_validateur) or (
+        role_validateur in _TERMINAUX and prochain_role in _TERMINAUX
+    )
+    if prochain_role and not role_ok:
         return False, f"Ce n'est pas votre tour de valider. En attente de: {prochain_role}"
 
-    role_validation_effectif = role_validateur
+    # Pour les rôles terminaux interchangeables, stocker le rôle attendu par la séquence
+    # (ex: stocker 'AG' quand PCA valide pour un employé ECG, et 'PCA' pour ELCAM/EXCA)
+    # Indispensable pour que la progression retrouve la validation par clé exacte
+    if prochain_role in _TERMINAUX and role_validateur in _TERMINAUX:
+        role_validation_effectif = prochain_role
+    else:
+        role_validation_effectif = role_validateur
     
     # Créer la validation
     validation = Validation(
@@ -314,39 +430,66 @@ def valider_operation(
     
     # Si refusé, arrêter le workflow
     if statut == 'refusé':
+        operation.statut = 'refusé'
+        db.add(operation)
+        db.commit()
         return True, "Opération refusée"
     
     # Si validé, vérifier s'il y a un prochain validateur
     prochain_role_apres, prochain_matricule_apres = obtenir_prochain_validateur(id_operation, db)
     
     if not prochain_role_apres:
-        # C'était le dernier validateur
-        # Notifier le demandeur que la validation est complète
+        # C'était le dernier validateur — statut passe à 'validé'
+        operation.statut = 'validé'
+        db.add(operation)
+        db.commit()
+
+        if operation.duree and not operation.solde_deduit and _doit_deduire_solde(operation, db):
+            from .business_logic import deduire_solde_conges
+
+            deduire_solde_conges(employe, operation.duree, db)
+            operation.solde_deduit = True
+            db.add(operation)
+            db.commit()
+
+        # Notifier le demandeur que sa demande est approuvée
         operation = db.query(Operation).filter(Operation.id_operation == id_operation).first()
         if operation:
             notification_finale = Notification(
                 matricule=operation.matricule,
                 type_notification=TypeNotificationEnum.VALIDATION,
-                titre="Validation complète",
-                message=f"Votre demande #{id_operation} a été validée par tous les validateurs et est maintenant approuvée.",
+                titre="Demande approuvée",
+                message=(
+                    f"Votre demande #{id_operation} a été validée par tous les validateurs "
+                    f"et est maintenant approuvée. Vous pouvez maintenant l'activer."
+                ),
                 id_operation=id_operation
             )
             db.add(notification_finale)
             db.commit()
+
         return True, "Opération validée par tous les validateurs"
+
+    # Tant que le dernier validateur n'a pas validé, l'opération reste en attente.
+    operation.statut = 'en attente'
+    db.add(operation)
+    db.commit()
     
     # Notifier le prochain validateur
     if prochain_matricule_apres:
         operation = db.query(Operation).filter(Operation.id_operation == id_operation).first()
         demandeur = db.query(Employe).filter(Employe.matricule == operation.matricule).first() if operation else None
         
+        demandeur_label = f"{demandeur.prenom} {demandeur.nom}" if demandeur else "un demandeur"
+        type_demande = operation.type_demande if operation and operation.type_demande else 'opération'
         notification_prochain = Notification(
             matricule=prochain_matricule_apres,
             type_notification=TypeNotificationEnum.VALIDATION,
             titre="Nouvelle demande à valider",
-            message=f"Une demande #{id_operation} ({operation.type_demande if operation else 'opération'}) " +
-                   f"de {demandeur.prenom} {demandeur.nom} " if demandeur else "" +
-                   f"est en attente de votre validation en tant que {prochain_role_apres}.",
+            message=(
+                f"Une demande #{id_operation} ({type_demande}) de {demandeur_label} "
+                f"est en attente de votre validation en tant que {prochain_role_apres}."
+            ),
             id_operation=id_operation
         )
         db.add(notification_prochain)
@@ -400,7 +543,65 @@ def obtenir_role_validateur(matricule: int, db: Session) -> str:
         if role:
             return _normaliser_role(role.name)
     
+    # Fallback: chercher via Employe.id_role
+    employe_obj = db.query(Employe).filter(Employe.matricule == matricule).first()
+    if employe_obj and employe_obj.id_role:
+        role = db.query(Role).filter(Role.id == employe_obj.id_role).first()
+        if role:
+            return _normaliser_role(role.name)
+    
     return 'EMPLOYE'
+
+
+def auto_valider_si_sequence_vide(
+    id_operation: int,
+    matricule_demandeur: int,
+    db: Session
+) -> bool:
+    """
+    Si la séquence de validation est vide (PCA/AG), valide et active immédiatement l'opération.
+    Retourne True si l'auto-validation a été effectuée.
+    """
+    operation = db.query(Operation).filter(Operation.id_operation == id_operation).first()
+    if not operation:
+        return False
+
+    employe = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
+    if not employe:
+        return False
+
+    sequence = determiner_sequence_validation(employe, db, id_operation)
+    if sequence:
+        return False  # Des validateurs sont requis — pas d'auto-validation
+
+    # Séquence vide → PCA/AG : auto-valider
+    operation.statut = 'validé'
+    db.add(operation)
+
+    # Déduire le solde si applicable (congés et permissions non-conventionnelles)
+    if operation.duree and not operation.solde_deduit and _doit_deduire_solde(operation, db):
+        from .business_logic import deduire_solde_conges
+        deduire_solde_conges(employe, operation.duree, db)
+        operation.solde_deduit = True
+        db.add(operation)
+
+    db.commit()
+
+    # Notification au demandeur
+    notif = Notification(
+        matricule=operation.matricule,
+        type_notification=TypeNotificationEnum.VALIDATION,
+        titre="Demande approuvée automatiquement",
+        message=(
+            f"Votre demande #{id_operation} a été approuvée automatiquement. "
+            f"Vous pouvez procéder à l'activation."
+        ),
+        id_operation=id_operation
+    )
+    db.add(notif)
+    db.commit()
+
+    return True
 
 
 def peut_creer_demande_pour_autrui(matricule: int, db: Session) -> bool:

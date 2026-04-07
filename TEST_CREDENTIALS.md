@@ -10,7 +10,7 @@
 
 ### Administrateur
 - **Matricule:** `9999`
-- **Mot de passe:** `AdminPassword123!@#`
+- **Mot de passe:** `ChangeMe123!@#` *(défini par `INIT_ADMIN_PW` dans docker-compose.yml)*
 - **Email:** `admin@elc.com`
 - **Rôle:** ADMIN (Administrateur Système)
 

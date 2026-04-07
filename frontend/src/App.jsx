@@ -23,6 +23,7 @@ import EvaluationsPage from './pages/EvaluationsPage'
 import NotificationsPage from './pages/NotificationsPage'
 import Organisation from './pages/Organisation'
 import Administration from './pages/Administration'
+import Utilisateurs from './pages/Utilisateurs'
 import UsageStats from './pages/UsageStats'
 import AdminUsageStats from './pages/AdminUsageStats'
 import MissionsIG from './pages/MissionsIG'
@@ -41,6 +42,8 @@ import TalentManagement from './pages/TalentManagement'
 import ClubReview from './pages/ClubReview'
 import SandboxPage from './pages/SandboxPage'
 import AbsencesPage from './pages/AbsencesPage'
+import ProfilePage from './pages/ProfilePage'
+import RemplacantsPage from './pages/RemplacantsPage'
 import './index.css'
 
 export default function App(){
@@ -58,7 +61,7 @@ export default function App(){
             <Route path="home" element={<Home />} />
             <Route path="dashboard" element={<Dashboard />} />
 
-            <Route path="employees" element={<ProtectedRoute allowedRoles={["RH","PCA","ADMIN"]}><Employees /></ProtectedRoute>} />
+            <Route path="employees" element={<Employees />} />
             <Route path="employees/:id" element={<ProtectedRoute allowedRoles={["RH","PCA","ADMIN"]}><EmployeeForm /></ProtectedRoute>} />
             <Route path="employees/new" element={<ProtectedRoute allowedRoles={["RH","PCA","ADMIN"]}><EmployeeForm /></ProtectedRoute>} />
 
@@ -77,13 +80,15 @@ export default function App(){
             <Route path="evaluations" element={<EvaluationsPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="organisation" element={<Organisation />} />
-            <Route path="administration" element={<ProtectedRoute allowedRoles={["RH","DG","PCA","ADMIN"]}><Administration /></ProtectedRoute>} />
+            <Route path="administration" element={<Administration />} />
+            <Route path="utilisateurs" element={<ProtectedRoute allowedRoles={["ADMIN","PCA","AG"]}><Utilisateurs /></ProtectedRoute>} />
             <Route path="usage-stats" element={<UsageStats />} />
             <Route path="admin/usage-stats" element={<ProtectedRoute allowedRoles={["RH","DG","PCA","ADMIN"]}><AdminUsageStats /></ProtectedRoute>} />
             <Route path="mfa" element={<MFASetup />} />
             <Route path="password" element={<ChangePassword />} />
             <Route path="calendrier-conge" element={<CongeCalendar />} />
             <Route path="sorties" element={<SortiesPage />} />
+            <Route path="remplacants" element={<RemplacantsPage />} />
             <Route path="parametrage" element={<Parametrage />} />
             <Route path="tasks" element={<TasksPage />} />
             <Route path="events" element={<EventsPage />} />
@@ -96,6 +101,7 @@ export default function App(){
             <Route path="club-review" element={<ClubReview />} />
             <Route path="sandbox" element={<SandboxPage />} />
             <Route path="module/:slug" element={<ModulePlaceholder />} />
+            <Route path="profile" element={<ProfilePage />} />
           </Route>
 
           <Route path="/home" element={<Navigate to="/rh/home" replace />} />
@@ -105,6 +111,7 @@ export default function App(){
           <Route path="/leaves" element={<Navigate to="/rh/leaves" replace />} />
           <Route path="/leaves/new" element={<Navigate to="/rh/leaves/new" replace />} />
           <Route path="/operations" element={<Navigate to="/rh/operations" replace />} />
+          <Route path="/remplacants" element={<Navigate to="/rh/remplacants" replace />} />
           <Route path="/missions-ig" element={<Navigate to="/rh/missions-ig" replace />} />
           <Route path="/evaluations" element={<Navigate to="/rh/evaluations" replace />} />
           <Route path="/notifications" element={<Navigate to="/rh/notifications" replace />} />
@@ -114,6 +121,8 @@ export default function App(){
           <Route path="/admin/usage-stats" element={<Navigate to="/rh/admin/usage-stats" replace />} />
           <Route path="/mfa" element={<Navigate to="/rh/mfa" replace />} />
           <Route path="/password" element={<Navigate to="/rh/password" replace />} />
+          <Route path="/profile" element={<Navigate to="/rh/profile" replace />} />
+          <Route path="/utilisateurs" element={<Navigate to="/rh/utilisateurs" replace />} />
 
         </Routes>
       </AuthProvider>

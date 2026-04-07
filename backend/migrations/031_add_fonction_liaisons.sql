@@ -1,0 +1,4 @@
+-- Migration 031: ajouter id_direction et dept_id a FONCTION_REFERENCE (MySQL)
+ALTER TABLE `FONCTION_REFERENCE`
+  ADD COLUMN IF NOT EXISTS `id_direction` INT NULL,
+  ADD COLUMN IF NOT EXISTS `dept_id` INT NULL;

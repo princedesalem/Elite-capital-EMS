@@ -35,7 +35,7 @@ export default function UsageStats() {
 
   const loadEmployees = async () => {
     try {
-      const res = await api.get('/employees')
+      const res = await api.get('/employees/')
       setEmployees(res.data || [])
     } catch (err) {
       console.error('Erreur chargement employés:', err)

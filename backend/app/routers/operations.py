@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from ..db import get_db
 from .. import models
+from ..utils import access_control, notifications, workflow
 from typing import List, Dict, Any
 from datetime import datetime, date
 
@@ -248,11 +249,13 @@ def get_operation_details(id_operation: int, db: Session = Depends(get_db)):
 
 
 @router.delete('/{id_operation}')
-def annuler_operation(id_operation: int, db: Session = Depends(get_db)):
+def annuler_operation(id_operation: int, request: Request, db: Session = Depends(get_db)):
     """
     Annule une opération (congé, permission, mission) en attente de validation.
     Seules les opérations en attente peuvent être annulées.
     """
+    actor_matricule, actor_role = access_control.get_actor_from_request(request)
+
     # Récupérer l'opération
     operation = db.query(models.Operation).filter(
         models.Operation.id_operation == id_operation
@@ -260,81 +263,79 @@ def annuler_operation(id_operation: int, db: Session = Depends(get_db)):
     
     if not operation:
         raise HTTPException(status_code=404, detail="Opération non trouvée")
+
+    if operation.matricule != actor_matricule and not access_control.can_access_globally(str(actor_role or '').upper()):
+        raise HTTPException(status_code=403, detail="Vous n'êtes pas autorisé à annuler cette opération")
     
     # Vérifier le statut
-    if operation.statut and operation.statut not in ['en attente', None]:
+    statut_normalise = str(operation.statut or '').strip().lower()
+    if statut_normalise and statut_normalise != 'en attente':
         raise HTTPException(
             status_code=400, 
             detail=f"Impossible d'annuler une opération {operation.statut}. Seules les opérations en attente peuvent être annulées."
         )
     
-    # Vérifier s'il y a des validations déjà accordées
-    validations_validees = db.query(models.Validation).filter(
-        models.Validation.id_operation == id_operation,
-        models.Validation.statut_validation == 'validé'
-    ).count()
-    
-    if validations_validees > 0:
+    if workflow.operation_est_validee_par_validateur_final(id_operation, db):
         raise HTTPException(
             status_code=400,
-            detail="Impossible d'annuler une opération déjà partiellement validée. Contactez les RH."
+            detail="Impossible d'annuler une opération déjà validée par le validateur final."
         )
     
     try:
-        # Supprimer les validations en attente
-        db.query(models.Validation).filter(
-            models.Validation.id_operation == id_operation
-        ).delete()
-        
-        # Supprimer les créations associées
-        db.query(models.Creation).filter(
-            models.Creation.id_operation == id_operation
-        ).delete()
-        
-        # Supprimer les notifications associées
-        db.query(models.Notification).filter(
-            models.Notification.id_operation == id_operation
-        ).delete()
-        
-        # Supprimer les liens d'héritage selon le type
-        db.query(models.CongesLink).filter(
-            models.CongesLink.id_conges == id_operation
-        ).delete()
-        
-        db.query(models.Permission).filter(
-            models.Permission.id_permission == id_operation
-        ).delete()
-        
-        # Pour les missions, supprimer les frais et segments d'abord
-        mission = db.query(models.Mission).filter(
-            models.Mission.id_mission == id_operation
-        ).first()
-        
+        notifications.ajouter_notifications_annulation_operation(operation, actor_matricule, db)
+
+        # Nettoyage des tables référencées par id_operation
+        db.query(models.Validation).filter(models.Validation.id_operation == id_operation).delete()
+        db.query(models.Creation).filter(models.Creation.id_operation == id_operation).delete()
+        db.query(models.Notification).filter(models.Notification.id_operation == id_operation).delete()
+        db.query(models.Activation).filter(models.Activation.id_operation == id_operation).delete()
+        db.query(models.RemplacantPropose).filter(models.RemplacantPropose.id_operation == id_operation).delete()
+        db.query(models.DemandeExplication).filter(models.DemandeExplication.id_operation == id_operation).delete()
+
+        # Sorties
+        db.query(models.Sortie).filter(models.Sortie.id_operation == id_operation).delete()
+
+        # Congés
+        db.query(models.CongesLink).filter(models.CongesLink.id_conges == id_operation).delete()
+
+        # Permissions et sous-types
+        db.query(models.PermMaternelle).filter(models.PermMaternelle.id_perm_mat == id_operation).delete()
+        db.query(models.PermDeces).filter(models.PermDeces.id_perm_dec == id_operation).delete()
+        db.query(models.PermMaladie).filter(models.PermMaladie.id_perm_mal == id_operation).delete()
+        db.query(models.PermBapteme).filter(models.PermBapteme.id_perm_bap == id_operation).delete()
+        db.query(models.PermMariage).filter(models.PermMariage.id_perm_mar == id_operation).delete()
+        db.query(models.PermConventionelle).filter(models.PermConventionelle.id_perm_c == id_operation).delete()
+        db.query(models.PermNonConventionelle).filter(models.PermNonConventionelle.id_perm_nc == id_operation).delete()
+        db.query(models.Permission).filter(models.Permission.id_permission == id_operation).delete()
+
+        # Missions et dépendances
+        mission = db.query(models.Mission).filter(models.Mission.id_mission == id_operation).first()
         if mission:
-            # Supprimer les frais
-            db.query(models.Frais).filter(
-                models.Frais.id_mission == mission.id_mission
-            ).delete()
-            
-            # Supprimer les segments
-            db.query(models.MissionSegment).filter(
-                models.MissionSegment.id_mission == mission.id_mission
-            ).delete()
-            
-            # Supprimer les missionnaires
-            db.query(models.MissionnairesMission).filter(
-                models.MissionnairesMission.id_mission == mission.id_mission
-            ).delete()
-            
-            # Supprimer les commentaires
-            db.query(models.CommentaireMission).filter(
-                models.CommentaireMission.id_mission == mission.id_mission
-            ).delete()
-            
-            # Supprimer la mission elle-même
+            frais_mission = db.query(models.Frais).filter(models.Frais.id_mission == mission.id_mission).all()
+            for frais_row in frais_mission:
+                frais_operation_id = frais_row.id_operation
+                if frais_operation_id and frais_operation_id != id_operation:
+                    db.query(models.Validation).filter(models.Validation.id_operation == frais_operation_id).delete()
+                    db.query(models.Creation).filter(models.Creation.id_operation == frais_operation_id).delete()
+                    db.query(models.Notification).filter(models.Notification.id_operation == frais_operation_id).delete()
+                    db.query(models.Activation).filter(models.Activation.id_operation == frais_operation_id).delete()
+                    db.query(models.RemplacantPropose).filter(models.RemplacantPropose.id_operation == frais_operation_id).delete()
+                    db.query(models.DemandeExplication).filter(models.DemandeExplication.id_operation == frais_operation_id).delete()
+                    frais_operation = db.query(models.Operation).filter(models.Operation.id_operation == frais_operation_id).first()
+                    if frais_operation:
+                        db.delete(frais_operation)
+                db.delete(frais_row)
+
+            db.query(models.MissionSegment).filter(models.MissionSegment.id_mission == mission.id_mission).delete()
+            db.query(models.MissionnairesMission).filter(models.MissionnairesMission.id_mission == mission.id_mission).delete()
+            db.query(models.CommentaireMission).filter(models.CommentaireMission.id_mission == mission.id_mission).delete()
+            db.query(models.RelanceMission).filter(models.RelanceMission.id_mission == mission.id_mission).delete()
             db.delete(mission)
-        
-        # Finalement, supprimer l'opération
+
+        # Demande de frais simple (si annulée via endpoint générique)
+        db.query(models.Frais).filter(models.Frais.id_operation == id_operation).delete()
+
+        # Suppression physique de l'opération
         db.delete(operation)
         db.commit()
         
@@ -355,6 +356,7 @@ def annuler_operation(id_operation: int, db: Session = Depends(get_db)):
 def modifier_operation(
     id_operation: int,
     payload: Dict[str, Any] = Body(...),
+    request: Request = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -367,21 +369,21 @@ def modifier_operation(
     if not operation:
         raise HTTPException(status_code=404, detail="Opération non trouvée")
 
+    if request is not None:
+        actor_matricule, actor_role = access_control.get_actor_from_request(request)
+        if operation.matricule != actor_matricule and not access_control.can_access_globally(str(actor_role or '').upper()):
+            raise HTTPException(status_code=403, detail="Vous n'êtes pas autorisé à modifier cette opération")
+
     if operation.statut and str(operation.statut).lower() != 'en attente':
         raise HTTPException(
             status_code=400,
             detail="Seules les opérations en attente peuvent être modifiées"
         )
 
-    validations_validees = db.query(models.Validation).filter(
-        models.Validation.id_operation == id_operation,
-        models.Validation.statut_validation == 'validé'
-    ).count()
-
-    if validations_validees > 0:
+    if workflow.operation_a_deja_ete_validee(id_operation, db):
         raise HTTPException(
             status_code=400,
-            detail="Impossible de modifier une opération déjà partiellement validée"
+            detail="Impossible de modifier une opération après la première validation"
         )
 
     try:

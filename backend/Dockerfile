@@ -2,7 +2,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # system deps
-RUN apt-get update && apt-get install -y build-essential gcc libpq-dev --no-install-recommends && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y build-essential gcc libpq-dev unixodbc unixodbc-dev mdbtools libjpeg62-turbo-dev libpng-dev zlib1g-dev --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt

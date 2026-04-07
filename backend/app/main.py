@@ -1,10 +1,22 @@
+"""
+Point d'entrée principal du backend FastAPI d'Extranet ELITE CAPITAL.
+
+Configure :
+- Le lifespan (scheduler APScheduler au démarrage)
+- Le middleware CORS (liste blanche contrôlée par CORS_ALLOW_ORIGINS)
+- Un middleware d'audit qui journalise les appels réussis dans audit.log
+- Toutes les routes en les incluant depuis les modules routers/*
+"""
+from contextlib import asynccontextmanager
+import os
+
 from fastapi import FastAPI
 from .db import Base, engine
 from .routers import (
     auth, organisation, employees, leaves, roles, dashboard, operations,
     conges, permissions_router, missions_router, remplacants_router,
-    notifications_router, evaluations_router, workflow_router,
-    commentaires_mission_router, sorties_router,
+    notifications_router, evaluations_router, workflow_router, tasks_router,
+    commentaires_mission_router, sorties_router, team_space_router, module_store_router,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request
@@ -23,30 +35,51 @@ formatter = logging.Formatter('%(asctime)s %(message)s')
 fh.setFormatter(formatter)
 if not audit_logger.handlers:
     audit_logger.addHandler(fh)
-app = FastAPI(title="Extranet ELITE CAPITAL - Backend")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Configure startup jobs using lifespan to avoid deprecated startup events."""
+    if not os.getenv('TESTING'):
+        # Auto-migrations : applique les fichiers SQL manquants avant tout
+        try:
+            from .utils.auto_migrate import run_migrations
+            run_migrations(engine)
+        except Exception as e:
+            logging.error(f"Erreur auto_migrate au démarrage: {e}")
+        # Scheduler
+        try:
+            from .scheduler import configurer_scheduler
 
-# Add CORS middleware FIRST, before audit middleware
+            configurer_scheduler()
+            logging.info("Scheduler configuré et démarré avec succès")
+        except Exception as e:
+            logging.error(f"Erreur lors de la configuration du scheduler: {e}")
+    yield
+
+
+app = FastAPI(title="Extranet ELITE CAPITAL - Backend", lifespan=lifespan)
+
+default_origins = [
+    "https://elitecapitalems.netlify.app",
+    "https://69b81a2f94cfe526a986b71e--elitecapitalems.netlify.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+configured_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOW_ORIGINS", "").split(",")
+    if origin.strip()
+]
+allow_origins = configured_origins or default_origins
+
+# Add CORS middleware FIRST, before other middlewares.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://elitecapitalems.netlify.app",
-        "https://69b81a2f94cfe526a986b71e--elitecapitalems.netlify.app",
-        "*"
-    ],
+    allow_origins=allow_origins,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# Middleware global CORS (force header sur toutes les réponses)
-@app.middleware('http')
-async def global_cors_middleware(request: Request, call_next):
-    response = await call_next(request)
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = '*'
-    response.headers['Access-Control-Allow-Headers'] = '*'
-    return response
 
 # Audit middleware (après CORS)
 @app.middleware('http')
@@ -80,16 +113,9 @@ async def audit_middleware(request: Request, call_next):
 
 Base.metadata.create_all(bind=engine)
 
-# Configurer le scheduler pour les tâches automatiques
-@app.on_event("startup")
-async def startup_event():
-    """Démarrer le scheduler pour les tâches automatiques"""
-    try:
-        from .scheduler import configurer_scheduler
-        scheduler = configurer_scheduler()
-        logging.info("Scheduler configuré et démarré avec succès")
-    except Exception as e:
-        logging.error(f"Erreur lors de la configuration du scheduler: {e}")
+from fastapi.staticfiles import StaticFiles
+os.makedirs('/app/uploads', exist_ok=True)
+app.mount('/uploads', StaticFiles(directory='/app/uploads'), name='uploads')
 
 # Routers existants
 app.include_router(auth.router)
@@ -110,6 +136,9 @@ app.include_router(evaluations_router.router)
 app.include_router(workflow_router.router)
 app.include_router(commentaires_mission_router.router)
 app.include_router(sorties_router.router)
+app.include_router(tasks_router.router)
+app.include_router(team_space_router.router)
+app.include_router(module_store_router.router)
 
 
 @app.get('/')

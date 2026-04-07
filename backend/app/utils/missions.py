@@ -162,7 +162,7 @@ def creer_demande_frais(
     preuves_paiement: List[str],
     justificatif: Optional[str],
     db: Session
-) -> Tuple[bool, str]:
+) -> Tuple[bool, str, Optional[Frais]]:
     """
     Crée une demande de frais de mission.
     
@@ -178,17 +178,17 @@ def creer_demande_frais(
         db: Session de base de données
     
     Returns:
-        Tuple (succès, message)
+        Tuple (succès, message, frais)
     """
     mission = db.query(Mission).filter(Mission.id_mission == id_operation).first()
     
     if not mission:
-        return False, "Mission introuvable"
+        return False, "Mission introuvable", None
     
     operation = db.query(Operation).filter(Operation.id_operation == id_operation).first()
     
     if operation.matricule != matricule:
-        return False, "Vous n'êtes pas autorisé à créer une demande de frais pour cette mission"
+        return False, "Vous n'êtes pas autorisé à créer une demande de frais pour cette mission", None
     
     # Calculer le total
     total_frais = frais_transport_voyage + frais_hotel + frais_deplacement + frais_nutrition
@@ -201,11 +201,28 @@ def creer_demande_frais(
     frais_existants = db.query(Frais).filter(Frais.id_mission == id_operation).first()
     
     if frais_existants:
-        return False, "Une demande de frais existe déjà pour cette mission"
+        return False, "Une demande de frais existe déjà pour cette mission", None
     
+    operation_frais = Operation(
+        matricule=matricule,
+        titre=f"Demande de frais mission #{id_operation}",
+        commentaire=justificatif,
+        type_demande='Frais de mission',
+        statut='en attente',
+        date_debut=operation.date_debut,
+        date_fin=operation.date_fin,
+        duree_jours=operation.duree_jours,
+        motif=justificatif,
+        date_demande=datetime.now(),
+        cree_par=matricule
+    )
+    db.add(operation_frais)
+    db.commit()
+    db.refresh(operation_frais)
+
     frais = Frais(
-        id_frais=id_operation,  # Utiliser le même ID que l'opération
-        id_operation=id_operation,
+        id_frais=operation_frais.id_operation,
+        id_operation=operation_frais.id_operation,
         id_mission=id_operation,
         frais_transport_voyage=frais_transport_voyage,
         frais_hotel=frais_hotel,
@@ -219,16 +236,21 @@ def creer_demande_frais(
     db.add(frais)
     db.commit()
     
-    # Notifier le RH pour validation de la demande de frais
-    from .activation_cloture import creer_notification_rh
-    creer_notification_rh(
-        id_operation,
-        "Nouvelle demande de frais",
-        f"L'employé {matricule} a soumis une demande de frais de {total_frais}",
-        db
-    )
+    # Notifier le prochain validateur du workflow de frais
+    from . import workflow, notifications
+
+    prochain_role, prochain_matricule = workflow.obtenir_prochain_validateur(operation_frais.id_operation, db)
+    if prochain_matricule:
+        notifications.creer_notification(
+            matricule=prochain_matricule,
+            type_notification='VALIDATION',
+            titre='Nouvelle demande de frais de mission',
+            message=f"L'employé {matricule} a soumis une demande de frais de {total_frais}",
+            id_operation=operation_frais.id_operation,
+            db=db
+        )
     
-    return True, f"Demande de frais créée. Total: {total_frais}"
+    return True, f"Demande de frais créée. Total: {total_frais}", frais
 
 
 def televerser_preuves_frais(

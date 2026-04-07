@@ -18,7 +18,7 @@ export default function Organisation() {
   const { user } = useAuth()
   const roleUtilisateur = useMemo(() => String(user?.role || '').toUpperCase(), [user])
   const peutModifierOrganisation = useMemo(
-    () => ['RH', 'ADMIN', 'DG', 'PCA', 'AG'].includes(roleUtilisateur),
+    () => ['ADMIN', 'DG', 'PCA', 'AG'].includes(roleUtilisateur),
     [roleUtilisateur]
   )
 
@@ -64,7 +64,7 @@ export default function Organisation() {
   // Load pays
   const loadPays = async () => {
     try {
-      const res = await api.get('/employees/pays')
+      const res = await api.get('/employees/pays-avec-entites')
       setPays(res.data || [])
       setSelectedPays(null)
       setSelectedVille(null)
@@ -76,7 +76,7 @@ export default function Organisation() {
   // Load villes by pays
   const loadVillesByPays = async (id_pays) => {
     try {
-      const res = await api.get(`/employees/pays/${id_pays}/villes`)
+      const res = await api.get(`/employees/pays/${id_pays}/villes-avec-entites`)
       setVilles(res.data || [])
     } catch (err) {
       setError('Erreur chargement villes: ' + (err.response?.data?.detail || err.message))
@@ -458,10 +458,13 @@ export default function Organisation() {
                   <p className="empty-state">Aucun pays disponible</p>
                 ) : (
                   pays.map((p) => (
-                    <button
+                    <div
                       key={p.id_pays}
                       className="pays-button"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => handleSelectPaysForVille(p)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSelectPaysForVille(p)}
                     >
                       <span className="pays-button-flag">{getCountryEmoji(p.code_pays)}</span>
                       <div className="pays-button-info">
@@ -478,7 +481,7 @@ export default function Organisation() {
                           <X size={12} />
                         </button>
                       )}
-                    </button>
+                    </div>
                   ))
                 )}
               </div>
@@ -504,10 +507,13 @@ export default function Organisation() {
                       <p className="empty-state">Aucune ville</p>
                     ) : (
                       villes.map((v) => (
-                        <button
+                        <div
                           key={v.id_localisation}
                           className="ville-button"
+                          role="button"
+                          tabIndex={0}
                           onClick={() => handleSelectLocation(v)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSelectLocation(v)}
                         >
                           <span className="ville-button-flag">{getCountryEmoji(selectedPays.code_pays)}</span>
                           <div className="pays-button-info">
@@ -524,7 +530,7 @@ export default function Organisation() {
                               <X size={12} />
                             </button>
                           )}
-                        </button>
+                        </div>
                       ))
                     )}
                   </div>
@@ -822,7 +828,7 @@ export default function Organisation() {
                                 <div style={{ flex: 1 }}>
                                   <h4>{dept.nom}</h4>
                                   <p className="meta-info">
-                                    {dept.entite_nom || 'N/A'} • {dept.direction_nom || 'N/A'}
+                                    {dept.entite_nom || 'N/A'} • {dept.localisation_nom || dept.direction_nom || 'N/A'}
                                   </p>
                                 </div>
                                 {peutModifierOrganisation && (

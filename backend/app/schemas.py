@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import date, datetime
 
@@ -7,9 +7,7 @@ class RoleOut(BaseModel):
     id: int
     name: str
     description: Optional[str]
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EmployeBase(BaseModel):
@@ -23,6 +21,9 @@ class EmployeBase(BaseModel):
     departement: Optional[str] = None
     fonction: Optional[str] = None
     ville: Optional[str] = None
+    pays: Optional[str] = None
+    id_pays: Optional[int] = None
+    id_localisation: Optional[int] = None
     contact_urgence: Optional[str] = None
     diplome: Optional[str] = None
     solde_conges: Optional[int] = 0
@@ -31,14 +32,17 @@ class EmployeBase(BaseModel):
     role: Optional[str] = None
     annee_experience: Optional[int] = None
     categorie: Optional[str] = None
+    statut_matrimonial: Optional[str] = None
+    nombre_enfants: Optional[int] = None
     direction: Optional[str] = None
     anciennete: Optional[str] = None
     n1: Optional[int | str] = None
+    statut_employe: Optional[str] = None
+    photo_url: Optional[str] = None
 
 
 class EmployeOut(EmployeBase):
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UtilisateurCreate(BaseModel):
@@ -68,9 +72,7 @@ class CongeOut(CongeCreate):
     statut: str
     duree: int
     date_demande: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class PaysCreate(BaseModel):
     nom_pays: str
@@ -84,3 +86,5 @@ class VilleCreate(BaseModel):
 
 class FonctionReferenceCreate(BaseModel):
     libelle: str = Field(min_length=2, max_length=200)
+    id_direction: Optional[int] = None
+    dept_id: Optional[int] = None

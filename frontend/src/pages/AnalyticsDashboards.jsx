@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
-import { TrendingUp, Users, Briefcase, BarChart2, ArrowDown, ArrowUp, Target, Award, Clock, CalendarDays, ChevronDown, ChevronUp, Activity } from 'lucide-react'
+import { TrendingUp, Users, Briefcase, BarChart2, ArrowDown, ArrowUp, Target, Award, Clock, CalendarDays, ChevronDown, ChevronUp, Activity, AlertTriangle, GraduationCap, Smile, Zap } from 'lucide-react'
 
 const ACCENT = '#ce2b2b'
 const DARK = '#021630'
@@ -33,18 +33,34 @@ function StatCard({ icon, label, value, sub, color = DARK, bg = '#f8fafc', borde
 
 const MOIS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
 
+function KpiFormulaCard({ icon, label, value, formula, available = true }) {
+  const isNa = value === 'N/A'
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', background: isNa ? '#f8fafc' : '#f0fdf4', border: `1px solid ${isNa ? '#e2e8f0' : '#bbf7d0'}`, borderRadius: 10, marginBottom: 8 }}>
+      <div style={{ width: 36, height: 36, borderRadius: 9, background: isNa ? '#f1f5f9' : '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isNa ? '#94a3b8' : '#16a34a', flexShrink: 0 }}>{icon}</div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>{label}</div>
+        <div style={{ fontSize: '1.3rem', fontWeight: 800, color: isNa ? '#94a3b8' : '#16a34a', marginTop: 2 }}>
+          {isNa ? <span title="Données insuffisantes dans le système">N/A — Données insuffisantes</span> : value}
+        </div>
+        <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 4 }}>Formule : {formula}</div>
+      </div>
+    </div>
+  )
+}
+
 export default function AnalyticsDashboards() {
   const { user } = useAuth()
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState('growth') // 'growth' | 'retention' | 'career' | null
+  const [expanded, setExpanded] = useState(null) // 'growth' | 'retention' | 'career' | null
   const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()))
   const [filterMois, setFilterMois] = useState('tous')
   const [filterEntite, setFilterEntite] = useState('tous')
   const [filterDirection, setFilterDirection] = useState('tous')
 
   useEffect(() => {
-    api.get('/employees').then(r => { setEmployees(r.data || []); setLoading(false) }).catch(() => setLoading(false))
+    api.get('/employees/').then(r => { setEmployees(r.data || []); setLoading(false) }).catch(() => setLoading(false))
   }, [])
 
   // ── Derived analytics ──
@@ -152,11 +168,16 @@ export default function AnalyticsDashboards() {
     // Retention rate (100 - turnover)
     const retentionRate = Math.max(0, 100 - turnoverRate)
 
+    // New computed KPIs
+    const pctSenior = ages.length ? Math.round(ages.filter(a => a >= 45).length / ages.length * 100) : null
+    const pctStable = tenures.length ? Math.round(tenures.filter(t => t >= 5).length / tenures.length * 100) : null
+
     return {
       totalEmployees, avgTenureYears, avgTenureMonths, avgAge: Math.round(avgAge),
       tenureBuckets, maxTenureBucket, ageBuckets, maxAgeBucket,
       entiteData, maxEntite, monthlyData, entites, directions,
       newHiresThisYear, turnoverRate, retentionRate,
+      pctSenior, pctStable,
     }
   }, [employees, filterYear, filterMois, filterEntite, filterDirection])
 
@@ -264,6 +285,9 @@ export default function AnalyticsDashboards() {
                         </div>
                       ))}
                     </div>
+                    <h3 style={{ margin: '20px 0 10px', color: DARK, fontSize: '0.9rem', fontWeight: 700 }}>KPI Opérationnels</h3>
+                    <KpiFormulaCard icon={<AlertTriangle size={16} />} label="Taux de fréquence des accidents" value="N/A" formula="(Nb accidents × 10⁶) / Heures travaillées" />
+                    <KpiFormulaCard icon={<Zap size={16} />} label="Indice de productivité" value="N/A" formula="Chiffre d’affaires / Effectif total" />
                   </div>
                 )}
 
@@ -296,6 +320,9 @@ export default function AnalyticsDashboards() {
                         </div>
                       ))}
                     </div>
+                    <h3 style={{ margin: '20px 0 10px', color: DARK, fontSize: '0.9rem', fontWeight: 700 }}>KPI Engagement</h3>
+                    <KpiFormulaCard icon={<CalendarDays size={16} />} label="Taux d’absentéisme" value="N/A" formula="(Jours abs. / (Effectif × Jours ouvrables)) × 100" />
+                    <KpiFormulaCard icon={<Smile size={16} />} label="eNPS (Employee Net Promoter Score)" value="N/A" formula="% Promoteurs − % Détracteurs" />
                   </div>
                 )}
 
@@ -338,6 +365,14 @@ export default function AnalyticsDashboards() {
                         </div>
                       </div>
                     </div>
+                    <h3 style={{ margin: '20px 0 10px', color: DARK, fontSize: '0.9rem', fontWeight: 700 }}>KPI Développement</h3>
+                    <KpiFormulaCard icon={<GraduationCap size={16} />} label="Taux d’accès à la formation" value="N/A" formula="(Formés dans l’année / Effectif total) × 100" />
+                    {analytics.pctSenior !== null && (
+                      <KpiFormulaCard icon={<Users size={16} />} label="Indice de vieillissement" value={`${analytics.pctSenior} %`} formula="(Employés ≥†45 ans / Effectif total) × 100" />
+                    )}
+                    {analytics.pctStable !== null && (
+                      <KpiFormulaCard icon={<Award size={16} />} label="Stabilité des équipes" value={`${analytics.pctStable} %`} formula="(Ancienneté ≥ 5 ans / Effectif total) × 100" />
+                    )}
                   </div>
                 )}
 

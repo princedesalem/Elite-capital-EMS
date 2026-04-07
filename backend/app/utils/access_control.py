@@ -5,7 +5,7 @@ from .. import models
 from ..utils import security
 
 
-MISSION_INITIATOR_ROLES = {'RESPONSABLE', 'DIRECTEUR', 'RH', 'DG', 'PCA', 'ADMIN'}
+MISSION_INITIATOR_ROLES = {'RESPONSABLE', 'DIRECTEUR', 'RH', 'DG', 'PCA', 'AG', 'ADMIN'}
 GLOBAL_ROLES = {'RH', 'PCA', 'AG', 'ADMIN'}
 
 
@@ -17,7 +17,9 @@ def get_actor_from_request(request: Request) -> tuple[int | None, str | None]:
     token = auth.split(None, 1)[1]
     try:
         payload = security.jwt.decode(token, security.SECRET_KEY, algorithms=[security.ALGORITHM])
-    except security.jwt.InvalidTokenError:
+    except HTTPException:
+        raise
+    except Exception:
         raise HTTPException(status_code=401, detail='Token invalide')
 
     matricule = payload.get('matricule')
@@ -36,8 +38,8 @@ def ensure_can_create_for_matricule(request: Request, matricule_cible: int):
     if actor_matricule == matricule_cible:
         return actor_matricule, actor_role
 
-    if actor_role not in {'RH', 'ADMIN', 'PCA'}:
-        raise HTTPException(status_code=403, detail='Seul RH/PCA/Admin peut créer une demande pour autrui')
+    if actor_role not in {'RH', 'ADMIN', 'PCA', 'AG'}:
+        raise HTTPException(status_code=403, detail='Seul RH/PCA/AG/Admin peut créer une demande pour autrui')
 
     return actor_matricule, actor_role
 
@@ -55,13 +57,13 @@ def can_access_globally(role: str) -> bool:
 
 
 def is_rh_or_admin_or_pca(role: str) -> bool:
-    return role in {'RH', 'ADMIN', 'PCA'}
+    return role in {'RH', 'ADMIN', 'PCA', 'AG'}
 
 
 def ensure_employee_crud_role(request: Request):
     _, role = get_actor_from_request(request)
-    if role not in {'RH', 'PCA', 'ADMIN'}:
-        raise HTTPException(status_code=403, detail='Accès refusé: seuls RH/PCA/Admin peuvent gérer les employés')
+    if role not in {'RH', 'PCA', 'AG', 'ADMIN'}:
+        raise HTTPException(status_code=403, detail='Accès refusé: seuls RH/PCA/AG/Admin peuvent gérer les employés')
 
 
 def get_actor_role_from_db(matricule: int, db: Session) -> str:

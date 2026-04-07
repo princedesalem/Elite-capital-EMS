@@ -59,6 +59,14 @@ def activer_operation_demandeur(
         db.add(activation)
     else:
         if activation.demandeur_fait:
+            # Si RH ou PCA/AG et que la partie RH n'est pas encore faite, compléter maintenant
+            est_ac = verifier_role_rh(matricule_demandeur, db) or verifier_role_pca_ag(matricule_demandeur, db)
+            if est_ac and not activation.rh_fait:
+                activation.rh_fait = True
+                activation.date_rh = datetime.now()
+                activation.statut_final = StatutFinalEnum.COMPLETE
+                db.commit()
+                return True, "Opération activée immédiatement."
             return False, "Vous avez déjà activé cette opération. En attente de confirmation RH."
         
         activation.demandeur_fait = True
@@ -66,6 +74,32 @@ def activer_operation_demandeur(
     
     db.commit()
     
+    # Si RH ou PCA/AG : compléter immédiatement les deux côtés (pas d'attente RH)
+    est_auto_complete = verifier_role_rh(matricule_demandeur, db) or verifier_role_pca_ag(matricule_demandeur, db)
+    if est_auto_complete:
+        activation.rh_fait = True
+        activation.date_rh = datetime.now()
+        activation.statut_final = StatutFinalEnum.COMPLETE
+        # Déduire le solde si pas encore fait (sécurité)
+        if not operation.solde_deduit:
+            from .permissions import obtenir_type_permission
+            from .business_logic import deduire_solde_conges
+            type_info = obtenir_type_permission(id_operation, db)
+            type_demande = str(operation.type_demande or '').strip().lower()
+            doit_deduire = (
+                type_info['est_conventionnelle'] == False
+                or type_info['type'] == 'conge'
+                or type_demande in {'conge', 'congé'}
+            )
+            if doit_deduire and operation.duree:
+                employe_obj = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
+                if employe_obj:
+                    deduire_solde_conges(employe_obj, operation.duree, db)
+                    operation.solde_deduit = True
+                    db.add(operation)
+        db.commit()
+        return True, "Opération activée immédiatement."
+
     # Créer notification pour RH
     creer_notification_rh(
         id_operation,
@@ -75,6 +109,61 @@ def activer_operation_demandeur(
     )
     
     return True, "Activation enregistrée. En attente de confirmation du RH."
+
+
+def activer_operation_auto_apres_validation(
+    id_operation: int,
+    matricule_demandeur: int,
+    db: Session
+) -> Tuple[bool, str]:
+    """
+    Déclenche automatiquement la partie demandeur de l'activation après la
+    validation finale du workflow.  La validation finale vaut comme accord
+    implicite de départ ; le RH doit encore confirmer pour compléter.
+    """
+    operation = db.query(Operation).filter(Operation.id_operation == id_operation).first()
+    if not operation:
+        return False, "Opération introuvable"
+
+    # Ne pas re-créer si une activation existe déjà
+    existing = db.query(Activation).filter(
+        Activation.id_operation == id_operation,
+        Activation.type_action == TypeActionEnum.ACTIVATION
+    ).first()
+    if existing:
+        return True, "Activation déjà initiée"
+
+    # Si le demandeur est lui-même RH, compléter les deux côtés immédiatement
+    employe = db.query(Employe).filter(Employe.matricule == matricule_demandeur).first()
+    nom_employe = f"{employe.prenom} {employe.nom}" if employe else f"Employé #{matricule_demandeur}"
+    est_rh = verifier_role_rh(matricule_demandeur, db)
+    now = datetime.now()
+
+    activation = Activation(
+        id_operation=id_operation,
+        type_action=TypeActionEnum.ACTIVATION,
+        demandeur_fait=True,
+        date_demandeur=now,
+        rh_fait=est_rh,
+        date_rh=now if est_rh else None,
+        statut_final=StatutFinalEnum.COMPLETE if est_rh else StatutFinalEnum.EN_ATTENTE
+    )
+    db.add(activation)
+    db.commit()
+
+    if not est_rh:
+        # Notifier le RH qu'une confirmation d'activation est requise
+        creer_notification_rh(
+            id_operation,
+            "Activation en attente de confirmation",
+            (
+                f"La demande #{id_operation} ({operation.type_demande or 'opération'}) de {nom_employe} "
+                f"a été approuvée par tous les validateurs. Votre confirmation d'activation est requise."
+            ),
+            db
+        )
+
+    return True, "Activation initiée automatiquement après validation finale"
 
 
 def activer_operation_rh(
@@ -125,12 +214,21 @@ def activer_operation_rh(
     
     operation = db.query(Operation).filter(Operation.id_operation == id_operation).first()
     type_info = obtenir_type_permission(id_operation, db)
+    type_demande = str(operation.type_demande or '').strip().lower() if operation else ''
+    doit_deduire_solde = (
+        type_info['est_conventionnelle'] == False
+        or type_info['type'] == 'conge'
+        or type_demande in {'conge', 'congé'}
+    )
     
     # Déduire du solde uniquement pour les permissions non conventionnelles et les congés
-    if type_info['est_conventionnelle'] == False or type_info['type'] == 'conge':
+    if doit_deduire_solde and operation.duree and not operation.solde_deduit:
         employe = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
         if employe:
             deduire_solde_conges(employe, operation.duree, db)
+            operation.solde_deduit = True
+            db.add(operation)
+            db.commit()
     
     # Notifier le demandeur
     notification = Notification(
@@ -206,7 +304,8 @@ def cloturer_operation_demandeur(
     activation_activee = db.query(Activation).filter(
         Activation.id_operation == id_operation,
         Activation.type_action == TypeActionEnum.ACTIVATION,
-        Activation.statut_final == StatutFinalEnum.COMPLETE
+        Activation.demandeur_fait == True,
+        Activation.rh_fait == True
     ).first()
     
     if not activation_activee:
@@ -241,7 +340,8 @@ def cloturer_operation_demandeur(
     
     # Gérer le retour anticipé
     if retour_anticipe:
-        if not date_retour_anticipe or date_retour_anticipe >= operation.date_retour:
+        date_retour_prevue = operation.date_retour or operation.date_fin
+        if not date_retour_anticipe or not date_retour_prevue or date_retour_anticipe >= date_retour_prevue:
             return False, "La date de retour anticipé doit être antérieure à la date de retour prévue"
         
         operation.retour_anticipe = True
@@ -249,13 +349,17 @@ def cloturer_operation_demandeur(
         
         # Calculer les jours à rendre
         from .business_logic import calculer_jours_ouvrables, rajouter_solde_conges
-        jours_non_utilises = calculer_jours_ouvrables(date_retour_anticipe, operation.date_retour)
+        jours_non_utilises = calculer_jours_ouvrables(date_retour_anticipe, date_retour_prevue)
         
         # Rendre les jours au solde (sauf pour permissions conventionnelles)
         if not type_info.get('est_conventionnelle'):
             employe = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
             rajouter_solde_conges(employe, jours_non_utilises, db)
     
+    # Si le demandeur est lui-même RH ou PCA/AG, compléter les deux côtés immédiatement
+    est_auto_complete = verifier_role_rh(matricule_demandeur, db) or verifier_role_pca_ag(matricule_demandeur, db)
+    now = datetime.now()
+
     # Vérifier si clôture existe déjà
     cloture = db.query(Activation).filter(
         Activation.id_operation == id_operation,
@@ -267,9 +371,10 @@ def cloturer_operation_demandeur(
             id_operation=id_operation,
             type_action=TypeActionEnum.CLOTURE,
             demandeur_fait=True,
-            date_demandeur=datetime.now(),
-            rh_fait=False,
-            statut_final=StatutFinalEnum.EN_ATTENTE
+            date_demandeur=now,
+            rh_fait=est_auto_complete,
+            date_rh=now if est_auto_complete else None,
+            statut_final=StatutFinalEnum.COMPLETE if est_auto_complete else StatutFinalEnum.EN_ATTENTE
         )
         db.add(cloture)
     else:
@@ -277,19 +382,25 @@ def cloturer_operation_demandeur(
             return False, "Vous avez déjà demandé la clôture. En attente de confirmation RH."
         
         cloture.demandeur_fait = True
-        cloture.date_demandeur = datetime.now()
+        cloture.date_demandeur = now
+        if est_auto_complete:
+            cloture.rh_fait = True
+            cloture.date_rh = now
+            cloture.statut_final = StatutFinalEnum.COMPLETE
     
     db.commit()
     
-    # Notifier le RH
-    creer_notification_rh(
-        id_operation,
-        "Clôture en attente",
-        f"L'employé {operation.matricule} a clôturé son opération. Confirmation RH requise.",
-        db
-    )
+    if not est_auto_complete:
+        # Notifier le RH
+        creer_notification_rh(
+            id_operation,
+            "Clôture en attente",
+            f"L'employé {operation.matricule} a clôturé son opération. Confirmation RH requise.",
+            db
+        )
+        return True, "Clôture enregistrée. En attente de confirmation du RH."
     
-    return True, "Clôture enregistrée. En attente de confirmation du RH."
+    return True, "Clôture complète (auto-confirmation RH)."
 
 
 def cloturer_operation_rh(
@@ -455,6 +566,21 @@ def verifier_role_rh(matricule: int, db: Session) -> bool:
     role = db.query(Role).filter(Role.id == utilisateur.role_id).first()
     
     return role and role.name.upper() == 'RH'
+
+
+def verifier_role_pca_ag(matricule: int, db: Session) -> bool:
+    """
+    Vérifie si un employé a le rôle PCA ou AG.
+    Ces rôles n'ont pas de validateurs — ils gèrent eux-mêmes leur cycle complet.
+    """
+    from ..models import Utilisateur, Role
+
+    utilisateur = db.query(Utilisateur).filter(Utilisateur.matricule == matricule).first()
+    if not utilisateur or not utilisateur.role_id:
+        return False
+
+    role = db.query(Role).filter(Role.id == utilisateur.role_id).first()
+    return role and role.name.upper() in {'PCA', 'AG'}
 
 
 def creer_notification_rh(id_operation: int, titre: str, message: str, db: Session):
