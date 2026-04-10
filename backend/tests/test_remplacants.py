@@ -226,18 +226,16 @@ class TestRemplacantsAPI:
 
 class TestNouveauxComportements:
     def test_n1_pairs_inclus_quand_n1_defini(self, db_session, seed_remplacants):
-        """Un employé avec N1 défini doit avoir ses pairs N1 proposés."""
+        """Les subordonnés directs (dont n1 == matricule de l'employé) sont proposés avec raison 'Subordonné direct'."""
         employe = seed_remplacants['employe']
         c1 = seed_remplacants['c1']
-        rh = seed_remplacants['rh']
-        # Affecter le même N1 à l'employé et à c1
-        employe.n1 = rh.matricule
-        c1.n1 = rh.matricule
+        # c1 est un subordonné direct de l'employé
+        c1.n1 = employe.matricule
         db_session.commit()
 
         result = rempl_utils.trouver_remplacants_automatiques(employe, db_session, limite=10)
         raisons = [r.get('raison', '') for r in result]
-        assert any('N1' in r for r in raisons), "Aucun remplaçant avec raison 'N1' trouvé"
+        assert any('Subordonné direct' in r for r in raisons), "Aucun subordonné direct trouvé"
 
     def test_pas_de_doublon_double_generation(self, db_session, seed_remplacants):
         """Appeler enregistrer deux fois ne crée pas de doublons."""

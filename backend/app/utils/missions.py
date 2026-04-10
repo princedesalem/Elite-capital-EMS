@@ -6,7 +6,8 @@ from decimal import Decimal
 from typing import Tuple, Dict, List, Optional
 from sqlalchemy.orm import Session
 from ..models import (
-    Mission, Frais, Operation, Employe, Notification, TypeNotificationEnum
+    Mission, Frais, Operation, Employe, Notification, TypeNotificationEnum,
+    MissionnairesMission
 )
 
 
@@ -96,11 +97,6 @@ def televerser_rapport_mission(
     if not mission:
         return False, "Mission introuvable"
     
-    operation = db.query(Operation).filter(Operation.id_operation == id_operation).first()
-    
-    if operation.matricule != matricule:
-        return False, "Vous n'êtes pas autorisé à soumettre ce rapport"
-    
     # Vérifier le délai
     if date.today() > mission.date_limite_rapport:
         return False, f"Délai dépassé. Date limite était le {mission.date_limite_rapport}"
@@ -187,7 +183,12 @@ def creer_demande_frais(
     
     operation = db.query(Operation).filter(Operation.id_operation == id_operation).first()
     
-    if operation.matricule != matricule:
+    # Autoriser l'initiateur OU tout missionnaire assigné à la mission
+    est_missionnaire = db.query(MissionnairesMission).filter(
+        MissionnairesMission.id_mission == id_operation,
+        MissionnairesMission.matricule == matricule
+    ).first() is not None
+    if operation.matricule != matricule and not est_missionnaire:
         return False, "Vous n'êtes pas autorisé à créer une demande de frais pour cette mission", None
     
     # Calculer le total
@@ -197,8 +198,13 @@ def creer_demande_frais(
     import json
     preuves_json = json.dumps(preuves_paiement)
     
-    # Vérifier si des frais existent déjà
-    frais_existants = db.query(Frais).filter(Frais.id_mission == id_operation).first()
+    # Un seul dossier de frais par personne par mission
+    frais_existants = db.query(Frais).join(
+        Operation, Operation.id_operation == Frais.id_operation
+    ).filter(
+        Frais.id_mission == id_operation,
+        Operation.matricule == matricule
+    ).first()
     
     if frais_existants:
         return False, "Une demande de frais existe déjà pour cette mission", None
@@ -241,20 +247,22 @@ def creer_demande_frais(
 
     prochain_role, prochain_matricule = workflow.obtenir_prochain_validateur(operation_frais.id_operation, db)
     if prochain_matricule:
+        _emp = db.query(Employe).filter(Employe.matricule == matricule).first()
+        _nom_emp = f"{_emp.prenom} {_emp.nom}" if _emp else f"l'employé #{matricule}"
         notifications.creer_notification(
             matricule=prochain_matricule,
             type_notification='VALIDATION',
             titre='Nouvelle demande de frais de mission',
-            message=f"L'employé {matricule} a soumis une demande de frais de {total_frais}",
+            message=f"{_nom_emp} a soumis une demande de frais de mission (total : {total_frais} FCFA) pour l'opération #{id_operation}.",
             id_operation=operation_frais.id_operation,
             db=db
         )
-    
+
     return True, f"Demande de frais créée. Total: {total_frais}", frais
 
 
 def televerser_preuves_frais(
-    id_operation: int,
+    id_frais: int,
     type_preuve: str,
     chemin_fichier: str,
     db: Session
@@ -263,7 +271,7 @@ def televerser_preuves_frais(
     Téléverse des preuves de paiement (tickets de bus, reçus d'hôtel, etc.).
     
     Args:
-        id_operation: ID de l'opération/mission
+        id_frais: ID de la demande de frais
         type_preuve: Type de preuve (transport, hotel, deplacement, nutrition)
         chemin_fichier: Chemin du fichier téléversé
         db: Session de base de données
@@ -271,7 +279,7 @@ def televerser_preuves_frais(
     Returns:
         Tuple (succès, message)
     """
-    frais = db.query(Frais).filter(Frais.id_mission == id_operation).first()
+    frais = db.query(Frais).filter(Frais.id_frais == id_frais).first()
     
     if not frais:
         return False, "Demande de frais introuvable"
@@ -409,6 +417,103 @@ def obtenir_moyens_transport_disponibles() -> List[str]:
         Liste des moyens de transport
     """
     return ['routiere', 'maritime', 'aerien', 'ferroviaire']
+
+
+def verifier_missions_a_activer(db: Session):
+    """
+    Vérifie les missions validées dont l'activation est incomplète et dont le départ
+    est dans moins de 48h. Envoie des rappels d'activation aux missionnaires.
+
+    - Rappel à 48h avant le départ (si pas encore envoyé)
+    - Rappel urgent à 24h avant le départ (si pas encore envoyé)
+
+    Anti-doublon : ne renvoie pas si un rappel identique a été envoyé dans les 12 dernières heures.
+    """
+    from ..models import Activation, TypeActionEnum, StatutFinalEnum, Notification
+
+    now = datetime.now()
+    limite_48h = (now + timedelta(hours=48)).date()
+    today = now.date()
+    limite_12h_back = now - timedelta(hours=12)
+
+    # Missions validées dont l'activation n'est pas complète
+    missions_a_activer = db.query(Operation).join(
+        Mission, Mission.id_mission == Operation.id_operation
+    ).filter(
+        Operation.type_demande == 'Mission',
+        Operation.statut == 'validé',
+        Operation.date_debut != None,
+        Operation.date_debut <= limite_48h,
+        Operation.date_debut >= today,
+    ).all()
+
+    for operation in missions_a_activer:
+        activation = db.query(Activation).filter(
+            Activation.id_operation == operation.id_operation,
+            Activation.type_action == TypeActionEnum.ACTIVATION
+        ).first()
+
+        # Skip si déjà complètement activé
+        if activation and activation.statut_final == StatutFinalEnum.COMPLETE:
+            continue
+
+        delta = datetime.combine(operation.date_debut, datetime.min.time()) - now
+        heures_restantes = delta.total_seconds() / 3600
+
+        if heures_restantes <= 0:
+            continue
+
+        # Déterminer le type de rappel
+        if heures_restantes <= 24:
+            type_rappel = '24h'
+            urgence = 'URGENT – '
+        elif heures_restantes <= 48:
+            type_rappel = '48h'
+            urgence = ''
+        else:
+            continue
+
+        # Récupérer les infos de destination
+        mission_obj = db.query(Mission).filter(Mission.id_mission == operation.id_operation).first()
+        destination = f"{mission_obj.ville}, {mission_obj.pays}" if mission_obj and mission_obj.ville else (mission_obj.pays if mission_obj else "la destination")
+
+        # Récupérer les missionnaires
+        missionnaires = db.query(MissionnairesMission).filter(
+            MissionnairesMission.id_mission == operation.id_operation
+        ).all()
+        matricules = [m.matricule for m in missionnaires]
+        if operation.matricule not in matricules:
+            matricules.append(operation.matricule)
+
+        id_op = operation.id_operation
+
+        for mat in matricules:
+            # Anti-doublon : vérifier si un rappel du même type a été envoyé dans les 12 dernières heures
+            rappel_recent = db.query(Notification).filter(
+                Notification.matricule == mat,
+                Notification.titre.like(f'%rappel {type_rappel}%'),
+                Notification.date_creation >= limite_12h_back,
+                Notification.id_operation == id_op,
+            ).first()
+            if rappel_recent:
+                continue
+
+            heures_display = int(heures_restantes)
+            notif = Notification(
+                matricule=mat,
+                type_notification=TypeNotificationEnum.RAPPEL_DEPART,
+                titre=f"{urgence}Rappel {type_rappel} – Activez votre mission avant le départ",
+                message=(
+                    f"La mission #{id_op} vers {destination} "
+                    f"débute le {operation.date_debut} (dans environ {heures_display}h) "
+                    f"et n'est pas encore activée. "
+                    f"Rendez-vous dans l'onglet « Reçu » de la page Missions pour l'activer."
+                ),
+                id_operation=id_op,
+            )
+            db.add(notif)
+
+    db.commit()
 
 
 def verifier_relances_rapport_mission(db: Session):

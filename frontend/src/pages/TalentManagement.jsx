@@ -104,8 +104,8 @@ export default function TalentManagement() {
 
   async function loadTalentData() {
     const [meetingsRes, goalsRes] = await Promise.all([
-      api.get('/api/module-store/talent_meetings').catch(() => ({ data: [] })),
-      api.get('/api/module-store/talent_goals').catch(() => ({ data: [] })),
+      api.get('/api/talent/meetings').catch(() => ({ data: [] })),
+      api.get('/api/talent/goals').catch(() => ({ data: [] })),
     ])
     setMeetings(Array.isArray(meetingsRes.data) ? meetingsRes.data : [])
     setGoals(Array.isArray(goalsRes.data) ? goalsRes.data : [])
@@ -137,13 +137,9 @@ export default function TalentManagement() {
     e.preventDefault()
     if (!meetForm.titre.trim()) return
     if (editMeeting) {
-      await api.put(`/api/module-store/talent_meetings/${editMeeting.id}`, { ...meetForm }).catch(() => null)
+      await api.put(`/api/talent/meetings/${editMeeting.id}`, { ...meetForm }).catch(() => null)
     } else {
-      await api.post('/api/module-store/talent_meetings', {
-        ...meetForm,
-        created_at: new Date().toISOString(),
-        _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
-      }).catch(() => null)
+      await api.post('/api/talent/meetings', { ...meetForm }).catch(() => null)
     }
     await loadTalentData()
     setMeetForm({ titre: '', manager_id: '', employee_id: '', date: '', agenda: '', notes: '', actions: '', statut: 'planifie' })
@@ -153,11 +149,9 @@ export default function TalentManagement() {
   const submitGoal = async (e) => {
     e.preventDefault()
     if (!goalForm.titre.trim()) return
-    await api.post('/api/module-store/talent_goals', {
+    await api.post('/api/talent/goals', {
       ...goalForm,
       employee_id: goalForm.employee_id || String(user?.matricule),
-      created_at: new Date().toISOString(),
-      _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
     }).catch(() => null)
     await loadTalentData()
     setShowGoalForm(false)
@@ -166,19 +160,19 @@ export default function TalentManagement() {
 
   const deleteMeeting = async (id) => {
     if (!window.confirm('Supprimer cette réunion ?')) return
-    await api.delete(`/api/module-store/talent_meetings/${id}`).catch(() => null)
+    await api.delete(`/api/talent/meetings/${id}`).catch(() => null)
     await loadTalentData()
   }
 
   const deleteGoal = async (id) => {
-    await api.delete(`/api/module-store/talent_goals/${id}`).catch(() => null)
+    await api.delete(`/api/talent/goals/${id}`).catch(() => null)
     await loadTalentData()
   }
 
   const updateGoalStatus = async (id, statut) => {
     const goal = goals.find((g) => g.id === id)
     if (!goal) return
-    await api.put(`/api/module-store/talent_goals/${id}`, { ...goal, statut }).catch(() => null)
+    await api.put(`/api/talent/goals/${id}`, { ...goal, statut }).catch(() => null)
     await loadTalentData()
   }
 

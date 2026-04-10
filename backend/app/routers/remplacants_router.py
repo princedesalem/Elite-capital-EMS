@@ -269,11 +269,12 @@ def demander_remplacant(
     ).first() if operation else None
 
     nom_absent = f"{employe_absent.prenom} {employe_absent.nom}" if employe_absent else "un collègue"
+    type_absence = (operation.type_demande or 'absence').lower() if operation else 'absence'
     notifications.creer_notification(
         matricule=matricule_remplacant,
         type_notification='AUTRE',
-        titre="Demande de remplacement",
-        message=f"Vous êtes sollicité pour remplacer {nom_absent}. Veuillez confirmer votre accord dans l'application.",
+        titre=f"Demande de remplacement – {(operation.type_demande or 'Absence') if operation else 'Absence'}",
+        message=f"Vous êtes sollicité(e) pour remplacer {nom_absent} durant son {type_absence} (opération #{id_operation}). Veuillez confirmer votre accord dans l'application.",
         id_operation=id_operation,
         db=db
     )

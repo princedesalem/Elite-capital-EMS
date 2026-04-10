@@ -1,77 +1,373 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import api from '../services/api'
-import { Calendar, ClipboardList, Car, Target, Check, Clock, Building2 } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
+import ProgressionValidation from '../components/ProgressionValidation'
+import CommentairesMission from '../components/CommentairesMission'
+import { CheckCircle, XCircle, UserCheck, RefreshCw } from 'lucide-react'
+import '../styles/Operations.css'
 
 export default function WorkflowPage() {
-  const [pendingRequests, setPendingRequests] = useState({
-    conges: 0,
-    permissions: 0,
-    sorties: 0,
-    missions: 0,
-  })
+  const { user } = useAuth()
+  const matricule = useMemo(() => Number(user?.matricule || user?.sub || 0), [user])
+  const roleUtilisateur = useMemo(() => String(user?.role || '').toUpperCase(), [user])
+  const estValidateur = useMemo(
+    () => ['RESPONSABLE', 'DIRECTEUR', 'RH', 'DG', 'DFC', 'PCA', 'AG', 'ADMIN'].includes(roleUtilisateur),
+    [roleUtilisateur]
+  )
+
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [mesDemandes, setMesDemandes] = useState([])
+  const [aValider, setAValider] = useState([])
+  const [mesValidations, setMesValidations] = useState([])
+  const [mesRefus, setMesRefus] = useState([])
+
+  const [selectedOperation, setSelectedOperation] = useState(null)
+  const [selectedOperationDetails, setSelectedOperationDetails] = useState(null)
+  const [showWorkflowInDetail, setShowWorkflowInDetail] = useState(false)
+  const [workflowDecisionComment, setWorkflowDecisionComment] = useState('')
+  const [validationRefreshKey, setValidationRefreshKey] = useState(0)
 
   useEffect(() => {
-    Promise.all([
-      api.get('/conges').catch(() => ({data: []})),
-      api.get('/leaves').catch(() => ({data: []})),
-      // Sorties handled in their own page via workflow boite
-      Promise.resolve({data: []}),
-      api.get('/api/missions').catch(() => ({data: []})),
-    ]).then(([congesRes, permRes, sortiesRes, missionsRes]) => {
-      setPendingRequests({
-        conges: congesRes.data.filter(c => c.statut === 'en attente').length,
-        permissions: permRes.data.filter(p => (p.statut || p.status) === 'en attente').length,
-        sorties: sortiesRes.data.filter(s => s.statut === 'en attente').length,
-        missions: missionsRes.data.filter(m => m.statut === 'en attente').length,
-      })
-    })
-  }, [])
+    if (!matricule) return
+    loadWorkflow()
+  }, [matricule])
 
-  const workflows = [
-    { label: 'Congés', pending: pendingRequests.conges, Icon: Calendar, color: '#10b981' },
-    { label: 'Permissions', pending: pendingRequests.permissions, Icon: ClipboardList, color: '#3b82f6' },
-    { label: 'Sorties', pending: pendingRequests.sorties, Icon: Car, color: '#f59e0b' },
-    { label: 'Missions', pending: pendingRequests.missions, Icon: Target, color: '#8b5cf6' },
-  ]
+  useEffect(() => {
+    setShowWorkflowInDetail(false)
+  }, [selectedOperation])
+
+  useEffect(() => {
+    if (!selectedOperation) { setSelectedOperationDetails(null); return }
+    api.get(`/api/operations/${selectedOperation}`)
+      .then(res => setSelectedOperationDetails(res.data || null))
+      .catch(() => setSelectedOperationDetails(null))
+  }, [selectedOperation])
+
+  async function loadWorkflow() {
+    setLoading(true)
+    setError('')
+    try {
+      const boite = await api.get(`/api/workflow/boite/${matricule}`).catch(() => null)
+      if (boite?.data && typeof boite.data === 'object') {
+        setMesDemandes(Array.isArray(boite.data.envoye) ? boite.data.envoye : [])
+        setAValider(Array.isArray(boite.data.recu) ? boite.data.recu : [])
+        setMesValidations(Array.isArray(boite.data.valide) ? boite.data.valide : [])
+        setMesRefus(Array.isArray(boite.data.refuse) ? boite.data.refuse : [])
+      } else {
+        const [mes, valider, validations, refus] = await Promise.all([
+          api.get(`/api/workflow/mes-demandes/${matricule}`).catch(() => ({ data: [] })),
+          api.get(`/api/workflow/a-valider/${matricule}`).catch(() => ({ data: [] })),
+          api.get(`/api/workflow/mes-validations/${matricule}`).catch(() => ({ data: [] })),
+          api.get(`/api/workflow/mes-refus/${matricule}`).catch(() => ({ data: [] }))
+        ])
+        setMesDemandes(Array.isArray(mes.data) ? mes.data : [])
+        setAValider(Array.isArray(valider.data) ? valider.data : [])
+        setMesValidations(Array.isArray(validations.data) ? validations.data : [])
+        setMesRefus(Array.isArray(refus.data) ? refus.data : [])
+      }
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Erreur de chargement du workflow')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function validerOperation(idOperation, statut, commentaire = null) {
+    try {
+      await api.post(`/api/workflow/valider/${idOperation}`, null, {
+        params: { matricule_validateur: matricule, statut, commentaire }
+      })
+      await loadWorkflow()
+      setValidationRefreshKey(k => k + 1)
+      return true
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Erreur lors de la validation')
+      return false
+    }
+  }
+
+  async function soumettreDecision(statut) {
+    if (!selectedOperation) return
+    const commentaire = statut === 'refusé' ? workflowDecisionComment.trim() : (workflowDecisionComment.trim() || null)
+    if (statut === 'refusé' && !commentaire) { alert('Le motif de refus est obligatoire'); return }
+    const ok = await validerOperation(selectedOperation, statut, commentaire)
+    if (ok) { setWorkflowDecisionComment(''); setSelectedOperation(null) }
+  }
+
+  const workflowCols = useMemo(() => ({
+    enAttente: mesDemandes.filter(d => String(d.statut || '').toLowerCase().includes('attente')),
+    valides:   mesDemandes.filter(d => String(d.statut || '').toLowerCase().includes('valid')),
+    refuses:   mesDemandes.filter(d => String(d.statut || '').toLowerCase().includes('refus')),
+  }), [mesDemandes])
+
+  const canValidate = useMemo(
+    () => estValidateur && aValider.some(item => String(item.id_operation) === String(selectedOperation)),
+    [estValidateur, aValider, selectedOperation]
+  )
+
+  const selectedWorkflowData = useMemo(() => {
+    if (!selectedOperation) return null
+    const workflowItem = [...aValider, ...mesDemandes, ...mesValidations, ...mesRefus]
+      .find(item => String(item.id_operation) === String(selectedOperation))
+    const rawType = String(workflowItem?.type_demande || '').toLowerCase()
+    const normalizedType = rawType.includes('mission') ? 'mission' : rawType.includes('permission') ? 'permission' : 'conge'
+    return { workflowItem, normalizedType }
+  }, [selectedOperation, aValider, mesDemandes, mesValidations, mesRefus])
+
+  const readonlyFormData = useMemo(() => {
+    if (!selectedWorkflowData) return null
+    const fmtDate = v => { if (!v) return ''; const d = new Date(v); return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0] }
+    const { workflowItem, normalizedType } = selectedWorkflowData
+    const op = selectedOperationDetails
+    const details = op?.details || {}
+    const common = {
+      typeDemande: workflowItem?.type_demande || op?.type || 'Demande opération',
+      demandeur: workflowItem?.demandeur?.nom_complet || '',
+      dateDemande: fmtDate(workflowItem?.date_demande),
+      dateDebut: fmtDate(workflowItem?.date_debut || op?.date_depart),
+      dateFin: fmtDate(workflowItem?.date_fin || op?.date_retour),
+      duree: workflowItem?.duree_jours || op?.duree || '',
+      motif: workflowItem?.motif || op?.commentaire || '',
+    }
+    if (normalizedType === 'mission') {
+      return { ...common, type: 'mission', objet: workflowItem?.motif || '', pays: details?.pays || '', ville: details?.ville || '', transport: details?.transport || '', emailContact: details?.email_mission || '', heureDepart: details?.heure_depart || '', heureRetour: details?.heure_retour || '' }
+    }
+    if (normalizedType === 'permission') {
+      return { ...common, type: 'permission', typePermission: workflowItem?.type_demande || 'Permission', sousType: details?.sous_type || '' }
+    }
+    return { ...common, type: 'conge' }
+  }, [selectedWorkflowData, selectedOperationDetails])
 
   return (
-    <div style={{padding:'28px'}}>
-      <h1 style={{margin:'0 0 24px 0', fontSize:'1.8rem', fontWeight:800, color:'#021630'}}>Vue d'ensemble des workflow</h1>
+    <div className="operations-container">
+      <div className="operations-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px' }}>
+        <div>
+          <h1 style={{ fontSize: '1.3rem', margin: '0 0 2px 0' }}>Workflow</h1>
+          <p style={{ fontSize: '0.82rem', margin: 0 }}>Boite envoyé · Boite reçu · Validation des demandes</p>
+        </div>
+        <button
+          onClick={loadWorkflow}
+          disabled={loading}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer', fontSize: '0.82rem', color: '#334155' }}
+        >
+          <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> Actualiser
+        </button>
+      </div>
 
-      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(250px, 1fr))', gap:'20px', marginBottom:'32px'}}>
-        {workflows.map(w => (
-          <div key={w.label} style={{background:'#fff', borderRadius:'10px', padding:'20px', boxShadow:'0 1px 3px rgba(0,0,0,0.08)', borderTop:`3px solid ${w.color}`}}>
-            <div style={{marginBottom:'12px', color:w.color}}><w.Icon size={28}/></div>
-            <h3 style={{margin:'0 0 12px 0', fontSize:'1rem', fontWeight:700, color:'#1f2937'}}>{w.label}</h3>
-            <div style={{display:'flex', alignItems:'baseline', gap:'8px'}}>
-              <div style={{fontSize:'1.8rem', fontWeight:800, color:w.color}}>{w.pending}</div>
-              <div style={{fontSize:'0.85rem', color:'#6b7280'}}>demandes en attente</div>
+      {error && <div className="alert alert-danger">{error}</div>}
+
+      {loading && <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>Chargement...</div>}
+
+      {!loading && (
+        <div className="tab-pane">
+
+          {/* Stats */}
+          <div className="form-card" style={{ marginBottom: '12px', padding: '10px 12px' }}>
+            <div style={{ display: 'grid', gap: '6px', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px' }}>
+                <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>Envoyé</div>
+                <div style={{ fontWeight: 700, color: '#0f172a' }}>{mesDemandes.length}</div>
+              </div>
+              <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '8px' }}>
+                <div style={{ fontSize: '0.72rem', color: '#9a3412', textTransform: 'uppercase' }}>Reçu à valider</div>
+                <div style={{ fontWeight: 700, color: '#7c2d12' }}>{aValider.length}</div>
+              </div>
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '8px' }}>
+                <div style={{ fontSize: '0.72rem', color: '#166534', textTransform: 'uppercase' }}>Validé par moi</div>
+                <div style={{ fontWeight: 700, color: '#14532d' }}>{mesValidations.length}</div>
+              </div>
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '8px' }}>
+                <div style={{ fontSize: '0.72rem', color: '#991b1b', textTransform: 'uppercase' }}>Refusé par moi</div>
+                <div style={{ fontWeight: 700, color: '#7f1d1d' }}>{mesRefus.length}</div>
+              </div>
             </div>
           </div>
-        ))}
-      </div>
 
-      <div style={{background:'#fff', borderRadius:'10px', padding:'24px', boxShadow:'0 1px 3px rgba(0,0,0,0.08)'}}>
-        <h2 style={{margin:'0 0 16px 0', fontSize:'1.1rem', fontWeight:700, color:'#1f2937'}}>Étapes du workflow</h2>
-        <div style={{display:'grid', gap:'16px'}}>
-          <div style={{padding:'16px', background:'#f0f4f8', borderRadius:'8px', borderLeft:'3px solid #3b82f6'}}>
-            <div style={{fontWeight:700, marginBottom:'6px', display:'flex', alignItems:'center', gap:6}}><Check size={14} color="#3b82f6"/> Soumission</div>
-            <div style={{fontSize:'0.85rem', color:'#606060'}}>L'employé soumet sa demande</div>
-          </div>
-          <div style={{padding:'16px', background:'#f9fafb', borderRadius:'8px', borderLeft:'3px solid #f59e0b'}}>
-            <div style={{fontWeight:700, marginBottom:'6px', display:'flex', alignItems:'center', gap:6}}><Clock size={14} color="#f59e0b"/> Vérification RH</div>
-            <div style={{fontSize:'0.85rem', color:'#606060'}}>Validation administrative et vérification des droits</div>
-          </div>
-          <div style={{padding:'16px', background:'#f9fafb', borderRadius:'8px', borderLeft:'3px solid #f59e0b'}}>
-            <div style={{fontWeight:700, marginBottom:'6px', display:'flex', alignItems:'center', gap:6}}><Clock size={14} color="#f59e0b"/> Approbation Manager</div>
-            <div style={{fontSize:'0.85rem', color:'#606060'}}>Approbation du manager direct</div>
-          </div>
-          <div style={{padding:'16px', background:'#f0fdf4', borderRadius:'8px', borderLeft:'3px solid #10b981'}}>
-            <div style={{fontWeight:700, marginBottom:'6px', display:'flex', alignItems:'center', gap:6}}><Check size={14} color="#10b981"/> Confirmée</div>
-            <div style={{fontSize:'0.85rem', color:'#606060'}}>La demande est validée et confirmée</div>
-          </div>
+          {/* Detail view when an operation is selected */}
+          {selectedOperation && (
+            <div style={{ marginBottom: '14px', maxWidth: '760px', marginInline: 'auto' }}>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => { setSelectedOperation(null); setWorkflowDecisionComment(''); setShowWorkflowInDetail(false) }}
+                >
+                  ← Fermer le détail
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => setShowWorkflowInDetail(v => !v)}
+                  style={{ padding: '6px 10px', fontSize: '0.78rem' }}
+                >
+                  {showWorkflowInDetail ? 'Masquer workflow' : 'Afficher workflow'}
+                </button>
+              </div>
+
+              {showWorkflowInDetail && (
+                <div className="card" style={{ marginBottom: '12px', padding: '8px 10px', border: '2px solid rgba(206,43,43,0.35)', boxShadow: '0 0 0 3px rgba(206,43,43,0.08)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+                    <button type="button" onClick={() => setShowWorkflowInDetail(false)}
+                      style={{ width: '24px', height: '24px', borderRadius: '999px', border: 'none', background: '#ce2b2b', color: '#fff', fontWeight: 700, cursor: 'pointer', lineHeight: 1, fontSize: '0.85rem', padding: 0 }}>×</button>
+                  </div>
+                  <ProgressionValidation key={`${selectedOperation}-${validationRefreshKey}`} idOperation={selectedOperation} typeDefault="Demande opération" />
+                </div>
+              )}
+
+              {!showWorkflowInDetail && (
+                <>
+                  {canValidate && (
+                    <div className="card" style={{ marginBottom: '8px', padding: '8px 10px', borderTop: '4px solid #112033', textAlign: 'center' }}>
+                      <h3 style={{ marginTop: 0, marginBottom: '6px', color: '#021630', fontSize: '0.9rem' }}>Action du validateur</h3>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: '#334155', marginBottom: '5px' }}>
+                        Commentaire de validation / motif de refus
+                      </label>
+                      <textarea
+                        value={workflowDecisionComment}
+                        onChange={e => setWorkflowDecisionComment(e.target.value)}
+                        placeholder="Ajoutez un commentaire. Le motif est obligatoire en cas de refus."
+                        rows={1}
+                        style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '6px 8px', resize: 'vertical', marginBottom: '6px', fontFamily: 'inherit', fontSize: '0.78rem', maxHeight: '64px' }}
+                      />
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button className="btn btn-success" onClick={() => soumettreDecision('validé')} style={{ padding: '5px 10px', fontSize: '0.76rem', width: 'auto' }}>Valider</button>
+                        <button className="btn btn-danger" onClick={() => soumettreDecision('refusé')} disabled={!workflowDecisionComment.trim()} style={{ opacity: workflowDecisionComment.trim() ? 1 : 0.6, padding: '5px 10px', fontSize: '0.76rem' }}>Refuser</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {readonlyFormData && (
+                    <div className="form-card readonly-compact-form" style={{ marginBottom: '8px', padding: '12px 14px', borderLeft: '4px solid #112033' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '12px' }}>
+                        <h3 style={{ margin: 0, color: '#021630', fontSize: '1.06rem' }}>Formulaire de demande (lecture seule)</h3>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#112033', background: '#e8edf4', padding: '5px 9px', borderRadius: '999px' }}>#{selectedOperation}</span>
+                      </div>
+                      <div style={{ display: 'grid', gap: '6px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
+                          <div className="form-group"><label>Type de demande</label><input className="input" value={readonlyFormData.typeDemande} readOnly /></div>
+                          <div className="form-group"><label>Demandeur</label><input className="input" value={readonlyFormData.demandeur || 'Non renseigné'} readOnly /></div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '8px' }}>
+                          <div className="form-group"><label>Date début</label><input className="input" value={readonlyFormData.dateDebut || ''} readOnly /></div>
+                          <div className="form-group"><label>Date fin</label><input className="input" value={readonlyFormData.dateFin || ''} readOnly /></div>
+                          <div className="form-group"><label>Date de demande</label><input className="input" value={readonlyFormData.dateDemande || ''} readOnly /></div>
+                          <div className="form-group"><label>Durée (jours)</label><input className="input" value={readonlyFormData.duree ? String(readonlyFormData.duree) : ''} readOnly /></div>
+                        </div>
+                        {readonlyFormData.type === 'mission' && (
+                          <>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
+                              <div className="form-group"><label>Objet / Motif mission</label><input className="input" value={readonlyFormData.objet || ''} readOnly /></div>
+                              <div className="form-group"><label>Pays</label><input className="input" value={readonlyFormData.pays || ''} readOnly /></div>
+                              <div className="form-group"><label>Ville</label><input className="input" value={readonlyFormData.ville || ''} readOnly /></div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
+                              <div className="form-group"><label>Heure départ</label><input className="input" value={readonlyFormData.heureDepart || ''} readOnly /></div>
+                              <div className="form-group"><label>Heure retour</label><input className="input" value={readonlyFormData.heureRetour || ''} readOnly /></div>
+                              <div className="form-group"><label>Moyen de transport</label><input className="input" value={readonlyFormData.transport || ''} readOnly /></div>
+                            </div>
+                          </>
+                        )}
+                        {readonlyFormData.type === 'permission' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
+                            <div className="form-group"><label>Type permission</label><input className="input" value={readonlyFormData.typePermission || ''} readOnly /></div>
+                            <div className="form-group"><label>Sous-type</label><input className="input" value={readonlyFormData.sousType || ''} readOnly /></div>
+                          </div>
+                        )}
+                        <div className="form-group"><label>Motif / Commentaire</label><textarea className="input" value={readonlyFormData.motif || ''} readOnly rows={1} style={{ resize: 'none', maxHeight: '48px' }} /></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedWorkflowData?.normalizedType === 'mission' && (
+                    <div style={{ marginTop: '10px' }}>
+                      <CommentairesMission idMission={selectedOperation} matricule={matricule} />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Kanban boards */}
+          {!selectedOperation && (
+            <>
+              <h3 style={{ marginBottom: '10px' }}>Boite Envoyé</h3>
+              <div className="kanban-grid">
+                <div className="kanban-col orange-light">
+                  <h3>En attente ({workflowCols.enAttente.length})</h3>
+                  {workflowCols.enAttente.length === 0 ? <p className="empty-state">Aucune</p>
+                    : workflowCols.enAttente.map(o => (
+                      <div key={`ea-${o.id_operation}`} className="kanban-card" onClick={() => setSelectedOperation(o.id_operation)} style={{ cursor: 'pointer' }}>
+                        <p><strong>#{o.id_operation}</strong> – {o.type_demande}</p>
+                        <p style={{ fontSize: '0.8em', color: '#64748b' }}>{o.statut}</p>
+                      </div>
+                    ))}
+                </div>
+                <div className="kanban-col green">
+                  <h3>Validées ({workflowCols.valides.length})</h3>
+                  {workflowCols.valides.length === 0 ? <p className="empty-state">Aucune</p>
+                    : workflowCols.valides.map(o => (
+                      <div key={`ev-${o.id_operation}`} className="kanban-card" onClick={() => setSelectedOperation(o.id_operation)} style={{ cursor: 'pointer' }}>
+                        <p><strong>#{o.id_operation}</strong> – {o.type_demande}</p>
+                      </div>
+                    ))}
+                </div>
+                <div className="kanban-col red">
+                  <h3>Refusées ({workflowCols.refuses.length})</h3>
+                  {workflowCols.refuses.length === 0 ? <p className="empty-state">Aucune</p>
+                    : workflowCols.refuses.map(o => (
+                      <div key={`er-${o.id_operation}`} className="kanban-card" onClick={() => setSelectedOperation(o.id_operation)} style={{ cursor: 'pointer' }}>
+                        <p><strong>#{o.id_operation}</strong> – {o.type_demande}</p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {estValidateur && (
+                <>
+                  <div style={{ marginTop: '14px', marginBottom: '8px' }}>
+                    <h3 style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <UserCheck size={14} /> Boite Reçu (validateur)
+                    </h3>
+                  </div>
+                  <div className="kanban-grid">
+                    <div className="kanban-col orange">
+                      <h3>À valider ({aValider.length})</h3>
+                      {aValider.length === 0 ? <p className="empty-state">Aucune validation</p>
+                        : aValider.map(o => (
+                          <div key={`ra-${o.id_operation}`} className="kanban-card" onClick={() => { setSelectedOperation(o.id_operation); setWorkflowDecisionComment('') }} style={{ cursor: 'pointer' }}>
+                            <p><strong>#{o.id_operation}</strong> – {o.type_demande}</p>
+                            <p style={{ fontSize: '0.8em', color: '#64748b', marginBottom: 0 }}>Cliquer pour examiner puis décider</p>
+                          </div>
+                        ))}
+                    </div>
+                    <div className="kanban-col blue">
+                      <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle size={14} /> Validées par moi ({mesValidations.length})</h3>
+                      {mesValidations.length === 0 ? <p className="empty-state">Aucune validation</p>
+                        : mesValidations.map(o => (
+                          <div key={`rv-${o.id_operation}`} className="kanban-card" onClick={() => setSelectedOperation(o.id_operation)} style={{ cursor: 'pointer' }}>
+                            <p><strong>#{o.id_operation}</strong> – {o.type_demande}</p>
+                            <p style={{ fontSize: '0.8em', color: '#666' }}>{o.demandeur?.nom || 'N/A'}</p>
+                          </div>
+                        ))}
+                    </div>
+                    <div className="kanban-col purple">
+                      <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><XCircle size={14} /> Refusées par moi ({mesRefus.length})</h3>
+                      {mesRefus.length === 0 ? <p className="empty-state">Aucun refus</p>
+                        : mesRefus.map(o => (
+                          <div key={`rr-${o.id_operation}`} className="kanban-card" onClick={() => setSelectedOperation(o.id_operation)} style={{ cursor: 'pointer' }}>
+                            <p><strong>#{o.id_operation}</strong> – {o.type_demande}</p>
+                            <p style={{ fontSize: '0.8em', color: '#666' }}>{o.demandeur?.nom || 'N/A'}</p>
+                            {o.motif_refus && <p style={{ fontSize: '0.72em', color: '#c0392b', fontStyle: 'italic' }}>Motif: {o.motif_refus}</p>}
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          )}
         </div>
-      </div>
+      )}
     </div>
   )
 }

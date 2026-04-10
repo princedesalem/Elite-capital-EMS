@@ -117,7 +117,7 @@ export default function PerformanceReviews() {
   }, [])
 
   async function loadReviews() {
-    const res = await api.get('/api/module-store/performance_reviews').catch(() => ({ data: [] }))
+    const res = await api.get('/api/performance-reviews').catch(() => ({ data: [] }))
     setReviews(Array.isArray(res.data) ? res.data : [])
   }
 
@@ -133,17 +133,14 @@ export default function PerformanceReviews() {
       points_amelioration: pointsAmelioration,
       created_at: new Date().toISOString(),
     }
-    await api.post('/api/module-store/performance_reviews', {
-      ...newReview,
-      _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
-    }).catch(() => null)
+    await api.post('/api/performance-reviews', newReview).catch(() => null)
     await loadReviews()
     setShowForm(false); setRevieweeId(''); setScores(Array(COMPETENCES.length).fill(3)); setCommentaire(''); setPointsForts(''); setPointsAmelioration('')
   }
 
   const deleteReview = async (id) => {
     if (!window.confirm('Supprimer cette évaluation ?')) return
-    await api.delete(`/api/module-store/performance_reviews/${id}`).catch(() => null)
+    await api.delete(`/api/performance-reviews/${id}`).catch(() => null)
     await loadReviews()
   }
 

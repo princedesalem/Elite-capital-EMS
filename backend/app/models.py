@@ -548,3 +548,123 @@ class ModuleStoreItem(Base):
     created_by = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+# ── Événements ────────────────────────────────────────────────────────────────
+class Evenement(Base):
+    __tablename__ = 'evenements'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    titre = Column(String(200), nullable=False)
+    type = Column(String(50), nullable=False)
+    description = Column(Text, nullable=True)
+    lieu = Column(String(200), nullable=True)
+    date_debut = Column(String(50), nullable=False)
+    date_fin = Column(String(50), nullable=True)
+    organisateur = Column(String(200), nullable=True)
+    capacite = Column(Integer, nullable=True)
+    statut = Column(String(50), default='brouillon')
+    created_by = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ── Performance 360 ───────────────────────────────────────────────────────────
+class Review360(Base):
+    __tablename__ = 'reviews_360'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    reviewer_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    reviewee_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    scores = Column(JSON, nullable=False, default=list)
+    commentaire = Column(Text, nullable=True)
+    points_forts = Column(Text, nullable=True)
+    points_amelioration = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ── Talent Management ─────────────────────────────────────────────────────────
+class TalentMeeting(Base):
+    __tablename__ = 'talent_meetings'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    titre = Column(String(200), nullable=False)
+    manager_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    employee_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    date = Column(String(20), nullable=True)
+    agenda = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+    actions = Column(Text, nullable=True)
+    statut = Column(String(50), default='planifie')
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class TalentGoal(Base):
+    __tablename__ = 'talent_goals'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    titre = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    type = Column(String(100), nullable=True)
+    echeance = Column(String(20), nullable=True)
+    statut = Column(String(50), default='a_faire')
+    employee_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ── Workforce Planning ────────────────────────────────────────────────────────
+class WorkforcePosition(Base):
+    __tablename__ = 'workforce_positions'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    titre = Column(String(200), nullable=False)
+    direction = Column(String(200), nullable=True)
+    entite = Column(String(100), nullable=True)
+    trimestre = Column(String(10), default='T1')
+    annee = Column(String(10), nullable=True)
+    budget = Column(DECIMAL(15, 2), nullable=True)
+    priorite = Column(String(50), default='moyenne')
+    statut = Column(String(50), default='planifie')
+    notes = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ── Clubs ─────────────────────────────────────────────────────────────────────
+class Club(Base):
+    __tablename__ = 'clubs'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    nom = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    type = Column(String(100), default='Sports')
+    emoji = Column(String(10), nullable=True)
+    created_by = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ClubMembership(Base):
+    __tablename__ = 'club_memberships'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    club_id = Column(Integer, ForeignKey('clubs.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ClubActivity(Base):
+    __tablename__ = 'club_activities'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    club_id = Column(Integer, ForeignKey('clubs.id'), nullable=False)
+    titre = Column(String(200), nullable=False)
+    date = Column(String(20), nullable=True)
+    description = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ClubReviewItem(Base):
+    __tablename__ = 'club_review_items'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    club_id = Column(Integer, ForeignKey('clubs.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    rating = Column(Integer, nullable=False)
+    commentaire = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

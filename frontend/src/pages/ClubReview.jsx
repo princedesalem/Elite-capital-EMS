@@ -142,10 +142,10 @@ export default function ClubReview() {
 
   async function loadClubData() {
     const [clubsRes, membersRes, activitiesRes, reviewsRes] = await Promise.all([
-      api.get('/api/module-store/club_review_clubs').catch(() => ({ data: [] })),
-      api.get('/api/module-store/club_review_memberships').catch(() => ({ data: [] })),
-      api.get('/api/module-store/club_review_activities').catch(() => ({ data: [] })),
-      api.get('/api/module-store/club_review_reviews').catch(() => ({ data: [] })),
+      api.get('/api/clubs').catch(() => ({ data: [] })),
+      api.get('/api/clubs/memberships').catch(() => ({ data: [] })),
+      api.get('/api/clubs/activities').catch(() => ({ data: [] })),
+      api.get('/api/clubs/reviews').catch(() => ({ data: [] })),
     ])
 
     const memberList = Array.isArray(membersRes.data) ? membersRes.data : []
@@ -169,12 +169,11 @@ export default function ClubReview() {
     e.preventDefault()
     if (!clubForm.nom.trim()) return
     if (editClub) {
-      await api.put(`/api/module-store/club_review_clubs/${editClub.id}`, { ...clubForm }).catch(() => null)
+      await api.put(`/api/clubs/${editClub.id}`, { ...clubForm }).catch(() => null)
     } else {
-      await api.post('/api/module-store/club_review_clubs', {
+      await api.post('/api/clubs', {
         ...clubForm,
-        created_at: new Date().toISOString(),
-        _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
+        actor_matricule: Number(user?.matricule || user?.sub || 0) || null
       }).catch(() => null)
     }
     await loadClubData()
@@ -183,26 +182,16 @@ export default function ClubReview() {
 
   const deleteClub = async (id) => {
     if (!window.confirm('Supprimer ce club ?')) return
-    await api.delete(`/api/module-store/club_review_clubs/${id}`).catch(() => null)
-    const relatedMemberships = memberRows.filter((m) => Number(m.club_id) === Number(id))
-    const relatedActivities = activities.filter((a) => Number(a.club_id) === Number(id))
-    const relatedReviews = reviews.filter((r) => Number(r.club_id) === Number(id))
-    await Promise.all([
-      ...relatedMemberships.map((m) => api.delete(`/api/module-store/club_review_memberships/${m.id}`).catch(() => null)),
-      ...relatedActivities.map((a) => api.delete(`/api/module-store/club_review_activities/${a.id}`).catch(() => null)),
-      ...relatedReviews.map((r) => api.delete(`/api/module-store/club_review_reviews/${r.id}`).catch(() => null)),
-    ])
+    await api.delete(`/api/clubs/${id}`).catch(() => null)
     await loadClubData()
   }
 
   const joinClub = async (clubId) => {
     const alreadyMember = memberRows.some((m) => Number(m.club_id) === Number(clubId) && String(m.user_id) === String(user?.matricule))
     if (alreadyMember) return
-    await api.post('/api/module-store/club_review_memberships', {
+    await api.post('/api/clubs/memberships', {
       club_id: Number(clubId),
-      user_id: String(user?.matricule),
-      joined_at: new Date().toISOString(),
-      _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
+      user_id: Number(user?.matricule),
     }).catch(() => null)
     await loadClubData()
   }
@@ -210,18 +199,17 @@ export default function ClubReview() {
   const leaveClub = async (clubId) => {
     const row = memberRows.find((m) => Number(m.club_id) === Number(clubId) && String(m.user_id) === String(user?.matricule))
     if (!row) return
-    await api.delete(`/api/module-store/club_review_memberships/${row.id}`).catch(() => null)
+    await api.delete(`/api/clubs/memberships/${row.id}`).catch(() => null)
     await loadClubData()
   }
 
   const submitActivity = async (e) => {
     e.preventDefault()
     if (!actForm.titre.trim() || !actForm.club_id) return
-    await api.post('/api/module-store/club_review_activities', {
+    await api.post('/api/clubs/activities', {
       ...actForm,
       club_id: Number(actForm.club_id),
-      created_by: user?.matricule,
-      _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
+      created_by: Number(user?.matricule) || null,
     }).catch(() => null)
     await loadClubData()
     setActForm({ club_id: '', titre: '', date: '', description: '' }); setShowActivityForm(false)
@@ -232,13 +220,11 @@ export default function ClubReview() {
     if (!reviewForm.club_id) return
     const exists = reviews.find(r => r.club_id === Number(reviewForm.club_id) && String(r.user_id) === String(user?.matricule))
     if (exists) { alert('Vous avez déjà évalué ce club.'); return }
-    await api.post('/api/module-store/club_review_reviews', {
+    await api.post('/api/clubs/reviews', {
       ...reviewForm,
       club_id: Number(reviewForm.club_id),
       rating: Number(reviewForm.rating),
-      user_id: user?.matricule,
-      created_at: new Date().toISOString(),
-      _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
+      user_id: Number(user?.matricule) || null,
     }).catch(() => null)
     await loadClubData()
     setReviewForm({ club_id: '', rating: 5, commentaire: '' }); setShowReviewForm(false)

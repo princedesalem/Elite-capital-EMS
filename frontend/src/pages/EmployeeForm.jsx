@@ -237,10 +237,10 @@ function normalizeSexValue(value) {
 const FUNCTION_SUGGESTIONS = [
   'Administrateur Général','PCA','Directeur Audit Interne et Inspection Générale',
   'Inspecteur Générale(IG)','Auditeur',
-  "Représentants Résidents et responsables de la creation et relation d'affaires",
+  "Représentants Résidents et responsables de la création et relation d'affaires",
   'Directeur financier et Comptable(DFC)','comptable et responsable contrôle et consolidation',
   'responsable Trésorerie et financement','contrôleur de gestion','comptable',
-  'responsable des resources Humaines','chargé des resources humaines',
+  'responsable des ressources Humaines','chargé des ressources humaines',
   'responsable communication et relation publiques',
   'chargé community management accueil et courrier','infographiste et déploiement',
   'Responsable affaires juridiques & fiscalité','chargé de la fiscalité',
@@ -398,8 +398,16 @@ export default function EmployeeForm(){
     if (!form.entite) { setErr("L'entité est obligatoire."); return }
     if (!form.date_embauche) { setErr("La date d'embauche est obligatoire."); return }
     try{
-      if(id && id!=='new') await api.put(`/employees/${id}`,form)
-      else await api.post('/employees/',form)
+      const toInt = (v) => (v === '' || v === null || v === undefined) ? null : Number(v)
+      const payload = {
+        ...form,
+        id_localisation: toInt(form.id_localisation),
+        nombre_enfants: toInt(form.nombre_enfants),
+        annee_experience: toInt(form.annee_experience),
+        solde_conges: form.solde_conges !== '' && form.solde_conges !== null ? Number(form.solde_conges) : 0,
+      }
+      if(id && id!=='new') await api.put(`/employees/${id}`, payload)
+      else await api.post('/employees/', payload)
       nav('/employees')
     }catch(e){
       const detail = e?.response?.data?.detail

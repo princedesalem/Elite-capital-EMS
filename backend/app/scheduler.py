@@ -11,7 +11,7 @@ from .utils.notifications import (
     nettoyer_anciennes_notifications
 )
 from .utils.activation_cloture import verifier_delai_cloture
-from .utils.missions import verifier_alertes_rapport_mission, verifier_relances_rapport_mission
+from .utils.missions import verifier_alertes_rapport_mission, verifier_relances_rapport_mission, verifier_missions_a_activer
 from .utils.permissions import envoyer_rappel_preuves_permission
 from .utils.business_logic import calculer_augmentation_solde_mensuel
 from .db import SessionLocal
@@ -150,6 +150,26 @@ def job_relances_rapports():
         db.close()
 
 
+def job_activation_reminders():
+    """
+    Vérifie les missions validées dont le départ est dans moins de 48h et
+    qui ne sont pas encore activées. Envoie des rappels aux missionnaires.
+    À exécuter toutes les 6 heures.
+    """
+    print(f"[{datetime.now()}] Vérification des rappels d'activation de missions...")
+
+    db = SessionLocal()
+    try:
+        verifier_missions_a_activer(db)
+        print(f"[{datetime.now()}] Rappels d'activation vérifiés avec succès.")
+
+    except Exception as e:
+        print(f"[{datetime.now()}] Erreur lors des rappels d'activation: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def configurer_scheduler():
     """
     Configure APScheduler avec toutes les tâches planifiées.
@@ -195,6 +215,15 @@ def configurer_scheduler():
         name='Relances rapports de mission (toutes les 2h)',
         replace_existing=True
     )
+
+    # Rappels d'activation de mission (toutes les 6 heures)
+    scheduler.add_job(
+        job_activation_reminders,
+        CronTrigger(hour='*/6', minute=0),
+        id='job_activation_reminders',
+        name='Rappels activation missions (toutes les 6h)',
+        replace_existing=True
+    )
     
     scheduler.start()
     print("Scheduler configuré et démarré.")
@@ -202,6 +231,7 @@ def configurer_scheduler():
     print("  - Job hebdomadaire: Lundi 9h00")
     print("  - Job mensuel: 1er du mois 00h30")
     print("  - Job relances rapports: Toutes les 2 heures")
+    print("  - Job rappels activation missions: Toutes les 6 heures")
     
     return scheduler
 

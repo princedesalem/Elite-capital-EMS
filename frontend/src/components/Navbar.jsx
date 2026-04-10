@@ -161,6 +161,7 @@ export default function Navbar(){
         if (!active) return
         const newCount = Number(res?.data?.non_lues || 0)
         if (prevCountRef.current >= 0 && newCount > prevCountRef.current) {
+          window.dispatchEvent(new CustomEvent('ems:newNotification'))
           playNotifSound()
           api.get(`/api/notifications/non-lues/${matricule}`)
             .then(r => {
@@ -243,7 +244,7 @@ export default function Navbar(){
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    border: '2px solid #8d1313'
+                    border: '2px solid rgba(255,255,255,0.7)'
                   }}
                 >
                   {notificationCount > 99 ? '99+' : notificationCount}

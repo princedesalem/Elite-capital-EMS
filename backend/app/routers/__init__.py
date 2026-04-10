@@ -19,7 +19,12 @@ from . import (
     workflow_router,
     commentaires_mission_router,
     team_space_router,
-    module_store_router
+    module_store_router,
+    events_router,
+    reviews360_router,
+    talent_router,
+    workforce_router,
+    clubs_router,
 )
 
 __all__ = [
@@ -39,5 +44,10 @@ __all__ = [
     'evaluations_router',
     'workflow_router',
     'team_space_router',
-    'module_store_router'
+    'module_store_router',
+    'events_router',
+    'reviews360_router',
+    'talent_router',
+    'workforce_router',
+    'clubs_router',
 ]

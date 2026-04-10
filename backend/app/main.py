@@ -17,6 +17,7 @@ from .routers import (
     conges, permissions_router, missions_router, remplacants_router,
     notifications_router, evaluations_router, workflow_router, tasks_router,
     commentaires_mission_router, sorties_router, team_space_router, module_store_router,
+    events_router, reviews360_router, talent_router, workforce_router, clubs_router,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request
@@ -139,6 +140,11 @@ app.include_router(sorties_router.router)
 app.include_router(tasks_router.router)
 app.include_router(team_space_router.router)
 app.include_router(module_store_router.router)
+app.include_router(events_router.router)
+app.include_router(reviews360_router.router)
+app.include_router(talent_router.router)
+app.include_router(workforce_router.router)
+app.include_router(clubs_router.router)
 
 
 @app.get('/')

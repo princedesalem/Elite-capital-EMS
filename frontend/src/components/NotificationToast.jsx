@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { X, CheckCircle2, XCircle, AlertTriangle, Plane, Bell, Briefcase, MessageSquare, Clock, Star, Home, ArrowRight } from 'lucide-react'
+import { X, CheckCircle2, XCircle, AlertTriangle, Plane, Bell, Briefcase, MessageSquare, Clock, Star, Home, ArrowRight, Banknote } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 const DURATION = 10000
 
 const TYPE_META = {
   VALIDATION:          { color: '#60a5fa', Icon: CheckCircle2,   label: 'Validation' },
+  PAIEMENT:            { color: '#059669', Icon: Banknote,        label: 'Paiement' },
   REFUS:               { color: '#f87171', Icon: XCircle,        label: 'Refus' },
   ALERTE_CONGES:       { color: '#fbbf24', Icon: AlertTriangle,  label: 'Alerte congés' },
   RAPPEL_DEPART:       { color: '#38bdf8', Icon: Plane,          label: 'Départ mission' },
@@ -17,20 +18,28 @@ const TYPE_META = {
   AUTRE:               { color: '#60a5fa', Icon: Bell,           label: 'Notification' },
 }
 
-function getMeta(typeKey) {
+function getMeta(typeKey, notif) {
   const key = (typeKey || '').replace('TypeNotificationEnum.', '').toUpperCase()
+  // Override to financial icon if notification is payment-related
+  if (notif) {
+    const content = ((notif.titre || '') + ' ' + (notif.message || '')).toLowerCase()
+    if (content.includes('paiement') || content.includes('payé') || content.includes('frais')) {
+      return TYPE_META.PAIEMENT
+    }
+  }
   return TYPE_META[key] || TYPE_META.AUTRE
 }
 
-/** Maps type_demande → the right page with operationId query param */
-function getOperationRoute(typeDemande, operationId) {
+/** Maps type_demande → the right page with operationId and optional tab query params */
+function getOperationRoute(typeDemande, operationId, tab) {
   const t = (typeDemande || '').toLowerCase()
     .replace(/[éè]/g, 'e').replace(/[àâ]/g, 'a').replace(/_/g, ' ')
-  if (t.includes('conge'))      return `/rh/conges?operationId=${operationId}`
-  if (t.includes('permission')) return `/rh/permissions?operationId=${operationId}`
-  if (t.includes('frais'))      return `/rh/frais?operationId=${operationId}`
-  if (t.includes('mission'))    return `/rh/missions?operationId=${operationId}`
-  if (t.includes('sortie'))     return `/rh/sorties?operationId=${operationId}`
+  const tabParam = tab ? `&tab=${tab}` : ''
+  if (t.includes('conge'))      return `/rh/conges?operationId=${operationId}${tabParam}`
+  if (t.includes('permission')) return `/rh/permissions?operationId=${operationId}${tabParam}`
+  if (t.includes('frais'))      return `/rh/frais?operationId=${operationId}${tabParam}`
+  if (t.includes('mission'))    return `/rh/missions?operationId=${operationId}${tabParam}`
+  if (t.includes('sortie'))     return `/rh/sorties?operationId=${operationId}${tabParam}`
   return `/rh/operations?operationId=${operationId}&tab=demandes`
 }
 
@@ -51,7 +60,7 @@ export default function NotificationToast({ notification, onDismiss }) {
     setTimeout(() => onDismiss?.(), 420)
   }
 
-  const meta = getMeta(notification?.type_notification)
+  const meta = getMeta(notification?.type_notification, notification)
   const { Icon } = meta
   const isVisible = visible && !exiting
 
@@ -158,7 +167,7 @@ export default function NotificationToast({ notification, onDismiss }) {
           <div style={{ paddingLeft: 51, marginTop: 12 }}>
             <button
               onClick={() => {
-                navigate(getOperationRoute(notification.type_demande, notification.id_operation))
+                navigate(getOperationRoute(notification.type_demande, notification.id_operation, notification.workflow_bucket))
                 dismiss()
               }}
               style={{

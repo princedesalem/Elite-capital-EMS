@@ -19,6 +19,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import MFASetup from './components/MFASetup'
 import ChangePassword from './components/ChangePassword'
 import Operations from './pages/Operations'
+import WorkflowPage from './pages/WorkflowPage'
 import EvaluationsPage from './pages/EvaluationsPage'
 import NotificationsPage from './pages/NotificationsPage'
 import Organisation from './pages/Organisation'
@@ -76,6 +77,7 @@ export default function App(){
             <Route path="missions/edit/:id" element={<LeaveForm />} />
             <Route path="frais" element={<FraisPage />} />
             <Route path="operations" element={<Operations />} />
+            <Route path="workflow" element={<WorkflowPage />} />
             <Route path="missions-ig" element={<MissionsIG />} />
             <Route path="evaluations" element={<EvaluationsPage />} />
             <Route path="notifications" element={<NotificationsPage />} />

@@ -132,7 +132,7 @@ async function assertCanonicalStatusFilterOptions() {
 }
 
 async function assertRecuTabShowsCanonicalBadges() {
-  fireEvent.click(screen.getByRole('button', { name: /Recu/i }))
+  fireEvent.click(screen.getByRole('button', { name: /Re[çc]u/i }))
 
   await waitFor(() => {
     expect(screen.getAllByText('en attente', { selector: 'span' }).length).toBeGreaterThan(0)
@@ -141,12 +141,12 @@ async function assertRecuTabShowsCanonicalBadges() {
 }
 
 async function assertEnvoyeHidesSenderColumnAndRecuShowsIt() {
-  await screen.findByRole('button', { name: /Envoye/i })
-  expect(screen.queryByText(/Envoye par/i)).not.toBeInTheDocument()
+  await screen.findByRole('button', { name: /Envoy[eé]/i })
+  expect(screen.queryByText(/Envoy[eé] par/i)).not.toBeInTheDocument()
 
-  fireEvent.click(screen.getByRole('button', { name: /Recu/i }))
+  fireEvent.click(screen.getByRole('button', { name: /Re[çc]u/i }))
   await waitFor(() => {
-    expect(screen.getByText(/Envoye par/i)).toBeInTheDocument()
+    expect(screen.getByText(/Envoy[eé] par/i)).toBeInTheDocument()
   })
 }
 

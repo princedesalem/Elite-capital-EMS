@@ -277,6 +277,7 @@ def _serialize_employee(e: models.Employe, db: Session):
     pays = db.query(models.Pays).filter(models.Pays.id_pays == localisation.id_pays).first() if localisation else None
     data['id_pays'] = pays.id_pays if pays else None
     data['pays'] = pays.nom_pays if pays else None
+    data['n1_fonction'] = e.n1_fonction
     sv = e.statut_employe
     data['statut_employe'] = (sv.value if hasattr(sv, 'value') else str(sv)) if sv else 'ACTIF'
     return data
@@ -348,7 +349,8 @@ def _prepare_employee_payload(payload: schemas.EmployeBase, db: Session):
     elif 'n1' in cleaned and not cleaned['n1']:
         cleaned['n1'] = None
     # Resolve n1 from function: find the active holder of n1_fonction
-    if cleaned.get('n1_fonction') and not cleaned.get('n1'):
+    # Always re-resolve when n1_fonction is provided, even if n1 is already set (handles edits)
+    if cleaned.get('n1_fonction'):
         nf = cleaned['n1_fonction'].strip()
         holder = db.query(models.Employe).filter(
             models.Employe.fonction == nf,
@@ -356,8 +358,10 @@ def _prepare_employee_payload(payload: schemas.EmployeBase, db: Session):
         ).first()
         if holder:
             cleaned['n1'] = holder.matricule
-    elif not cleaned.get('n1_fonction') and 'n1_fonction' in cleaned:
+            cleaned['n1_fonction'] = nf
+    elif 'n1_fonction' in cleaned and not cleaned.get('n1_fonction'):
         cleaned['n1_fonction'] = None
+        cleaned['n1'] = None
     if cleaned.get('sexe') is not None:
         sexe_raw = str(cleaned.get('sexe') or '').strip().lower()
         if sexe_raw in {'m', 'masculin', 'homme'}:

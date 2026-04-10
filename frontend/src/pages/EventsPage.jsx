@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import api from '../services/api'
 import { CalendarDays, Plus, CheckCircle, Clock, FileText, X, MapPin, Users, Edit3, Trash2 } from 'lucide-react'
 import '../styles/Operations.css'
 
@@ -13,13 +14,6 @@ const STATUTS_EVENT = [
 
 const TYPES_EVENT = ['Réunion', 'Formation', 'Conférence', 'Ceremonie', 'Team Building', 'Séminaire', 'Autre']
 
-const STORAGE_KEY = 'ems_events_v1'
-
-function loadEvents() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] }
-}
-function saveEvents(ev) { localStorage.setItem(STORAGE_KEY, JSON.stringify(ev)) }
-
 const emptyForm = {
   titre: '', type: 'Réunion', description: '', lieu: '',
   date_debut: '', date_fin: '', organisateur: '', capacite: '',
@@ -28,7 +22,8 @@ const emptyForm = {
 
 export default function EventsPage() {
   const { user } = useAuth()
-  const [events, setEvents] = useState(() => loadEvents())
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(emptyForm)
@@ -40,23 +35,42 @@ export default function EventsPage() {
   const isEventManager = ['RH', 'PCA', 'ADMIN', 'AG'].includes(role)
   const isReadOnlyEvents = !isEventManager
 
-  const handleSubmit = (e) => {
-    if (!isEventManager) return
-    e.preventDefault()
-    let updated
-    if (editingId) {
-      updated = events.map(ev => ev.id === editingId ? { ...ev, ...form, updated_at: new Date().toISOString() } : ev)
-    } else {
-      updated = [{ ...form, id: Date.now(), created_by: user?.matricule, created_at: new Date().toISOString() }, ...events]
+  useEffect(() => {
+    loadEvents()
+  }, [])
+
+  const loadEvents = async () => {
+    try {
+      const res = await api.get('/api/events')
+      setEvents(Array.isArray(res.data) ? res.data : [])
+    } catch {
+      setEvents([])
+    } finally {
+      setLoading(false)
     }
-    setEvents(updated); saveEvents(updated); resetForm()
   }
 
-  const deleteEvent = (id) => {
+  const handleSubmit = async (e) => {
+    if (!isEventManager) return
+    e.preventDefault()
+    try {
+      if (editingId) {
+        await api.put(`/api/events/${editingId}`, { ...form })
+      } else {
+        await api.post('/api/events', { ...form, created_by: user?.matricule || null })
+      }
+      await loadEvents()
+    } catch { /* silent */ }
+    resetForm()
+  }
+
+  const deleteEvent = async (id) => {
     if (!isEventManager) return
     if (!window.confirm('Supprimer cet événement ?')) return
-    const updated = events.filter(ev => ev.id !== id)
-    setEvents(updated); saveEvents(updated)
+    try {
+      await api.delete(`/api/events/${id}`)
+      await loadEvents()
+    } catch { /* silent */ }
   }
 
   const editEvent = (ev) => {
@@ -65,10 +79,12 @@ export default function EventsPage() {
     setEditingId(ev.id); setShowForm(true)
   }
 
-  const changeStatut = (id, statut) => {
+  const changeStatut = async (id, statut) => {
     if (!isEventManager) return
-    const updated = events.map(ev => ev.id === id ? { ...ev, statut, updated_at: new Date().toISOString() } : ev)
-    setEvents(updated); saveEvents(updated)
+    try {
+      await api.patch(`/api/events/${id}/statut`, { statut })
+      await loadEvents()
+    } catch { /* silent */ }
   }
 
   const resetForm = () => { setForm(emptyForm); setEditingId(null); setShowForm(false) }

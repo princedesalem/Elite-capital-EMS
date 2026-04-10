@@ -226,36 +226,37 @@ def get_directions_structure_by_ville(id_localisation: int, db: Session = Depend
 
 @router.get('/villes/{id_localisation}/departements')
 def get_departements_by_ville(id_localisation: int, db: Session = Depends(get_db)):
-    """Get departments for a city"""
+    """Get departments for a city via Implantation chain (Ville → Entité → Département)."""
     ville = db.query(models.Localisation).filter(models.Localisation.id_localisation == id_localisation).first()
     if not ville:
         raise HTTPException(status_code=404, detail='Ville non trouvée')
-    
-    # Get all entites for this localisation
-    implantations = db.query(models.Implantation).filter(models.Implantation.id_localisation == id_localisation).all()
-    entite_ids = [imp.id_entite for imp in implantations]
-    
+
+    # Find entities implanted in this city
+    implantations = db.query(models.Implantation).filter(
+        models.Implantation.id_localisation == id_localisation
+    ).all()
+    entite_ids = list({i.id_entite for i in implantations})
     if not entite_ids:
         return []
-    
-    # Get all departments for entites in this localisation
-    depts = db.query(models.Departement).filter(models.Departement.id_entite.in_(entite_ids)).all()
-    
+
+    depts = db.query(models.Departement).filter(
+        models.Departement.id_entite.in_(entite_ids)
+    ).all()
+
     result = []
     for d in depts:
-        # Get entite and direction names
         entite = db.query(models.Entite).filter(models.Entite.id_entite == d.id_entite).first()
         direction = None
         if d.id_direction:
             direction = db.query(models.Direction).filter(models.Direction.id_direction == d.id_direction).first()
-        
+
         result.append({
             'dept_id': d.dept_id,
             'nom': d.nom,
             'id_entite': d.id_entite,
             'entite_nom': entite.nom if entite else '',
             'id_direction': d.id_direction,
-            'direction_nom': direction.nom if direction else ''
+            'direction_nom': direction.nom if direction else '',
         })
     return result
 
@@ -455,9 +456,9 @@ def create_direction(data: dict, db: Session = Depends(get_db)):
 
 @router.get('/departements')
 def get_all_departements(id_localisation: int = None, id_pays: int = None, db: Session = Depends(get_db)):
-    """Get all departements from database, optionally filtered by localisation or pays."""
+    """Get all departements, optionally filtered by localisation or pays via Implantation chain."""
     if id_pays is not None:
-        # Filtrer via Pays → Localisation → Implantation → Entité → Département
+        # Pays → Localisation → Implantation → Entité → Département
         locs = db.query(models.Localisation).filter(models.Localisation.id_pays == id_pays).all()
         loc_ids = [l.id_localisation for l in locs]
         if not loc_ids:
@@ -465,18 +466,18 @@ def get_all_departements(id_localisation: int = None, id_pays: int = None, db: S
         implantations = db.query(models.Implantation).filter(
             models.Implantation.id_localisation.in_(loc_ids)
         ).all()
-        entite_ids = [imp.id_entite for imp in implantations]
+        entite_ids = list({i.id_entite for i in implantations})
         if not entite_ids:
             return []
         departements = db.query(models.Departement).filter(
             models.Departement.id_entite.in_(entite_ids)
         ).all()
     elif id_localisation is not None:
-        # Filtrer via Implantation: localisation → entité → département
+        # Localisation → Implantation → Entité → Département
         implantations = db.query(models.Implantation).filter(
             models.Implantation.id_localisation == id_localisation
         ).all()
-        entite_ids = [imp.id_entite for imp in implantations]
+        entite_ids = list({i.id_entite for i in implantations})
         if not entite_ids:
             return []
         departements = db.query(models.Departement).filter(
@@ -486,22 +487,22 @@ def get_all_departements(id_localisation: int = None, id_pays: int = None, db: S
         departements = db.query(models.Departement).all()
     result = []
     for d in departements:
-        # Get entite and direction names
         entite = db.query(models.Entite).filter(models.Entite.id_entite == d.id_entite).first()
         direction = None
         if d.id_direction:
             direction = db.query(models.Direction).filter(models.Direction.id_direction == d.id_direction).first()
-        # Localisation derived from entity implantation
+        # Resolve localisation from Implantation chain
         localisation_nom = None
-        id_loc = None
         pays_nom = None
         pays_id = None
-        impl = db.query(models.Implantation).filter(models.Implantation.id_entite == d.id_entite).first()
-        if impl:
-            loc = db.query(models.Localisation).filter(models.Localisation.id_localisation == impl.id_localisation).first()
+        impl = db.query(models.Implantation).filter(
+            models.Implantation.id_entite == d.id_entite
+        ).first()
+        id_loc = impl.id_localisation if impl else None
+        if id_loc:
+            loc = db.query(models.Localisation).filter(models.Localisation.id_localisation == id_loc).first()
             if loc:
                 localisation_nom = loc.ville
-                id_loc = loc.id_localisation
                 pays = db.query(models.Pays).filter(models.Pays.id_pays == loc.id_pays).first()
                 if pays:
                     pays_nom = pays.nom_pays
@@ -553,14 +554,14 @@ def create_departement(data: dict, db: Session = Depends(get_db)):
     db.add(departement)
     db.commit()
     db.refresh(departement)
-    
+
     return {
         'dept_id': departement.dept_id,
         'nom': departement.nom,
         'id_entite': departement.id_entite,
         'entite_nom': entite.nom,
         'id_direction': departement.id_direction,
-        'direction_nom': direction.nom if direction else ''
+        'direction_nom': direction.nom if direction else '',
     }
 
 
@@ -733,14 +734,14 @@ def update_departement(dept_id: int, data: dict, db: Session = Depends(get_db)):
     departement.id_direction = id_direction
     db.commit()
     db.refresh(departement)
-    
+
     return {
         'dept_id': departement.dept_id,
         'nom': departement.nom,
         'id_entite': departement.id_entite,
         'entite_nom': entite.nom,
         'id_direction': departement.id_direction,
-        'direction_nom': direction.nom if direction else ''
+        'direction_nom': direction.nom if direction else '',
     }
 
 

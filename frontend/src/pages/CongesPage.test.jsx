@@ -158,7 +158,7 @@ describe('CongesPage', () => {
     })
 
     // Aller sur l'onglet reçu
-    fireEvent.click(screen.getByText(/recu/i))
+    fireEvent.click(screen.getByText(/Re[çc]u/i))
 
     expect(screen.queryByRole('button', { name: /approuver/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /refuser/i })).not.toBeInTheDocument()

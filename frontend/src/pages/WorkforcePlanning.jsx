@@ -36,7 +36,7 @@ export default function WorkforcePlanning() {
   }, [])
 
   async function loadPositions() {
-    const res = await api.get('/api/module-store/workforce_positions').catch(() => ({ data: [] }))
+    const res = await api.get('/api/workforce/positions').catch(() => ({ data: [] }))
     setPositions(Array.isArray(res.data) ? res.data : [])
   }
 
@@ -78,12 +78,11 @@ export default function WorkforcePlanning() {
     e.preventDefault()
     if (!formData.titre.trim()) return
     if (editPos) {
-      await api.put(`/api/module-store/workforce_positions/${editPos.id}`, { ...formData }).catch(() => null)
+      await api.put(`/api/workforce/positions/${editPos.id}`, { ...formData }).catch(() => null)
     } else {
-      await api.post('/api/module-store/workforce_positions', {
+      await api.post('/api/workforce/positions', {
         ...formData,
-        created_at: new Date().toISOString(),
-        _actor_matricule: Number(user?.matricule || user?.sub || 0) || null
+        created_by: Number(user?.matricule || user?.sub || 0) || null
       }).catch(() => null)
     }
     await loadPositions()
@@ -92,14 +91,14 @@ export default function WorkforcePlanning() {
 
   const deletePosition = async (id) => {
     if (!window.confirm('Supprimer ce poste planifié ?')) return
-    await api.delete(`/api/module-store/workforce_positions/${id}`).catch(() => null)
+    await api.delete(`/api/workforce/positions/${id}`).catch(() => null)
     await loadPositions()
   }
 
   const markFilled = async (id) => {
     const pos = positions.find((p) => p.id === id)
     if (!pos) return
-    await api.put(`/api/module-store/workforce_positions/${id}`, { ...pos, statut: 'pourvu' }).catch(() => null)
+    await api.put(`/api/workforce/positions/${id}`, { ...pos, statut: 'pourvu' }).catch(() => null)
     await loadPositions()
   }
 

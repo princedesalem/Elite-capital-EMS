@@ -61,22 +61,80 @@ def _get_frais_entities(id_operation: int, db: Session):
 
 
 @router.get('/rechercher-employes')
-def rechercher_employes(q: str = '', db: Session = Depends(get_db)):
+def rechercher_employes(q: str = '', matricule_initiateur: Optional[int] = None, db: Session = Depends(get_db)):
     """
-    Rechercher des employés par nom, prénom ou matricule pour les ajouter comme missionnaires.
+    Rechercher des employés pour les ajouter comme missionnaires.
+    Filtre selon la hiérarchie de l'initiateur :
+      - PCA / AG / ADMIN / RH : tous les employés actifs
+      - DG : employés de la même entité
+      - DIRECTEUR : employés de la même direction + DG de l'entité
+      - RESPONSABLE : employés du même département + directeur de la direction + DG de l'entité
     """
+    from sqlalchemy import or_
+
     if not q or len(q) < 2:
         return {"employes": []}
-    
-    employes = db.query(models.Employe).filter(
+
+    text_filter = (
+        models.Employe.nom.ilike(f'%{q}%') |
+        models.Employe.prenom.ilike(f'%{q}%') |
+        models.Employe.matricule.like(f'%{q}%')
+    )
+
+    base_query = db.query(models.Employe).filter(
         models.Employe.statut_employe == 'ACTIF',
-        (
-            models.Employe.nom.ilike(f'%{q}%') |
-            models.Employe.prenom.ilike(f'%{q}%') |
-            models.Employe.matricule.like(f'%{q}%')
-        )
-    ).limit(10).all()
-    
+        text_filter
+    )
+
+    if matricule_initiateur:
+        initiateur = db.query(models.Employe).filter(models.Employe.matricule == matricule_initiateur).first()
+        if initiateur:
+            role = access_control.get_actor_role_from_db(matricule_initiateur, db)
+
+            if role not in {'PCA', 'AG', 'ADMIN', 'RH'}:
+                # Trouver les DG de la même entité via rôle DB
+                dg_matricules = []
+                if initiateur.id_entite:
+                    dg_role = db.query(models.Role).filter(models.Role.name == 'DG').first()
+                    if dg_role:
+                        dg_emps = db.query(models.Employe).join(
+                            models.Utilisateur,
+                            models.Utilisateur.matricule == models.Employe.matricule
+                        ).filter(
+                            models.Utilisateur.role_id == dg_role.id,
+                            models.Employe.id_entite == initiateur.id_entite
+                        ).all()
+                        dg_matricules = [emp.matricule for emp in dg_emps]
+
+                if role == 'DG':
+                    if initiateur.id_entite:
+                        base_query = base_query.filter(models.Employe.id_entite == initiateur.id_entite)
+
+                elif role == 'DIRECTEUR':
+                    conditions = []
+                    if initiateur.id_direction:
+                        conditions.append(models.Employe.id_direction == initiateur.id_direction)
+                    if dg_matricules:
+                        conditions.append(models.Employe.matricule.in_(dg_matricules))
+                    if conditions:
+                        base_query = base_query.filter(or_(*conditions))
+
+                else:  # RESPONSABLE ou autre rôle hiérarchique
+                    conditions = []
+                    if initiateur.dept_id:
+                        conditions.append(models.Employe.dept_id == initiateur.dept_id)
+                    if initiateur.id_direction:
+                        direction = db.query(models.Direction).filter(
+                            models.Direction.id_direction == initiateur.id_direction
+                        ).first()
+                        if direction and direction.id_directeur:
+                            conditions.append(models.Employe.matricule == direction.id_directeur)
+                    if dg_matricules:
+                        conditions.append(models.Employe.matricule.in_(dg_matricules))
+                    if conditions:
+                        base_query = base_query.filter(or_(*conditions))
+
+    employes = base_query.limit(10).all()
     return {
         "employes": [
             {
@@ -172,7 +230,7 @@ def creer_mission(
         )
     
     # Vérifier que les moyens de transport sont valides
-    moyens_valides = ['routiere', 'aerien', 'ferroviaire', 'maritime']
+    moyens_valides = ['routiere', 'routier', 'aerien', 'ferroviaire', 'maritime']
     for moyen in moyens_transport:
         if moyen.lower() not in moyens_valides:
             raise HTTPException(
@@ -332,7 +390,7 @@ def creer_mission_multi_segments(
         segment.country_code = geo_data['country_code']
     
     # Vérifier que les moyens de transport sont valides
-    moyens_valides = ['routiere', 'aerien', 'ferroviaire', 'maritime']
+    moyens_valides = ['routiere', 'routier', 'aerien', 'ferroviaire', 'maritime']
     for segment in mission_data.segments:
         moyen = segment.moyen_transport or 'aerien'
         if moyen.lower() not in moyens_valides:
@@ -648,6 +706,7 @@ async def televerser_rapport(
 ):
     """
     Téléverser le rapport de mission (obligatoire dans les 48h après retour).
+    Seuls les missionnaires assignés peuvent téléverser.
     """
     operation = db.query(models.Operation).filter(
         models.Operation.id_operation == id_operation
@@ -656,15 +715,20 @@ async def televerser_rapport(
     if not operation:
         raise HTTPException(status_code=404, detail="Opération introuvable")
     
-    if operation.matricule != matricule:
-        raise HTTPException(status_code=403, detail="Non autorisé")
+    # Seuls les missionnaires assignés peuvent téléverser le rapport
+    is_missionnaire = db.query(models.MissionnairesMission).filter(
+        models.MissionnairesMission.id_mission == id_operation,
+        models.MissionnairesMission.matricule == matricule
+    ).first() is not None
+    if not is_missionnaire:
+        raise HTTPException(status_code=403, detail="Seuls les missionnaires assignés peuvent téléverser le rapport")
     
     # Créer le dossier uploads
     upload_dir = "uploads/rapports_missions"
     os.makedirs(upload_dir, exist_ok=True)
     
     # Sauvegarder le fichier
-    file_path = os.path.join(upload_dir, f"{id_operation}_{fichier.filename}")
+    file_path = os.path.join(upload_dir, fichier.filename)
     
     with open(file_path, "wb") as f:
         content = await fichier.read()
@@ -758,6 +822,8 @@ def obtenir_statut_mission(id_operation: int, db: Session = Depends(get_db)):
         "validation_complete": validation_complete,
         "peut_demander_frais": validation_complete,  # Frais seulement après validation complète
         "rapport_fourni": rapport_fourni,
+        "rapport_televerse": rapport_fourni,
+        "date_telechargement_rapport": mission.date_telechargement_rapport.isoformat() if mission.date_telechargement_rapport else None,
         "frais_deja_demandes": frais_existants is not None,
         "prochain_validateur": prochain_role
     }
@@ -817,6 +883,9 @@ def creer_demande_frais(
     if not success:
         raise HTTPException(status_code=400, detail=message)
     
+    # Auto-valider si le demandeur est PCA/AG (séquence de validation vide)
+    workflow.auto_valider_si_sequence_vide(frais.id_frais, matricule, db)
+    
     return {
         "id_frais": frais.id_frais,
         "id_operation": frais.id_operation,
@@ -834,12 +903,19 @@ def obtenir_detail_frais(id_operation: int, db: Session = Depends(get_db)):
     if not operation or not frais:
         raise HTTPException(status_code=404, detail='Demande de frais introuvable')
 
+    demandeur_emp = db.query(models.Employe).filter(models.Employe.matricule == operation.matricule).first()
     return {
         'id_operation': operation.id_operation,
         'id_frais': frais.id_frais,
         'id_mission': frais.id_mission,
         'statut': operation.statut,
         'date_demande': operation.date_demande,
+        'demandeur': {
+            'matricule': operation.matricule,
+            'nom': demandeur_emp.nom if demandeur_emp else None,
+            'prenom': demandeur_emp.prenom if demandeur_emp else None,
+            'fonction': demandeur_emp.fonction if demandeur_emp else None,
+        },
         'motif': operation.motif,
         'justificatif': frais.justificatif_de_frais,
         'frais_transport_voyage': float(frais.frais_transport_voyage or 0),
@@ -847,6 +923,7 @@ def obtenir_detail_frais(id_operation: int, db: Session = Depends(get_db)):
         'frais_deplacement': float(frais.frais_deplacement or 0),
         'frais_nutrition': float(frais.frais_nutrition or 0),
         'total_frais': float(frais.total_frais or 0),
+        'preuves_paiement': (json.loads(frais.preuves_paiement) if isinstance(frais.preuves_paiement, str) else frais.preuves_paiement) if frais.preuves_paiement else [],
         'mission': {
             'id_operation': mission_operation.id_operation if mission_operation else frais.id_mission,
             'titre': mission_operation.titre if mission_operation else None,
@@ -857,8 +934,15 @@ def obtenir_detail_frais(id_operation: int, db: Session = Depends(get_db)):
             'moyens_transport': (json.loads(mission.moyens_transport) if mission and isinstance(mission.moyens_transport, str) else (mission.moyens_transport if mission and mission.moyens_transport else [])),
             'heure_arrivee': None,
             'heure_retour': mission.heure_retour if mission else None,
-        }
+        },
+        'frais_valides_missionnaire': mission.frais_valides_missionnaire if mission else False,
+        'frais_valides_rh': mission.frais_valides_rh if mission else False,
+        'frais_payes': mission.frais_payes if mission else False,
+        'date_validation_frais_missionnaire': mission.date_validation_frais_missionnaire.isoformat() if mission and mission.date_validation_frais_missionnaire else None,
+        'date_validation_frais_rh': mission.date_validation_frais_rh.isoformat() if mission and mission.date_validation_frais_rh else None,
+        'date_paiement_frais': mission.date_paiement_frais.isoformat() if mission and mission.date_paiement_frais else None,
     }
+
 
 
 @router.put('/frais/{id_operation}/modifier')
@@ -951,26 +1035,76 @@ def annuler_demande_frais(id_operation: int, request: Request, db: Session = Dep
     }
 
 
+@router.delete('/frais/{id_frais}/supprimer-preuve')
+def supprimer_preuve_frais(
+    id_frais: int,
+    matricule: int,
+    index: int,
+    db: Session = Depends(get_db)
+):
+    frais = db.query(models.Frais).filter(models.Frais.id_frais == id_frais).first()
+    if not frais:
+        raise HTTPException(status_code=404, detail="Frais introuvable")
+    is_missionnaire = db.query(models.MissionnairesMission).filter(
+        models.MissionnairesMission.id_mission == frais.id_mission,
+        models.MissionnairesMission.matricule == matricule
+    ).first() is not None
+    if not is_missionnaire:
+        raise HTTPException(status_code=403, detail="Seuls les missionnaires assignés peuvent supprimer les preuves")
+    raw = frais.preuves_paiement
+    if isinstance(raw, str):
+        try:
+            preuves = json.loads(raw)
+        except Exception:
+            preuves = []
+    elif isinstance(raw, list):
+        preuves = list(raw)
+    else:
+        preuves = []
+    if index < 0 or index >= len(preuves):
+        raise HTTPException(status_code=404, detail="Preuve introuvable à cet index")
+    preuve = preuves[index]
+    chemin = ''
+    if isinstance(preuve, dict):
+        chemin = preuve.get('fichier') or preuve.get('chemin_fichier') or preuve.get('chemin') or ''
+    if chemin and os.path.exists(chemin):
+        os.remove(chemin)
+    preuves.pop(index)
+    frais.preuves_paiement = json.dumps(preuves)
+    db.commit()
+    return {"message": "Preuve supprimée avec succès"}
+
+
 @router.post('/frais/{id_frais}/televerser-preuves')
 async def televerser_preuves_frais(
     id_frais: int,
     type_preuve: str,  # ticket, recu, facture, etc.
+    matricule: int = Query(..., description="Matricule du missionnaire"),
     fichier: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
     """
     Téléverser les preuves de paiement pour une demande de frais.
+    Seuls les missionnaires assignés à la mission peuvent téléverser.
     """
     frais = db.query(models.Frais).filter(models.Frais.id_frais == id_frais).first()
     if not frais:
         raise HTTPException(status_code=404, detail="Frais introuvable")
+    
+    # Vérifier que l'utilisateur est un missionnaire assigné à cette mission
+    is_missionnaire = db.query(models.MissionnairesMission).filter(
+        models.MissionnairesMission.id_mission == frais.id_mission,
+        models.MissionnairesMission.matricule == matricule
+    ).first() is not None
+    if not is_missionnaire:
+        raise HTTPException(status_code=403, detail="Seuls les missionnaires assignés peuvent téléverser les preuves")
     
     # Créer le dossier uploads
     upload_dir = "uploads/preuves_frais"
     os.makedirs(upload_dir, exist_ok=True)
     
     # Sauvegarder le fichier
-    file_path = os.path.join(upload_dir, f"{id_frais}_{type_preuve}_{fichier.filename}")
+    file_path = os.path.join(upload_dir, fichier.filename)
     
     with open(file_path, "wb") as f:
         content = await fichier.read()
@@ -978,7 +1112,7 @@ async def televerser_preuves_frais(
     
     # Enregistrer dans la BDD
     success, message = mission_utils.televerser_preuves_frais(
-        frais.id_operation, type_preuve, file_path, db
+        frais.id_frais, type_preuve, file_path, db
     )
     
     if not success:
@@ -1253,13 +1387,18 @@ def valider_frais_missionnaire(
     rh_employees = db.query(models.Employe).filter(
         models.Employe.fonction.ilike('%RH%')
     ).all()
-    
+
+    _emp_miss = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
+    _nom_miss = f"{_emp_miss.prenom} {_emp_miss.nom}" if _emp_miss else f"Matricule {matricule}"
+    _op_miss = db.query(models.Operation).filter(models.Operation.id_operation == id_mission).first()
+    _titre_miss = (_op_miss.titre or f"Mission #{id_mission}") if _op_miss else f"Mission #{id_mission}"
+
     for rh in rh_employees:
         notifications.creer_notification(
             matricule=rh.matricule,
             type_notification=models.TypeNotificationEnum.VALIDATION,
-            titre=f"Frais mission #{id_mission} validés par missionnaire",
-            message=f"Le missionnaire a validé les frais de la mission #{id_mission}. En attente de validation RH pour paiement.",
+            titre=f"Paiement frais requis – {_titre_miss}",
+            message=f"{_nom_miss} a confirmé la réception des frais pour la mission #{id_mission} ({_titre_miss}). Rendez-vous dans Frais de Mission (onglet Reçu) pour valider le paiement.",
             id_operation=id_mission,
             db=db
         )
@@ -1289,9 +1428,20 @@ def valider_paiement_rh(
     if not matricule:
         raise HTTPException(status_code=400, detail="Matricule requis")
     
-    # Vérifier que l'utilisateur est RH
+    # Vérifier que l'utilisateur est RH (via rôle DB ou champ fonction)
     employe = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
-    if not employe or not (employe.fonction and 'RH' in employe.fonction.upper()):
+    if not employe:
+        raise HTTPException(status_code=403, detail="Employé introuvable")
+    _utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.matricule == matricule).first()
+    _role_db = None
+    if _utilisateur:
+        _role_obj = db.query(models.Role).filter(models.Role.id == _utilisateur.role_id).first()
+        _role_db = (_role_obj.name or '').upper() if _role_obj else None
+    _est_rh = (
+        (_role_db in ('RH', 'ADMIN', 'PCA', 'AG')) or
+        (employe.fonction and 'RH' in employe.fonction.upper())
+    )
+    if not _est_rh:
         raise HTTPException(status_code=403, detail="Seul le RH peut valider le paiement des frais")
     
     # Vérifier que le missionnaire a validé les frais
@@ -1329,12 +1479,30 @@ def valider_paiement_rh(
         notifications.creer_notification(
             matricule=mat,
             type_notification=models.TypeNotificationEnum.AUTRE,
-            titre=f"✅ Frais mission #{id_mission} payés",
+            titre=f"Paiement frais – Mission #{id_mission} confirmé",
             message=f"Le RH a validé le paiement de vos frais pour la mission #{id_mission}.",
             id_operation=id_mission,
             db=db
         )
-    
+
+    # Notifier les validateurs du workflow
+    _validateurs_pay = db.query(models.Validation).filter(
+        models.Validation.id_operation == id_mission,
+        models.Validation.statut_validation == 'validé'
+    ).all()
+    _op_pay = db.query(models.Operation).filter(models.Operation.id_operation == id_mission).first()
+    _titre_pay = (_op_pay.titre or f"Mission #{id_mission}") if _op_pay else f"Mission #{id_mission}"
+    for _v in _validateurs_pay:
+        if _v.matricule_validateur and _v.matricule_validateur not in matricules_notifies:
+            notifications.creer_notification(
+                matricule=_v.matricule_validateur,
+                type_notification=models.TypeNotificationEnum.AUTRE,
+                titre=f"Paiement frais – {_titre_pay}",
+                message=f"Les frais de la mission #{id_mission} ({_titre_pay}) ont été payés et confirmés par le RH.",
+                id_operation=id_mission,
+                db=db
+            )
+
     return {
         "message": "Paiement validé par le RH",
         "frais_payes": True,
@@ -1350,9 +1518,13 @@ def obtenir_statut_paiement_frais(id_mission: int, db: Session = Depends(get_db)
     mission = db.query(models.Mission).filter(models.Mission.id_mission == id_mission).first()
     if not mission:
         raise HTTPException(status_code=404, detail="Mission non trouvée")
-    
+
+    frais = db.query(models.Frais).filter(models.Frais.id_mission == id_mission).first()
+
     return {
         "id_mission": id_mission,
+        "id_frais": frais.id_frais if frais else None,
+        "id_frais_operation": frais.id_operation if frais else None,
         "frais_valides_missionnaire": mission.frais_valides_missionnaire or False,
         "frais_valides_rh": mission.frais_valides_rh or False,
         "frais_payes": mission.frais_payes or False,
@@ -1360,6 +1532,57 @@ def obtenir_statut_paiement_frais(id_mission: int, db: Session = Depends(get_db)
         "date_validation_frais_rh": mission.date_validation_frais_rh.isoformat() if mission.date_validation_frais_rh else None,
         "date_paiement_frais": mission.date_paiement_frais.isoformat() if mission.date_paiement_frais else None
     }
+
+
+@router.get('/{id_operation}/rapport')
+def obtenir_rapport_mission(id_operation: int, db: Session = Depends(get_db)):
+    """
+    Retourne les informations du rapport téléversé pour une mission.
+    """
+    mission = db.query(models.Mission).filter(models.Mission.id_mission == id_operation).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+
+    if not mission.rapport_televerse or not mission.rapport:
+        return {"rapport_televerse": False, "fichier": None, "date": None}
+
+    chemin = mission.rapport
+    nom_fichier = chemin.split('/')[-1] if '/' in chemin else chemin
+    return {
+        "rapport_televerse": True,
+        "fichier": {
+            "chemin": chemin,
+            "nom_fichier": nom_fichier,
+            "url": f"/api/{chemin.lstrip('/')}",
+        },
+        "date": mission.date_telechargement_rapport.isoformat() if mission.date_telechargement_rapport else None,
+    }
+
+
+@router.delete('/{id_operation}/supprimer-rapport')
+def supprimer_rapport_mission(
+    id_operation: int,
+    matricule: int,
+    db: Session = Depends(get_db)
+):
+    is_missionnaire = db.query(models.MissionnairesMission).filter(
+        models.MissionnairesMission.id_mission == id_operation,
+        models.MissionnairesMission.matricule == matricule
+    ).first() is not None
+    if not is_missionnaire:
+        raise HTTPException(status_code=403, detail="Seuls les missionnaires assignés peuvent supprimer le rapport")
+    mission = db.query(models.Mission).filter(models.Mission.id_mission == id_operation).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+    if not mission.rapport_televerse or not mission.rapport:
+        raise HTTPException(status_code=404, detail="Aucun rapport à supprimer")
+    if os.path.exists(mission.rapport):
+        os.remove(mission.rapport)
+    mission.rapport = None
+    mission.rapport_televerse = False
+    mission.date_telechargement_rapport = None
+    db.commit()
+    return {"message": "Rapport supprimé avec succès"}
 
 
 @router.post('/{id_mission}/marquer-paye')
@@ -1396,7 +1619,7 @@ def marquer_frais_paye(id_mission: int, request: Request, db: Session = Depends(
         notifications.creer_notification(
             matricule=mat,
             type_notification=models.TypeNotificationEnum.AUTRE,
-            titre=f"Frais mission #{id_mission} payés",
+            titre=f"Paiement frais – Mission #{id_mission} confirmé",
             message=f"Le RH a confirmé le paiement des frais pour la mission #{id_mission}.",
             id_operation=id_mission,
             db=db
@@ -1419,7 +1642,6 @@ def obtenir_missions_en_tant_que_missionnaire(matricule: int, db: Session = Depe
         return []
     operations = db.query(models.Operation).filter(
         models.Operation.id_operation.in_(mission_ids),
-        models.Operation.matricule != matricule,
         models.Operation.type_demande == 'Mission'
     ).order_by(models.Operation.date_debut.desc()).all()
     result = []
@@ -1445,6 +1667,14 @@ def obtenir_missions_en_tant_que_missionnaire(matricule: int, db: Session = Depe
                     moyens_transport = [raw]
             else:
                 moyens_transport = raw
+        activation = db.query(models.Activation).filter(
+            models.Activation.id_operation == op.id_operation,
+            models.Activation.type_action == models.TypeActionEnum.ACTIVATION
+        ).first()
+        cloture = db.query(models.Activation).filter(
+            models.Activation.id_operation == op.id_operation,
+            models.Activation.type_action == models.TypeActionEnum.CLOTURE
+        ).first()
         result.append({
             "id_operation": op.id_operation,
             "date_debut": op.date_debut,
@@ -1460,6 +1690,21 @@ def obtenir_missions_en_tant_que_missionnaire(matricule: int, db: Session = Depe
             "missionnaires_noms": missionnaires_noms,
             "initiateur_matricule": op.matricule,
             "initiateur_nom": f"{initiateur.prenom} {initiateur.nom}" if initiateur else f"#{op.matricule}",
+            # Activation fields needed by initRowEtatFromApi
+            "activation_demandeur_fait": activation.demandeur_fait if activation else False,
+            "activation_rh_fait": activation.rh_fait if activation else False,
+            "activation_complete": (activation.statut_final == models.StatutFinalEnum.COMPLETE) if activation else False,
+            "activation_date_demandeur": activation.date_demandeur if activation else None,
+            "activation_date_rh": activation.date_rh if activation else None,
+            # Cloture fields
+            "cloture_demandeur_fait": cloture.demandeur_fait if cloture else False,
+            "cloture_complete": (cloture.statut_final == models.StatutFinalEnum.COMPLETE) if cloture else False,
+            # Payment fields
+            "frais_payes": mission.frais_payes if mission else False,
+            "frais_valides_missionnaire": mission.frais_valides_missionnaire if mission else False,
+            "frais_valides_rh": mission.frais_valides_rh if mission else False,
+            "type_demande": "Mission",
+            "motif": op.motif,
         })
     return result
 

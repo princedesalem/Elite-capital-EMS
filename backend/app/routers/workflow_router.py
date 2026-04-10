@@ -12,6 +12,75 @@ from ..utils import workflow as wf_utils
 router = APIRouter(prefix='/api/workflow', tags=['workflow'])
 
 
+def _notifier_missionnaires_mission_validee(id_operation: int, operation: models.Operation, db: Session):
+    """
+    Quand une mission est définitivement validée, notifie chaque missionnaire avec un lien
+    vers la page frais, et notifie leurs supérieurs hiérarchiques (chaîne n1).
+    """
+    from ..utils import notifications as notif_utils
+
+    # Récupérer tous les missionnaires assignés
+    missionnaires = db.query(models.MissionnairesMission).filter(
+        models.MissionnairesMission.id_mission == id_operation
+    ).all()
+
+    matricules_missionnaires = [m.matricule for m in missionnaires]
+    # Si pas de ligne MissionnairesMission (mission simple), utiliser l'initiateur
+    if not matricules_missionnaires:
+        matricules_missionnaires = [operation.matricule]
+
+    deja_notifies = set()
+
+    for mat in matricules_missionnaires:
+        # Notifier le missionnaire avec lien vers frais
+        notif_utils.creer_notification(
+            matricule=mat,
+            type_notification='INFO',
+            titre="Mission validée – soumettez vos frais",
+            message=(
+                f"Votre mission #{id_operation} a été validée. "
+                f"Rendez-vous dans Frais de Mission pour soumettre votre demande de frais (mission_id={id_operation})."
+            ),
+            id_operation=id_operation,
+            db=db,
+        )
+        # Rappel d'activation : le missionnaire doit activer sa mission avant le départ
+        notif_utils.creer_notification(
+            matricule=mat,
+            type_notification='ALERTE',
+            titre="Action requise – Activez votre mission",
+            message=(
+                f"La mission #{id_operation} a été approuvée. "
+                f"Pensez à l'activer avant votre départ depuis l'onglet « Reçu » dans la page Missions (type_demande=Mission)."
+            ),
+            id_operation=id_operation,
+            db=db,
+        )
+        deja_notifies.add(mat)
+
+        # Notifier la hiérarchie (remontée via n1, max 5 niveaux)
+        employe = db.query(models.Employe).filter(models.Employe.matricule == mat).first()
+        superieur_mat = employe.n1 if employe else None
+        niveau = 0
+        while superieur_mat and niveau < 5:
+            if superieur_mat not in deja_notifies:
+                notif_utils.creer_notification(
+                    matricule=superieur_mat,
+                    type_notification='INFO',
+                    titre="Mission validée",
+                    message=(
+                        f"La mission #{id_operation} de "
+                        f"{employe.prenom} {employe.nom} a été validée."
+                    ),
+                    id_operation=id_operation,
+                    db=db,
+                )
+                deja_notifies.add(superieur_mat)
+            sup_emp = db.query(models.Employe).filter(models.Employe.matricule == superieur_mat).first()
+            superieur_mat = sup_emp.n1 if sup_emp else None
+            niveau += 1
+
+
 def _serialize_operation_with_demandeur(operation: models.Operation, db: Session) -> Dict:
     demandeur = db.query(models.Employe).filter(
         models.Employe.matricule == operation.matricule
@@ -53,7 +122,7 @@ def _serialize_operation_with_demandeur(operation: models.Operation, db: Session
             models.PreuvePermission.id_perm_c == operation.id_operation
         ).count()
 
-    return {
+    result = {
         'id_operation': operation.id_operation,
         'type_demande': operation.type_demande,
         'titre': operation.titre,
@@ -95,6 +164,33 @@ def _serialize_operation_with_demandeur(operation: models.Operation, db: Session
         'est_conventionnelle': bool(perm_conv) if perm_conv is not None else None,
         'preuves_televersees': preuves_count > 0 if perm_conv else None,
     }
+
+    # Enrichissement spécifique aux missions
+    if (operation.type_demande or '').lower() == 'mission':
+        _mission = db.query(models.Mission).filter(
+            models.Mission.id_mission == operation.id_operation
+        ).first()
+        _mm_rows = db.query(models.MissionnairesMission).filter(
+            models.MissionnairesMission.id_mission == operation.id_operation
+        ).all()
+        _noms = []
+        for _mm in _mm_rows:
+            _emp = db.query(models.Employe).filter(
+                models.Employe.matricule == _mm.matricule
+            ).first()
+            if _emp:
+                _noms.append(f"{_emp.prenom} {_emp.nom}")
+        result.update({
+            'pays': _mission.pays if _mission else None,
+            'ville': _mission.ville if _mission else None,
+            'missionnaires_noms': _noms,
+            'frais_payes': bool(_mission.frais_payes) if _mission else False,
+            'frais_valides_missionnaire': bool(_mission.frais_valides_missionnaire) if _mission else False,
+            'frais_valides_rh': bool(_mission.frais_valides_rh) if _mission else False,
+            'date_paiement_frais': _mission.date_paiement_frais.isoformat() if _mission and _mission.date_paiement_frais else None,
+        })
+
+    return result
 
 
 @router.get('/mes-demandes/{matricule}')
@@ -237,6 +333,12 @@ def valider_operation(
     
     if not success:
         raise HTTPException(status_code=400, detail=message)
+    
+    # Si c'est une mission définitivement validée → notifier missionnaires et hiérarchie
+    if statut == 'validé':
+        op = db.query(models.Operation).filter(models.Operation.id_operation == id_operation).first()
+        if op and (op.statut or '').lower() == 'validé' and (op.type_demande or '').lower() == 'mission':
+            _notifier_missionnaires_mission_validee(id_operation, op, db)
     
     # Obtenir le prochain validateur si validé
     prochain_role, prochain_matricule = wf_utils.obtenir_prochain_validateur(id_operation, db)

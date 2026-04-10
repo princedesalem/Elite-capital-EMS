@@ -6,9 +6,47 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
+import re
+
 from ..db import get_db
 from .. import models
 from ..utils import notifications as notif_utils
+
+
+def _enrichir_notif(titre, message, id_operation, db):
+    """Résout les matricules bruts et 'son opération' dans les notifications stockées."""
+    def _sub(t):
+        if not t:
+            return t
+
+        def _r(m):
+            try:
+                e = db.query(models.Employe).filter(
+                    models.Employe.matricule == int(m.group(1))
+                ).first()
+                return f"{e.prenom} {e.nom}" if e else m.group(0)
+            except Exception:
+                return m.group(0)
+
+        t = re.sub(r"[Ll]'[Ee]mploy[\xe9e]\s+(\d+)", _r, t)
+        t = re.sub(r"(?<!['])[Ee]mploy[\xe9e]\s+(\d+)", _r, t)
+        return t
+
+    titre = _sub(titre or '')
+    message = _sub(message or '')
+    if id_operation and ('son op' in message or 'son op' in titre):
+        try:
+            op = db.query(models.Operation).filter(
+                models.Operation.id_operation == id_operation
+            ).first()
+            if op:
+                _tp = (op.type_demande or 'opération').lower()
+                _lp = f"la {_tp} \u00ab {op.titre} \u00bb" if op.titre else f"la {_tp}"
+                titre = titre.replace('son opération', _lp)
+                message = message.replace('son opération', _lp)
+        except Exception:
+            pass
+    return titre, message
 from ..utils import security
 from ..utils import webpush as webpush_utils
 
@@ -162,23 +200,26 @@ def obtenir_notifications_non_lues(matricule: int, db: Session = Depends(get_db)
         models.Notification.lue == False  # noqa: E712
     ).order_by(models.Notification.date_creation.desc()).all()
 
-    return [
-        {
+    result = []
+    for n in notifications:
+        t, m = _enrichir_notif(n.titre, n.message, n.id_operation, db)
+        op = (
+            db.query(models.Operation)
+            .filter(models.Operation.id_operation == n.id_operation)
+            .first()
+        ) if n.id_operation else None
+        result.append({
             "id_notification": n.id_notification,
             "type_notification": n.type_notification,
-            "titre": n.titre,
-            "message": n.message,
+            "titre": t,
+            "message": m,
             "lue": n.lue,
             "date_creation": n.date_creation,
             "id_operation": n.id_operation,
-            "type_demande": (
-                db.query(models.Operation.type_demande)
-                .filter(models.Operation.id_operation == n.id_operation)
-                .scalar() if n.id_operation else None
-            ),
-        }
-        for n in notifications
-    ]
+            "type_demande": op.type_demande if op else None,
+            "workflow_bucket": 'envoye' if (op and op.matricule == n.matricule) else 'recu',
+        })
+    return result
 
 
 @router.get('/toutes/{matricule}')
@@ -194,24 +235,27 @@ def obtenir_toutes_notifications(
         models.Notification.matricule == matricule
     ).order_by(models.Notification.date_creation.desc()).limit(limite).all()
     
-    return [
-        {
+    result = []
+    for n in notifications:
+        t, m = _enrichir_notif(n.titre, n.message, n.id_operation, db)
+        op = (
+            db.query(models.Operation)
+            .filter(models.Operation.id_operation == n.id_operation)
+            .first()
+        ) if n.id_operation else None
+        result.append({
             "id_notification": n.id_notification,
             "type_notification": n.type_notification,
-            "titre": n.titre,
-            "message": n.message,
+            "titre": t,
+            "message": m,
             "lue": n.lue,
             "date_creation": n.date_creation,
             "date_lecture": n.date_lecture,
             "id_operation": n.id_operation,
-            "type_demande": (
-                db.query(models.Operation.type_demande)
-                .filter(models.Operation.id_operation == n.id_operation)
-                .scalar() if n.id_operation else None
-            ),
-        }
-        for n in notifications
-    ]
+            "type_demande": op.type_demande if op else None,
+            "workflow_bucket": 'envoye' if (op and op.matricule == n.matricule) else 'recu',
+        })
+    return result
 
 
 @router.put('/{id_notification}/marquer-lue')

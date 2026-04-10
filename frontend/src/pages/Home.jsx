@@ -448,8 +448,8 @@ export default function Home() {
                 </h2>
               </div>
               <p style={{ color: '#606060', marginBottom: 12, lineHeight: 1.45, fontSize: '0.92rem' }}>
-                Bienvenue sur votre espace personnalisé de EMS. Accédez rapidement à vos taches, 
-                consultez vos congés etc  et gérez vos informations professionnelle.
+                Bienvenue sur votre espace personnalisé de EMS. Accédez rapidement à vos tâches, 
+                consultez vos congés, etc. et gérez vos informations professionnelles.
               </p>
               <div style={{ display: 'flex', gap: 12 }}>
                 <Link to="/dashboard" className="button" style={{ textDecoration: 'none', display: 'inline-flex', alignItems:'center', gap:6, padding: '7px 10px', fontSize: '0.82rem' }}>

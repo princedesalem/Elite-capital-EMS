@@ -37,6 +37,7 @@ class EmployeBase(BaseModel):
     direction: Optional[str] = None
     anciennete: Optional[str] = None
     n1: Optional[int | str] = None
+    n1_fonction: Optional[str] = None
     statut_employe: Optional[str] = None
     photo_url: Optional[str] = None
 

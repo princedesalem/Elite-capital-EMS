@@ -68,7 +68,6 @@ const MODULES = [
         {label: 'Demandes de Sortie',path: '/rh/sorties'},
         {label: 'Remplaçants',       path: '/rh/remplacants'},
       ]},
-      {label: 'Opérations', path: '/rh/operations'},
       {label: 'Missions', path: '/rh/missions', isGroup: true, groupSubs: [
         {label: 'Missions',          path: '/rh/missions'},
         {label: 'Frais de mission',  path: '/rh/frais'},
@@ -76,7 +75,7 @@ const MODULES = [
       ]},
       {label: 'Évaluations', path: '/rh/evaluations'},
       {label: 'Calendrier Congés', path: '/rh/calendrier-conge'},
-      {label: 'Workflow', path: '/rh/operations?tab=workflow'},
+      {label: 'Workflow', path: '/rh/workflow'},
       {label: 'Tâches', path: '/rh/tasks'},
       {label: 'Événements', path: '/rh/events'},
       {label: 'Analytics RH', path: '/rh/analytics'},
@@ -148,7 +147,7 @@ export default function RHLayout() {
   const isFullAccessRole = ['ADMIN', 'PCA', 'AG'].includes(role)
   const hiddenByRole = {
     EMPLOYE: new Set(['Tâches', 'Analytics RH', 'Workforce Planning', 'Talent Management', 'Sandbox']),
-    RESPONSABLE: new Set(['Tâches', 'Workforce Planning', 'Talent Management', 'Sandbox', 'Workflow']),
+    RESPONSABLE: new Set(['Tâches', 'Workforce Planning', 'Talent Management', 'Sandbox']),
     DIRECTEUR: new Set(['Tâches', 'Workforce Planning', 'Talent Management', 'Sandbox']),
     DG: new Set(['Tâches', 'Workforce Planning', 'Talent Management', 'Sandbox']),
   }

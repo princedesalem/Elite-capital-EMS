@@ -8,7 +8,7 @@ from sqlalchemy import and_, or_, event, select, delete
 from ..models import (
     Employe, Operation, Notification, TypeNotificationEnum, Validation,
     AlerteCongesAnnuelle, Activation, TypeActionEnum, StatutFinalEnum,
-    PushSubscription
+    PushSubscription, MissionnairesMission
 )
 from decimal import Decimal
 from . import webpush
@@ -197,34 +197,81 @@ def notifier_validation_operation(
         db: Session de base de données
     """
     operation = db.query(Operation).filter(Operation.id_operation == id_operation).first()
-    
+
     if not operation:
         return
-    
+
     type_notif = TypeNotificationEnum.VALIDATION if statut == 'validé' else TypeNotificationEnum.REFUS
-    
-    # Notifier le demandeur
-    message = f"Votre opération a été {statut} par le {validateur_role}."
+
+    # Libellé spécifique selon le type de demande
+    raw_type = (operation.type_demande or '').lower()
+    if 'conge' in raw_type or 'congé' in raw_type:
+        libelle = 'congé'
+    elif 'frais' in raw_type:
+        libelle = 'frais de mission'
+    elif 'mission' in raw_type:
+        libelle = 'mission'
+    elif 'permission' in raw_type:
+        libelle = 'permission'
+    elif 'sortie' in raw_type:
+        libelle = 'sortie'
+    else:
+        libelle = 'demande'
+
+    # Accord féminin/masculin pour le statut
+    _feminins = {'mission', 'permission', 'sortie', 'demande'}
+    if libelle in _feminins:
+        statut_accorde = statut.rstrip('é') + 'ée' if statut.endswith('é') else statut
+    else:
+        statut_accorde = statut
+
+    titre_notif = f"{libelle.capitalize()} {statut_accorde}"
+
+    # Message au demandeur
+    message_demandeur = f"Votre {libelle} a été {statut_accorde} par le {validateur_role}."
     if commentaire:
-        message += f"\nCommentaire: {commentaire}"
-    
+        message_demandeur += f"\nCommentaire : {commentaire}"
+
     notification = Notification(
         matricule=operation.matricule,
         type_notification=type_notif,
-        titre=f"Opération {statut}",
-        message=message,
+        titre=titre_notif,
+        message=message_demandeur,
         id_operation=id_operation
     )
     db.add(notification)
-    
-    # Notifier le RH
+
+    # Notifier tous les missionnaires assignés (s'il s'agit d'une mission)
+    if 'mission' in raw_type:
+        missionnaires = db.query(MissionnairesMission).filter(
+            MissionnairesMission.id_mission == id_operation
+        ).all()
+        _emp_initiateur = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
+        _nom_initiateur = f"{_emp_initiateur.prenom} {_emp_initiateur.nom}" if _emp_initiateur else f"Employé #{operation.matricule}"
+        for mm in missionnaires:
+            if mm.matricule != operation.matricule:
+                msg_miss = f"La mission de {_nom_initiateur} (#{id_operation}) a été {statut_accorde} par le {validateur_role}."
+                if commentaire:
+                    msg_miss += f"\nCommentaire : {commentaire}"
+                db.add(Notification(
+                    matricule=mm.matricule,
+                    type_notification=type_notif,
+                    titre=titre_notif,
+                    message=msg_miss,
+                    id_operation=id_operation
+                ))
+
+    # Notifier le RH avec nom du demandeur et type précis
     from .activation_cloture import creer_notification_rh
     _emp = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
     _nom_employe = f"{_emp.prenom} {_emp.nom}" if _emp else f"Employé #{operation.matricule}"
+    message_rh = f"Le {libelle} de {_nom_employe} a été {statut_accorde} par le {validateur_role}."
+    if commentaire:
+        message_rh += f"\nCommentaire : {commentaire}"
     creer_notification_rh(
         id_operation,
-        f"Opération {statut}",
-        f"L'opération de {_nom_employe} a été {statut} par le {validateur_role}",
+        titre_notif,
+        message_rh,
         db
     )
 
@@ -470,6 +517,15 @@ def ajouter_notifications_annulation_operation(
     for validation in validations:
         if validation.matricule_validateur:
             recipients.add(validation.matricule_validateur)
+
+    # Inclure les missionnaires assignés (pour les missions)
+    raw_type = (operation.type_demande or '').lower()
+    if 'mission' in raw_type:
+        missionnaires = db.query(MissionnairesMission).filter(
+            MissionnairesMission.id_mission == operation.id_operation
+        ).all()
+        for mm in missionnaires:
+            recipients.add(mm.matricule)
 
     actor = None
     if actor_matricule:

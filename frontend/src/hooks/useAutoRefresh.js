@@ -18,7 +18,12 @@ export function useAutoRefresh(refreshFn) {
         fnRef.current()
       }
     }
+    const onNotification = () => fnRef.current()
     document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
+    window.addEventListener('ems:newNotification', onNotification)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('ems:newNotification', onNotification)
+    }
   }, [])
 }

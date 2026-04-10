@@ -124,6 +124,16 @@ export default function Employees(){
     return map
   }, [list])
 
+  // Nom du supérieur hiérarchique (N1) — fetch si absent de la liste scoped
+  const [superiorName, setSuperiorName] = useState(null)
+  useEffect(() => {
+    if (!selectedEmployee?.n1) { setSuperiorName(null); return }
+    if (employeeMap[selectedEmployee.n1]) { setSuperiorName(null); return }
+    api.get(`/employees/${selectedEmployee.n1}`)
+      .then(r => setSuperiorName(`${r.data.prenom} ${r.data.nom}`))
+      .catch(() => setSuperiorName(null))
+  }, [selectedEmployee, employeeMap])
+
   // Options organisation dérivées de la liste
   const entiteOptions = useMemo(() => {
     const seen = new Set()
@@ -673,7 +683,7 @@ export default function Employees(){
                   <div><span style={{color: '#64748b'}}>Diplôme:</span> <strong>{selectedEmployee.diplome || '-'}</strong></div>
                   <div><span style={{color: '#64748b'}}>Catégorie:</span> <strong>{selectedEmployee.categorie || '-'}</strong></div>
                   <div><span style={{color: '#64748b'}}>Années d'expérience:</span> <strong>{selectedEmployee.annee_experience ?? '-'} ans</strong></div>
-                  <div><span style={{color: '#64748b'}}>N1 (Supérieur):</span> <strong>{employeeMap[selectedEmployee.n1] || selectedEmployee.n1 || '-'}</strong></div>
+                  <div><span style={{color: '#64748b'}}>N1 (Supérieur):</span> <strong>{employeeMap[selectedEmployee.n1] || superiorName || selectedEmployee.n1_fonction || (selectedEmployee.n1 ? `Matricule ${selectedEmployee.n1}` : '-')}</strong></div>
                   <div><span style={{color: '#64748b'}}>Date d'embauche:</span> <strong>{selectedEmployee.date_embauche ? new Date(selectedEmployee.date_embauche).toLocaleDateString('fr-FR') : '-'}</strong></div>
                   <div><span style={{color: '#64748b'}}>Ancienneté:</span> <strong>{calculateAnciennete(selectedEmployee.date_embauche)}</strong></div>
                   <div><span style={{color: '#64748b'}}>Solde de congés:</span> <strong>{selectedEmployee.solde_conges ?? '-'} jours</strong></div>

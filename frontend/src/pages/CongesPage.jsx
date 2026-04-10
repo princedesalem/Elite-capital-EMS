@@ -148,6 +148,8 @@ export default function CongesPage() {
   useEffect(() => {
     const opId = searchParams.get('operationId')
     if (opId) setSelectedOperationForWorkflow(Number(opId))
+    const tab = searchParams.get('tab')
+    if (tab === 'recu' || tab === 'envoye') setActiveTab(tab)
   }, [])
 
   async function loadData() {

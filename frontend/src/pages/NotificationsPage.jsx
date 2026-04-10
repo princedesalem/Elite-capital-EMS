@@ -5,11 +5,12 @@ import { useAuth } from '../contexts/AuthContext'
 import {
   Bell, BellOff, CheckCircle2, XCircle, AlertTriangle, Plane,
   Home, Briefcase, MessageSquare, Star, Clock, Check, Inbox,
-  ExternalLink, Trash2, Mail, RefreshCw
+  ExternalLink, Trash2, Mail, RefreshCw, Banknote
 } from 'lucide-react'
 
 const TYPE_CONFIG = {
   VALIDATION: { color: '#10b981', bg: '#ecfdf5', label: 'Validation', Icon: CheckCircle2 },
+  PAIEMENT:   { color: '#059669', bg: '#f0fdf4', label: 'Paiement',   Icon: Banknote },
   REFUS: { color: '#ef4444', bg: '#fff5f5', label: 'Refus', Icon: XCircle },
   ALERTE_CONGES: { color: '#f59e0b', bg: '#fffbeb', label: 'Alerte congés', Icon: AlertTriangle },
   RAPPEL_DEPART: { color: '#3b82f6', bg: '#eff6ff', label: 'Rappel départ', Icon: Plane },
@@ -21,9 +22,43 @@ const TYPE_CONFIG = {
   AUTRE: { color: '#6b7280', bg: '#f9fafb', label: 'Autre', Icon: Bell },
 }
 
-function getTypeCfg(typeKey) {
+function getTypeCfg(typeKey, notif) {
   const key = (typeKey || '').replace('TypeNotificationEnum.', '').toUpperCase()
+  if (notif) {
+    const content = ((notif.titre || '') + ' ' + (notif.message || '')).toLowerCase()
+    if (content.includes('paiement') || content.includes('payé') || content.includes('frais')) {
+      return TYPE_CONFIG.PAIEMENT
+    }
+  }
   return TYPE_CONFIG[key] || TYPE_CONFIG.AUTRE
+}
+
+function getTargetRoute(notif) {
+  // Priorité 1 : type_demande depuis l'opération liée (valeurs : 'Congé', 'Permission', 'Mission', 'Sortie', 'Frais de mission')
+  const td = (notif.type_demande || '').toLowerCase()
+  const opId = notif.id_operation
+  const bucket = notif.workflow_bucket || 'envoye'
+  const opParam = opId ? `?operationId=${opId}&tab=${bucket}` : ''
+  if (td.includes('frais')) return { path: `/rh/frais${opParam}`, label: 'Voir mes frais de mission' }
+  if (td.includes('permission')) return { path: `/rh/permissions${opParam}`, label: 'Voir ma permission' }
+  if (td.includes('mission')) return { path: `/rh/missions${opParam}`, label: 'Voir ma mission' }
+  if (td.includes('sortie')) return { path: `/rh/sorties${opParam}`, label: 'Voir ma sortie' }
+  if (td.includes('conge') || td.includes('congé')) return { path: `/rh/conges${opParam}`, label: 'Voir mon congé' }
+  // Priorité 2 : type de notification
+  const type = (notif.type_notification || '').replace('TypeNotificationEnum.', '').toUpperCase()
+  if (type === 'DEMANDE_MISSION' || type === 'RAPPEL_DEPART' || type === 'RAPPEL_RETOUR') return { path: `/rh/missions${opParam}`, label: 'Voir ma mission' }
+  if (type === 'ALERTE_CONGES') return { path: `/rh/conges${opParam}`, label: 'Voir mon congé' }
+  if (type === 'EVALUATION') return { path: '/rh/evaluations', label: 'Voir mes évaluations' }
+  // Priorité 3 : contenu du message
+  const text = ((notif.message || '') + ' ' + (notif.titre || '')).toLowerCase()
+  if (text.includes('frais de mission') || text.includes('frais')) return { path: `/rh/frais${opParam}`, label: 'Voir mes frais de mission' }
+  if (text.includes('permission')) return { path: `/rh/permissions${opParam}`, label: 'Voir ma permission' }
+  if (text.includes('mission')) return { path: `/rh/missions${opParam}`, label: 'Voir ma mission' }
+  if (text.includes('sortie')) return { path: `/rh/sorties${opParam}`, label: 'Voir ma sortie' }
+  if (text.includes('congé') || text.includes('conge')) return { path: `/rh/conges${opParam}`, label: 'Voir mon congé' }
+  if (text.includes('évaluation') || text.includes('evaluation')) return { path: '/rh/evaluations', label: 'Voir mes évaluations' }
+  if (text.includes('remplac')) return { path: '/rh/remplacants', label: 'Voir les remplaçants' }
+  return { path: '/rh/workflow', label: 'Voir dans le workflow' }
 }
 
 function formatDate(dateStr) {
@@ -43,7 +78,7 @@ function formatDate(dateStr) {
 }
 
 function NotifCard({ notif, onMarkRead, onDelete, navigate }) {
-  const cfg = getTypeCfg(notif.type_notification)
+  const cfg = getTypeCfg(notif.type_notification, notif)
   const { Icon } = cfg
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '4px 1fr', borderRadius: 10, overflow: 'hidden', border: '1px solid #e8edf2', background: notif.lue ? '#fff' : cfg.bg, boxShadow: notif.lue ? 'none' : '0 2px 8px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>
@@ -87,13 +122,26 @@ function NotifCard({ notif, onMarkRead, onDelete, navigate }) {
           {notif.message}
         </p>
         {notif.id_operation && (
-          <div style={{ paddingLeft: 40 }}>
-            <button
-              onClick={() => navigate('/rh/operations', { state: { operationId: notif.id_operation } })}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, border: `1px solid ${cfg.color}33`, background: cfg.color + '0d', color: cfg.color, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
-            >
-              <ExternalLink size={11} /> Voir l'opération #{notif.id_operation}
-            </button>
+          <div style={{ paddingLeft: 40, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {(() => { const target = getTargetRoute(notif); return (
+              <button
+                onClick={() => navigate(target.path)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, border: `1px solid ${cfg.color}33`, background: cfg.color + '0d', color: cfg.color, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
+              >
+                <ExternalLink size={11} /> {target.label}
+              </button>
+            )})()}
+            {/mission_id=(\d+)/.test(notif.message || '') && (
+              <button
+                onClick={() => {
+                  const match = (notif.message || '').match(/mission_id=(\d+)/)
+                  if (match) navigate(`/frais?mission_id=${match[1]}`)
+                }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, border: '1px solid #10b98133', background: '#10b9810d', color: '#10b981', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
+              >
+                <ExternalLink size={11} /> Demander les frais
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -37,7 +37,15 @@ def activer_operation_demandeur(
     if not operation:
         return False, "Opération introuvable"
     
-    if operation.matricule != matricule_demandeur:
+    # Allow the initiator OR any missionnaire assigned to a Mission-type operation
+    is_authorized = (operation.matricule == matricule_demandeur)
+    if not is_authorized and (operation.type_demande or '').lower() == 'mission':
+        from ..models import MissionnairesMission
+        is_authorized = db.query(MissionnairesMission).filter(
+            MissionnairesMission.id_mission == id_operation,
+            MissionnairesMission.matricule == matricule_demandeur
+        ).first() is not None
+    if not is_authorized:
         return False, "Vous n'êtes pas autorisé à activer cette opération"
     
     # Vérifier si activation existe déjà
@@ -101,10 +109,14 @@ def activer_operation_demandeur(
         return True, "Opération activée immédiatement."
 
     # Créer notification pour RH
+    _emp_act = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
+    _nom_act = f"{_emp_act.prenom} {_emp_act.nom}" if _emp_act else f"Matricule {operation.matricule}"
+    _type_act = (operation.type_demande or 'Opération').capitalize()
+    _label_act = f"{_type_act} « {operation.titre} »" if operation.titre else _type_act
     creer_notification_rh(
         id_operation,
         "Activation en attente",
-        f"L'employé {operation.matricule} a activé son opération. Confirmation RH requise.",
+        f"{_nom_act} a activé {_label_act}. Confirmation RH requise.",
         db
     )
     
@@ -297,7 +309,15 @@ def cloturer_operation_demandeur(
     if not operation:
         return False, "Opération introuvable"
     
-    if operation.matricule != matricule_demandeur:
+    # Allow the initiator OR any missionnaire assigned to a Mission-type operation
+    is_authorized = (operation.matricule == matricule_demandeur)
+    if not is_authorized and (operation.type_demande or '').lower() == 'mission':
+        from ..models import MissionnairesMission
+        is_authorized = db.query(MissionnairesMission).filter(
+            MissionnairesMission.id_mission == id_operation,
+            MissionnairesMission.matricule == matricule_demandeur
+        ).first() is not None
+    if not is_authorized:
         return False, "Vous n'êtes pas autorisé à clôturer cette opération"
     
     # Vérifier que l'opération est activée
@@ -392,10 +412,14 @@ def cloturer_operation_demandeur(
     
     if not est_auto_complete:
         # Notifier le RH
+        _emp = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
+        _nom = f"{_emp.prenom} {_emp.nom}" if _emp else f"Matricule {operation.matricule}"
+        _type_op = (operation.type_demande or 'Opération').capitalize()
+        _label_op = f"{_type_op} « {operation.titre} »" if operation.titre else _type_op
         creer_notification_rh(
             id_operation,
             "Clôture en attente",
-            f"L'employé {operation.matricule} a clôturé son opération. Confirmation RH requise.",
+            f"{_nom} a clôturé {_label_op}. Confirmation RH requise.",
             db
         )
         return True, "Clôture enregistrée. En attente de confirmation du RH."
@@ -505,10 +529,14 @@ def verifier_delai_cloture(db: Session):
             db.add(notification)
             
             # Notifier le RH
+            _emp_alerte = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
+            _nom_alerte = f"{_emp_alerte.prenom} {_emp_alerte.nom}" if _emp_alerte else f"Matricule {operation.matricule}"
+            _type_alerte = (operation.type_demande or 'Opération').capitalize()
+            _label_alerte = f"{_type_alerte} « {operation.titre} »" if operation.titre else _type_alerte
             creer_notification_rh(
                 operation.id_operation,
                 "Opération non clôturée",
-                f"Employé {operation.matricule} n'a pas clôturé son opération (retour: {operation.date_retour})",
+                f"{_nom_alerte} n'a pas clôturé {_label_alerte} (retour prévu : {operation.date_retour}).",
                 db
             )
         
