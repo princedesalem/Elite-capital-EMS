@@ -6,6 +6,7 @@ from .. import models
 from ..utils import security
 from fastapi import Request
 from datetime import date, datetime, timedelta
+from typing import Optional
 
 router = APIRouter(prefix='/dashboard', tags=['dashboard'])
 
@@ -47,7 +48,12 @@ def _get_department_localisation(db: Session, dept: models.Departement):
 
 
 @router.get('/analytics/{matricule}')
-def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_db)):
+def get_dashboard_analytics_for_user(
+    matricule: int,
+    mois: Optional[int] = None,
+    annee: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
     """
     Retourne les analytics filtrées selon le rôle de l'utilisateur:
     - EMPLOYE: ses propres opérations uniquement
@@ -142,7 +148,20 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
         perimetre_operations = []
         perimetre_employes = []
         show_org_stats = False
-    
+
+    # Filtre temporel sur les opérations (ne touche pas aux stats employés)
+    if mois or annee:
+        def _date_match(op):
+            d = op.date_debut
+            if not d:
+                return True
+            if annee and d.year != annee:
+                return False
+            if mois and d.month != mois:
+                return False
+            return True
+        perimetre_operations = [op for op in perimetre_operations if _date_match(op)]
+
     # Stats périmètre
     perimetre_ops_by_type = {}
     for op in perimetre_operations:
@@ -361,6 +380,41 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
     
     # === INFOS ORGANISATION (selon rôle) ===
     org_stats = None
+
+    # Pré-indexation pour le calcul des opérations par structure (évite N+1)
+    _emp_map = {e.matricule: e for e in perimetre_employes}
+    _entite_cache: dict = {}
+    _dir_cache: dict = {}
+    _dept_cache: dict = {}
+    for _e in perimetre_employes:
+        if _e.id_entite and _e.id_entite not in _entite_cache:
+            _ent = db.query(models.Entite).filter(models.Entite.id_entite == _e.id_entite).first()
+            _entite_cache[_e.id_entite] = _ent.nom if _ent else 'Non renseigné'
+        if _e.id_direction and _e.id_direction not in _dir_cache:
+            _dir = db.query(models.Direction).filter(models.Direction.id_direction == _e.id_direction).first()
+            _dir_cache[_e.id_direction] = _dir.nom if _dir else 'Non renseigné'
+        if _e.dept_id and _e.dept_id not in _dept_cache:
+            _dpt = db.query(models.Departement).filter(models.Departement.dept_id == _e.dept_id).first()
+            _dept_cache[_e.dept_id] = _dpt.nom if _dpt else 'Non renseigné'
+
+    def _build_ops_by_unit(ops, unit_fn):
+        """Group operations by org unit and type → [{'name': 'DSI', 'Congé': 3, 'Mission': 1, ...}]"""
+        buckets: dict = {}
+        for op in ops:
+            emp = _emp_map.get(op.matricule)
+            if not emp:
+                continue
+            unit = unit_fn(emp) or 'Non renseigné'
+            type_op = _normalize_operation_type(op)
+            if unit not in buckets:
+                buckets[unit] = {'name': unit}
+            buckets[unit][type_op] = buckets[unit].get(type_op, 0) + 1
+        return sorted(
+            buckets.values(),
+            key=lambda x: sum(v for k, v in x.items() if k != 'name'),
+            reverse=True
+        )
+
     if show_org_stats:
         if is_admin:
             # Toutes les entités
@@ -392,6 +446,18 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
                     }
                     for d in db.query(models.Departement).all()
                 ],
+                'operations_by_entite': _build_ops_by_unit(
+                    perimetre_operations,
+                    lambda e: _entite_cache.get(e.id_entite, 'Non renseigné') if e.id_entite else 'Non renseigné'
+                ),
+                'operations_by_direction': _build_ops_by_unit(
+                    perimetre_operations,
+                    lambda e: _dir_cache.get(e.id_direction, 'Non renseigné') if e.id_direction else 'Non renseigné'
+                ),
+                'operations_by_departement': _build_ops_by_unit(
+                    perimetre_operations,
+                    lambda e: _dept_cache.get(e.dept_id, 'Non renseigné') if e.dept_id else 'Non renseigné'
+                ),
             }
         elif is_dg:
             # Toutes les directions de l'entité
@@ -408,6 +474,10 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
                     }
                     for d in directions
                 ],
+                'operations_by_direction': _build_ops_by_unit(
+                    perimetre_operations,
+                    lambda e: _dir_cache.get(e.id_direction, 'Non renseigné') if e.id_direction else 'Non renseigné'
+                ),
             }
         elif is_directeur:
             # Tous les départements de la direction
@@ -424,6 +494,10 @@ def get_dashboard_analytics_for_user(matricule: int, db: Session = Depends(get_d
                     }
                     for d in departements
                 ],
+                'operations_by_departement': _build_ops_by_unit(
+                    perimetre_operations,
+                    lambda e: _dept_cache.get(e.dept_id, 'Non renseigné') if e.dept_id else 'Non renseigné'
+                ),
             }
         elif is_responsable:
             # Juste le département
@@ -825,3 +899,130 @@ def get_dashboard(request: Request, db: Session = Depends(get_db)):
         return {'role':'PCA','requests': [c.__dict__ for c in allc]}
 
     return {'role':'UNKNOWN','requests':[]}
+
+
+@router.get('/trends/{matricule}')
+def get_dashboard_trends(matricule: int, db: Session = Depends(get_db)):
+    """
+    Retourne les tendances mensuelles sur 12 mois glissants.
+    Même logique de périmètre que analytics.
+    """
+    employe = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
+    if not employe:
+        raise HTTPException(status_code=404, detail="Employé non trouvé")
+
+    role_obj = db.query(models.Role).filter(models.Role.id == employe.id_role).first() if employe.id_role else None
+    role = (role_obj.name if role_obj else 'EMPLOYE').upper()
+
+    is_admin = role in ['RH', 'ADMIN', 'PCA', 'AG']
+    is_dg = role == 'DG'
+    is_directeur = role == 'DIRECTEUR'
+    is_responsable = role == 'RESPONSABLE'
+
+    # Build scoped operations query
+    if is_admin:
+        ops = db.query(models.Operation).all()
+    elif is_dg:
+        emps = db.query(models.Employe).filter(models.Employe.id_entite == employe.id_entite).all()
+        mats = [e.matricule for e in emps]
+        ops = db.query(models.Operation).filter(models.Operation.matricule.in_(mats)).all() if mats else []
+    elif is_directeur:
+        depts = db.query(models.Departement).filter(models.Departement.id_direction == employe.id_direction).all()
+        dept_ids = [d.dept_id for d in depts]
+        emps = db.query(models.Employe).filter(models.Employe.dept_id.in_(dept_ids)).all() if dept_ids else []
+        mats = [e.matricule for e in emps]
+        if matricule not in mats:
+            mats.append(matricule)
+        ops = db.query(models.Operation).filter(models.Operation.matricule.in_(mats)).all() if mats else []
+    elif is_responsable:
+        emps = db.query(models.Employe).filter(models.Employe.dept_id == employe.dept_id).all()
+        mats = [e.matricule for e in emps]
+        if matricule not in mats:
+            mats.append(matricule)
+        ops = db.query(models.Operation).filter(models.Operation.matricule.in_(mats)).all() if mats else []
+    else:
+        ops = db.query(models.Operation).filter(models.Operation.matricule == matricule).all()
+
+    # Compute 12 rolling months
+    today = date.today()
+    months = []
+    for i in range(11, -1, -1):
+        d = today.replace(day=1) - timedelta(days=i * 30)
+        months.append((d.year, d.month))
+
+    # Count by month and type
+    trends = []
+    for annee, mois in months:
+        row = {'annee': annee, 'mois': mois, 'Mission': 0, 'Congé': 0, 'Permission': 0, 'Sortie': 0, 'total': 0}
+        for op in ops:
+            op_date = op.date_demande or op.date_debut
+            if op_date and op_date.year == annee and op_date.month == mois:
+                type_op = _normalize_operation_type(op)
+                if type_op in row:
+                    row[type_op] += 1
+                row['total'] += 1
+        trends.append(row)
+
+    return trends
+
+
+# ── Graphiques analytiques avancés ───────────────────────────────────────────
+
+@router.get('/absenteisme-par-dept')
+def get_absenteisme_par_dept(db: Session = Depends(get_db)):
+    """Retourne le nombre de jours d'absence (congés validés) par département."""
+    ops = (
+        db.query(models.Operation)
+        .filter(
+            models.Operation.type_demande == 'Congé',
+            models.Operation.statut == 'validé',
+        )
+        .all()
+    )
+    dept_jours: dict = {}
+    for op in ops:
+        emp = db.query(models.Employe).filter(models.Employe.matricule == op.matricule).first()
+        dept = (emp.departement or 'Non renseigné') if emp else 'Non renseigné'
+        duree = float(op.duree_jours or 0)
+        dept_jours[dept] = dept_jours.get(dept, 0.0) + duree
+
+    result = sorted(
+        [{'departement': k, 'jours_absence': round(v, 1)} for k, v in dept_jours.items()],
+        key=lambda x: x['jours_absence'],
+        reverse=True,
+    )
+    return result[:20]  # top 20 departments
+
+
+@router.get('/solde-conges-par-tranche')
+def get_solde_conges_par_tranche(db: Session = Depends(get_db)):
+    """Retourne la répartition des employés par tranche de solde de congés."""
+    employees = (
+        db.query(models.Employe)
+        .filter(models.Employe.statut_employe != models.StatutEmployeEnum.CONGEDIE)
+        .all()
+    )
+    tranches = {
+        '0 j': 0,
+        '1-5 j': 0,
+        '6-15 j': 0,
+        '16-25 j': 0,
+        '26-35 j': 0,
+        '36+ j': 0,
+    }
+    for e in employees:
+        s = float(e.solde_conges or 0)
+        if s <= 0:
+            tranches['0 j'] += 1
+        elif s <= 5:
+            tranches['1-5 j'] += 1
+        elif s <= 15:
+            tranches['6-15 j'] += 1
+        elif s <= 25:
+            tranches['16-25 j'] += 1
+        elif s <= 35:
+            tranches['26-35 j'] += 1
+        else:
+            tranches['36+ j'] += 1
+
+    return [{'tranche': k, 'count': v} for k, v in tranches.items()]

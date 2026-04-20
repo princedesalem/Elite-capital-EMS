@@ -55,7 +55,7 @@ def creer_fiche_poste(
         )
     
     return {
-        "id_fiche_de_poste": fiche.id_fiche_de_poste,
+        "id_fiche_de_poste": fiche.id_fiche,
         "matricule": matricule,
         "nombre_objectifs": len(objectifs),
         "message": message
@@ -75,7 +75,7 @@ def obtenir_fiche_poste(matricule: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Fiche de poste introuvable")
     
     return {
-        "id_fiche_de_poste": fiche.id_fiche_de_poste,
+        "id_fiche_de_poste": fiche.id_fiche,
         "matricule": fiche.matricule,
         "objectifs": fiche.objectifs,
         "date_creation": fiche.date_creation,
@@ -101,7 +101,7 @@ def creer_periode_evaluation(
         raise HTTPException(status_code=400, detail=message)
     
     return {
-        "id_periode_evaluation": periode.id_periode_evaluation,
+        "id_periode_evaluation": periode.id_periode,
         "date_debut": date_debut,
         "date_fin": date_fin,
         "message": message
@@ -119,7 +119,7 @@ def obtenir_periodes_evaluation(db: Session = Depends(get_db)):
     
     return [
         {
-            "id_periode_evaluation": p.id_periode_evaluation,
+            "id_periode_evaluation": p.id_periode,
             "date_debut": p.date_debut,
             "date_fin": p.date_fin,
             "cree_par": p.cree_par
@@ -210,7 +210,7 @@ def calculer_note_finale(id_evaluation: int, db: Session = Depends(get_db)):
     = 100%
     """
     evaluation = db.query(models.EvaluationEmploye).filter(
-        models.EvaluationEmploye.id_evaluation == id_evaluation
+        models.EvaluationEmploye.id_eval == id_evaluation
     ).first()
     
     if not evaluation:
@@ -250,20 +250,21 @@ def obtenir_mes_evaluations(matricule: int, db: Session = Depends(get_db)):
         models.EvaluationEmploye.matricule == matricule
     ).order_by(models.EvaluationEmploye.date_creation.desc()).all()
     
-    return [
-        {
-            "id_evaluation": e.id_evaluation,
+    result = []
+    for e in evaluations:
+        evals_json = e.evaluations or {}
+        result.append({
+            "id_evaluation": e.id_eval,
             "date_creation": e.date_creation,
             "statut": e.statut,
             "note_finale": float(e.note_finale) if e.note_finale else None,
             "auto_evaluation_faite": e.auto_evaluation is not None,
-            "evaluation_responsable_faite": e.evaluation_responsable is not None,
-            "evaluation_directeur_faite": e.evaluation_directeur is not None,
-            "evaluation_rh_faite": e.evaluation_rh is not None,
-            "evaluation_dg_faite": e.evaluation_dg is not None
-        }
-        for e in evaluations
-    ]
+            "evaluation_responsable_faite": evals_json.get('responsable') is not None,
+            "evaluation_directeur_faite": evals_json.get('directeur') is not None,
+            "evaluation_rh_faite": evals_json.get('rh') is not None,
+            "evaluation_dg_faite": evals_json.get('dg') is not None
+        })
+    return result
 
 
 @router.get('/a-evaluer/{matricule_evaluateur}')
@@ -287,17 +288,17 @@ def obtenir_evaluations_a_faire(
         models.EvaluationEmploye.statut == 'EN_COURS'
     ).all()
     
-    for eval in evaluations:
+    for ev in evaluations:
         # Vérifier si l'évaluateur a déjà évalué
-        champ_eval = f"evaluation_{role_evaluateur.lower()}"
-        if hasattr(eval, champ_eval) and getattr(eval, champ_eval) is None:
+        evals_json = ev.evaluations or {}
+        if evals_json.get(role_evaluateur.lower()) is None:
             employe = db.query(models.Employe).filter(
-                models.Employe.matricule == eval.matricule
+                models.Employe.matricule == ev.matricule
             ).first()
             
             evaluations_a_faire.append({
-                "id_evaluation": eval.id_evaluation,
-                "matricule": eval.matricule,
+                "id_evaluation": ev.id_eval,
+                "matricule": ev.matricule,
                 "nom_complet": f"{employe.prenom} {employe.nom}" if employe else "Inconnu",
                 "fonction": employe.fonction if employe else None
             })

@@ -40,6 +40,9 @@ class EmployeBase(BaseModel):
     n1_fonction: Optional[str] = None
     statut_employe: Optional[str] = None
     photo_url: Optional[str] = None
+    id_entite: Optional[int] = None
+    id_direction: Optional[int] = None
+    dept_id: Optional[int] = None
 
 
 class EmployeOut(EmployeBase):

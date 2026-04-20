@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import WorkflowModal from '../components/WorkflowModal'
 import ModifiedBadge from '../components/ModifiedBadge'
+import { missionDestLabel, fraisLabel } from '../utils/operationLabel'
 import '../styles/Operations.css'
 import { ClipboardList, AlertTriangle, FileText, CheckCircle, Upload, Eye, Banknote, Clock, Download, Trash2 } from 'lucide-react'
 
@@ -49,7 +50,7 @@ const normalizeListStatus = (value) => {
 const normalizeFraisWorkflow = (rows, label, bucket) => (Array.isArray(rows) ? rows : [])
   .filter((item) => normalizeText(item?.type_demande).includes('frais'))
   .map((item) => ({ ...item, __workflow_label: label, __workflow_bucket: bucket }))
-const missionLabel = (item) => item?.objet || item?.titre || `Mission #${item?.id_operation || '-'}`
+const missionLabel = (item) => missionDestLabel(item)
 const getEmitterName = (item, isRecu, senderName) => {
   if (!isRecu) return senderName
   const full = [item?.demandeur?.prenom, item?.demandeur?.nom].filter(Boolean).join(' ').trim()
@@ -89,7 +90,7 @@ const computeMissionMetrics = (mission) => {
 function Tabs({ active, setActive, counts }) {
   return (
     <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
-      {[['envoye', 'Envoyé', counts.envoye], ['recu', 'Reçu', counts.recu]].map(([key, label, count]) => (
+      {[['envoye', "Envoyé", counts.envoye], ['recu', "Recu", counts.recu]].map(([key, label, count]) => (
         <button key={key} onClick={() => setActive(key)} style={{ flex: 1, padding: '10px 8px', border: 'none', cursor: 'pointer', background: active === key ? '#fff' : '#f9fafb', fontWeight: active === key ? 700 : 500, fontSize: '0.82rem', borderBottom: active === key ? '2px solid #ce2b2b' : '2px solid transparent', color: active === key ? '#ce2b2b' : '#6b7280' }}>
           {label}
           {count > 0 && <span style={{ marginLeft: 5, padding: '1px 6px', borderRadius: 999, fontSize: '0.68rem', background: active === key ? '#ce2b2b' : '#e5e7eb', color: active === key ? '#fff' : '#374151' }}>{count}</span>}
@@ -113,7 +114,7 @@ function FilterBar({ date, setDate, statut, setStatut, source, setSource, emette
         <option value="">Tous États</option>
         {['--', 'AttenteRH', 'Active', 'ClotureDemandee', 'Cloturee'].map(value => <option key={value} value={value}>{value}</option>)}
       </select>
-      {(date || statut || source || emetteur || etat) && <button onClick={() => { setDate(''); setStatut(''); setSource(''); setEmetteur(''); setEtat('') }} style={{ padding: '5px 9px', borderRadius: 5, border: '1px solid #f87171', background: '#fee2e2', color: '#991b1b', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}>Réinitialiser</button>}
+      {(date || statut || source || emetteur || etat) && <button onClick={() => { setDate(''); setStatut(''); setSource(''); setEmetteur(''); setEtat('') }} style={{ padding: '5px 9px', borderRadius: 5, border: '1px solid #f87171', background: '#fee2e2', color: '#991b1b', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}>{"Réinitialiser"}</button>}
     </div>
   )
 }
@@ -147,7 +148,7 @@ function PreuvesModal({ idOperation, matricule, estMissionnaire, onClose, onUplo
   const uploader = async (e) => {
     e.preventDefault()
     const files = fileRef.current?.files
-    if (!files || !files.length || !idFrais) { setError('Sélectionnez un fichier'); return }
+    if (!files || !files.length || !idFrais) { setError("Veuillez sélectionner un fichier"); return }
     setUploading(true); setError('')
     try {
       const fd = new FormData()
@@ -157,21 +158,21 @@ function PreuvesModal({ idOperation, matricule, estMissionnaire, onClose, onUplo
       await charger()
       onUploaded()
     } catch (err) {
-      setError(errMsg(err, 'Erreur lors du téléversement'))
+      setError(errMsg(err, "Erreur lors du téléversement"))
     } finally { setUploading(false) }
   }
 
   const fmtDt = (v) => v ? new Date(v).toLocaleString('fr-FR') : ''
 
   const supprimerPreuve = async (index) => {
-    if (!window.confirm('Supprimer cette preuve ?')) return
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce justificatif ?")) return
     setError('')
     try {
       await api.delete(`/api/missions/frais/${idFrais}/supprimer-preuve`, { params: { matricule, index } })
       await charger()
       onUploaded()
     } catch (err) {
-      setError(errMsg(err, 'Erreur lors de la suppression'))
+      setError(errMsg(err, "Erreur lors de la suppression"))
     }
   }
 
@@ -182,7 +183,7 @@ function PreuvesModal({ idOperation, matricule, estMissionnaire, onClose, onUplo
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 36, height: 36, borderRadius: 9, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Upload size={16} style={{ color: '#475569' }} /></div>
             <div>
-              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>Preuves de paiement</div>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>{"Justificatifs de paiement"}</div>
               <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Frais #{idOperation}</div>
             </div>
           </div>
@@ -190,11 +191,11 @@ function PreuvesModal({ idOperation, matricule, estMissionnaire, onClose, onUplo
         </div>
         <div style={{ padding: '16px 22px', flex: 1 }}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: '0.85rem' }}>Chargement…</div>
+            <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: '0.85rem' }}>{"Chargement..."}</div>
           ) : preuves.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '32px 0', color: '#cbd5e1', fontSize: '0.85rem' }}>
               <FileText size={28} style={{ opacity: 0.3, display: 'block', margin: '0 auto 8px' }} />
-              Aucune preuve téléversée
+              {"Aucun justificatif"}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -222,7 +223,7 @@ function PreuvesModal({ idOperation, matricule, estMissionnaire, onClose, onUplo
         </div>
         {estMissionnaire && <div style={{ padding: '14px 22px 20px', borderTop: '1px solid #f1f5f9' }}>
           <form onSubmit={uploader} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>Ajouter une preuve</label>
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>{"Ajouter un justificatif"}</label>
             <select value={typePreuve} onChange={(e) => setTypePreuve(e.target.value)} style={{ fontSize: '0.82rem', padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 6 }}>
               <option value="facture">Facture</option>
               <option value="recu">Reçu</option>
@@ -234,7 +235,7 @@ function PreuvesModal({ idOperation, matricule, estMissionnaire, onClose, onUplo
             <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style={{ fontSize: '0.82rem', padding: '8px', border: '1px dashed #cbd5e1', borderRadius: 8, cursor: 'pointer', color: '#475569', background: '#f8fafc' }} />
             {error && <p style={{ color: '#ef4444', fontSize: '0.78rem', margin: 0 }}>{error}</p>}
             <button type="submit" disabled={uploading || !idFrais} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', background: (uploading || !idFrais) ? '#94a3b8' : '#0f172a', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, cursor: (uploading || !idFrais) ? 'not-allowed' : 'pointer', fontSize: '0.82rem', alignSelf: 'flex-start' }}>
-              <Upload size={14} />{uploading ? 'Téléversement…' : 'Téléverser'}
+              <Upload size={14} />{uploading ? "Téléversement..." : "Téléverser"}
             </button>
           </form>
         </div>}
@@ -678,8 +679,8 @@ export default function FraisPage() {
       const canApprove = !isValid && item.__workflow_bucket === 'recu'
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'validé') }} style={okBtn} disabled={isLoading}>Approuver</button>}
-          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'refusé') }} style={dangerBtn} disabled={isLoading}>Refuser</button>}
+          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'validé') }} style={okBtn} disabled={isLoading}>{"Approuver"}</button>}
+          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'refusé') }} style={dangerBtn} disabled={isLoading}>{"Refuser"}</button>}
           {paiementBtn}
           {eyeBtn}
         </div>
@@ -689,8 +690,8 @@ export default function FraisPage() {
     if (!isValid) {
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <button onClick={(e) => { e.stopPropagation(); handleEditFrais(item) }} style={primaryBtn}>Modifier</button>
-          <button onClick={(e) => { e.stopPropagation(); handleAnnuler(id) }} style={dangerBtn}>Annuler</button>
+          <button onClick={(e) => { e.stopPropagation(); handleEditFrais(item) }} style={primaryBtn}>{"Modifier"}</button>
+          <button onClick={(e) => { e.stopPropagation(); handleAnnuler(id) }} style={dangerBtn}>{"Annuler"}</button>
           {eyeBtn}
         </div>
       )
@@ -705,7 +706,7 @@ export default function FraisPage() {
       <tr key={item.id_operation} onClick={() => setSelectedOperationForWorkflow(item.id_operation)} style={{ cursor: 'pointer' }}>
         <td style={td}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 600 }}>{item.motif || `Frais mission #${item.id_operation}`}</span>
+            <span style={{ fontWeight: 600 }}>{fraisLabel(item)}</span>
             <ModifiedBadge estModifie={item.est_modifie} dateModification={item.date_modification} />
           </div>
         </td>
@@ -751,15 +752,15 @@ export default function FraisPage() {
     ))
   }
 
-  if (loading) return <div style={{ padding: 28 }}>Chargement...</div>
+  if (loading) return <div style={{ padding: 28 }}>{"Chargement..."}</div>
 
   return (
     <div style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#021630' }}>Frais de Mission</h1>
+        <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#021630' }}>{"Frais de mission"}</h1>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => { setShowUploadSection(true); setShowForm(false); setPreuveUploadMissionId(''); setPreuveUpload({ id_frais: '', type_preuve: 'facture', file: null }) }} style={{ padding: '9px 14px', background: '#fff', color: '#334155', border: '1.5px solid #d1d5db', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}><Upload size={15} /> Téléverser preuves</button>
-          <button onClick={() => { resetFraisForm(); setShowForm(true); setFormError(''); setFormSuccess(''); setShowUploadSection(false) }} style={{ padding: '9px 14px', background: '#ce2b2b', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Nouvelle demande</button>
+          <button onClick={() => { resetFraisForm(); setShowForm(true); setFormError(''); setFormSuccess(''); setShowUploadSection(false) }} style={{ padding: '9px 14px', background: '#ce2b2b', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>{"Ajouter"}</button>
         </div>
       </div>
 
@@ -767,7 +768,7 @@ export default function FraisPage() {
         <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb', marginBottom: 12, padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{fraisEditMode ? 'Modifier la demande de frais de mission' : 'Nouvelle demande de frais de mission'}</strong>
-            <button onClick={() => { setShowForm(false); resetFraisForm() }} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Annuler</button>
+            <button onClick={() => { setShowForm(false); resetFraisForm() }} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>{"Annuler"}</button>
           </div>
           {formError && <div style={{ background: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formError}</div>}
           {formSuccess && <div style={{ background: '#d1fae5', color: '#065f46', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formSuccess}</div>}
@@ -839,7 +840,7 @@ export default function FraisPage() {
           <div style={{ background: '#fff', borderRadius: 12, padding: 28, width: '90%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>Téléversement de preuves de frais</strong>
-            <button onClick={() => setShowUploadSection(false)} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Fermer</button>
+            <button onClick={() => setShowUploadSection(false)} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>{"Fermer"}</button>
           </div>
           {formError && <div style={{ background: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formError}</div>}
           {formSuccess && <div style={{ background: '#d1fae5', color: '#065f46', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formSuccess}</div>}
@@ -896,15 +897,15 @@ export default function FraisPage() {
               <th style={{ ...th, width: '13%' }}>Titre de demande</th>
               <th style={{ ...th, width: '12%' }}>Mission</th>
               <th style={{ ...th, width: '8%' }}>Source</th>
-              <th style={{ ...th, width: '8%' }}>Statut</th>
+              <th style={{ ...th, width: '8%' }}>{"Statut"}</th>
               <th style={{ ...th, width: '8%' }}>Date Création</th>
               {activeTab !== 'envoye' && <th style={{ ...th, width: '9%' }}>Envoyé Par</th>}
               <th style={{ ...th, width: '7%' }}>Date Départ</th>
               <th style={{ ...th, width: '7%' }}>Date Retour</th>
               <th style={{ ...th, width: '5%' }}>Durée</th>
-              <th style={{ ...th, width: '7%' }}>Paiement</th>
+              <th style={{ ...th, width: '7%' }}>{"Paiement des frais"}</th>
               <th style={{ ...th, width: '5%', textAlign: 'center' }}>Preuves</th>
-              <th style={{ ...th, width: '14%' }}>Actions</th>
+              <th style={{ ...th, width: '14%' }}>{"Actions"}</th>
             </tr>
           </thead>
           <tbody>{activeTab === 'envoye' ? renderRows(envoye, false) : renderRows(recu, true)}</tbody>
@@ -933,7 +934,7 @@ export default function FraisPage() {
           <div style={{ background: '#fff', borderRadius: 12, padding: 28, width: '90%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
               <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>Détail des Frais de Mission</strong>
-              <button onClick={() => setDetailFraisData(null)} style={{ padding: '6px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>Fermer</button>
+              <button onClick={() => setDetailFraisData(null)} style={{ padding: '6px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>{"Fermer"}</button>
             </div>
             {detailFraisData.error ? (
               <p style={{ color: '#dc2626' }}>Impossible de charger les détails.</p>

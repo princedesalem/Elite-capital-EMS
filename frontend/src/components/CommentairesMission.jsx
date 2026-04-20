@@ -69,7 +69,7 @@ export default function CommentairesMission({ idMission, matricule }) {
   }
 
   return (
-    <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '8px', marginTop: '20px' }}>
+    <div style={{ background: 'var(--bg)', padding: '20px', borderRadius: '8px', marginTop: '20px' }}>
       <h3 style={{ margin: '0 0 15px 0', color: '#374151' }}>Commentaires de mission</h3>
       
       {/* Formulaire d'ajout */}
@@ -130,17 +130,17 @@ export default function CommentairesMission({ idMission, matricule }) {
             <div
               key={comm.id_commentaire}
               style={{
-                background: 'white',
+                background: 'var(--card)',
                 padding: '15px',
                 borderRadius: '8px',
-                border: '1px solid #e5e7eb',
+                border: '1px solid var(--border)',
                 boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <div>
                   <strong style={{ color: '#1f2937' }}>{comm.auteur_nom}</strong>
-                  <span style={{ color: '#6b7280', fontSize: '0.85rem', marginLeft: '8px' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginLeft: '8px' }}>
                     {comm.auteur_fonction}
                   </span>
                 </div>

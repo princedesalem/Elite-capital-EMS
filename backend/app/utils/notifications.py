@@ -12,6 +12,7 @@ from ..models import (
 )
 from decimal import Decimal
 from . import webpush
+from . import email as email_utils
 
 
 def envoyer_alerte_conges_fin_annee(db: Session):
@@ -79,6 +80,15 @@ def envoyer_alerte_conges_fin_annee(db: Session):
             f"{employe.prenom} {employe.nom} a encore {employe.solde_conges} jour(s) de congés restants",
             db
         )
+
+        # Email à l'employé
+        if employe.email:
+            email_utils.send_alerte_conges_email(
+                employe.email,
+                f"{employe.prenom} {employe.nom}",
+                float(employe.solde_conges),
+                today.year
+            )
     
     db.commit()
 
@@ -106,6 +116,7 @@ def envoyer_rappel_depart_conges(db: Session):
         )
     ).all()
     
+    liste_departs = []
     for operation in operations:
         employe = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
         
@@ -118,7 +129,27 @@ def envoyer_rappel_depart_conges(db: Session):
                 f"{employe.prenom} {employe.nom} part en opération demain ({demain})",
                 db
             )
-    
+            liste_departs.append({
+                'nom': f"{employe.prenom} {employe.nom}",
+                'date_fin': str(operation.date_fin or operation.date_retour or ''),
+                'duree': operation.duree_jours or 0,
+            })
+
+    # Email récapitulatif aux RH
+    if liste_departs:
+        from ..models import Utilisateur, Role
+        rh_role = db.query(Role).filter(Role.name == 'RH').first()
+        if rh_role:
+            rh_users = db.query(Utilisateur).filter(Utilisateur.role_id == rh_role.id).all()
+            for rh in rh_users:
+                rh_emp = db.query(Employe).filter(Employe.matricule == rh.matricule).first()
+                if rh_emp and rh_emp.email:
+                    email_utils.send_rappel_depart_email(
+                        rh_emp.email,
+                        f"{rh_emp.prenom} {rh_emp.nom}",
+                        liste_departs
+                    )
+
     db.commit()
 
 
@@ -152,6 +183,7 @@ def envoyer_rappel_retour_conges(db: Session):
         )
     ).all()
     
+    liste_retours = []
     for operation in operations:
         employe = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
         
@@ -175,7 +207,26 @@ def envoyer_rappel_retour_conges(db: Session):
                 id_operation=operation.id_operation
             )
             db.add(notification)
-    
+            liste_retours.append({
+                'nom': f"{employe.prenom} {employe.nom}",
+                'duree': operation.duree_jours or 0,
+            })
+
+    # Email récapitulatif aux RH
+    if liste_retours:
+        from ..models import Utilisateur, Role
+        rh_role = db.query(Role).filter(Role.name == 'RH').first()
+        if rh_role:
+            rh_users = db.query(Utilisateur).filter(Utilisateur.role_id == rh_role.id).all()
+            for rh in rh_users:
+                rh_emp = db.query(Employe).filter(Employe.matricule == rh.matricule).first()
+                if rh_emp and rh_emp.email:
+                    email_utils.send_rappel_retour_email(
+                        rh_emp.email,
+                        f"{rh_emp.prenom} {rh_emp.nom}",
+                        liste_retours
+                    )
+
     db.commit()
 
 
@@ -250,7 +301,7 @@ def notifier_validation_operation(
         _nom_initiateur = f"{_emp_initiateur.prenom} {_emp_initiateur.nom}" if _emp_initiateur else f"Employé #{operation.matricule}"
         for mm in missionnaires:
             if mm.matricule != operation.matricule:
-                msg_miss = f"La mission de {_nom_initiateur} (#{id_operation}) a été {statut_accorde} par le {validateur_role}."
+                msg_miss = f"La mission de {_nom_initiateur} a été {statut_accorde} par le {validateur_role}."
                 if commentaire:
                     msg_miss += f"\nCommentaire : {commentaire}"
                 db.add(Notification(
@@ -276,8 +327,54 @@ def notifier_validation_operation(
     )
 
     db.commit()
-    
-    # TODO: Envoyer emails
+
+    # Email au demandeur
+    if _emp and _emp.email:
+        if statut == 'validé':
+            body = (
+                f"Bonjour {_emp.prenom} {_emp.nom},\n\n"
+                f"Votre {libelle} du {operation.date_debut} au "
+                f"{operation.date_fin or operation.date_retour} "
+                f"({operation.duree_jours or ''} jour(s)) a été {statut_accorde} "
+                f"par le {validateur_role}.\n"
+                + (f"\nCommentaire : {commentaire}\n" if commentaire else "")
+                + f"\nCordialement,\nÉquipe EMS"
+            )
+        else:
+            body = (
+                f"Bonjour {_emp.prenom} {_emp.nom},\n\n"
+                f"Votre {libelle} du {operation.date_debut} au "
+                f"{operation.date_fin or operation.date_retour} "
+                f"a malheureusement été {statut_accorde} par le {validateur_role}.\n"
+                + (f"\nMotif : {commentaire}\n" if commentaire else "")
+                + f"\nCordialement,\nÉquipe EMS"
+            )
+        email_utils.send_email(
+            _emp.email,
+            f"[EMS] Votre {libelle} a été {statut_accorde}",
+            body
+        )
+
+    # Email aux missionnaires co-assignés si mission
+    if 'mission' in raw_type:
+        mm_list = db.query(MissionnairesMission).filter(
+            MissionnairesMission.id_mission == id_operation
+        ).all()
+        for mm in mm_list:
+            if mm.matricule != operation.matricule:
+                mm_emp = db.query(Employe).filter(Employe.matricule == mm.matricule).first()
+                if mm_emp and mm_emp.email:
+                    email_utils.send_email(
+                        mm_emp.email,
+                        f"[EMS] Mission de {_nom_initiateur} {statut_accorde}",
+                        (
+                            f"Bonjour {mm_emp.prenom} {mm_emp.nom},\n\n"
+                            f"La mission de {_nom_initiateur} a été {statut_accorde} "
+                            f"par le {validateur_role}.\n"
+                            + (f"\nCommentaire : {commentaire}\n" if commentaire else "")
+                            + f"\nCordialement,\nÉquipe EMS"
+                        )
+                    )
 
 
 def obtenir_notifications_non_lues(matricule: int, db: Session) -> List[Dict]:
@@ -502,6 +599,87 @@ def creer_notification(
         return False, f"Erreur lors de la création de la notification: {str(e)}"
 
 
+def notifier_tous_employes_debut_operation(db: Session):
+    """
+    Crée des notifications in-app pour tous les employés actifs quand une opération
+    activée commence aujourd'hui. Appelé quotidiennement par le scheduler.
+    Ex : "M. Jean Dupont est en congé du 14/04/2026 au 21/04/2026"
+    """
+    today = date.today()
+
+    operations = db.query(Operation).join(
+        Activation,
+        and_(
+            Activation.id_operation == Operation.id_operation,
+            Activation.type_action == TypeActionEnum.ACTIVATION,
+            Activation.statut_final == StatutFinalEnum.COMPLETE
+        )
+    ).filter(
+        or_(
+            Operation.date_debut == today,
+            Operation.date_depart == today,
+        )
+    ).all()
+
+    if not operations:
+        return
+
+    tous_employes = db.query(Employe).filter(Employe.statut_employe == 'ACTIF').all()
+    matricules_actifs = {e.matricule for e in tous_employes}
+    civ_map = {
+        e.matricule: ('M.' if (e.sexe or '').upper() in ('M', 'H') else 'Mme')
+        for e in tous_employes
+    }
+
+    for operation in operations:
+        raw_type = (operation.type_demande or '').lower()
+
+        # Broadcast uniquement pour les congés et permissions
+        if 'conge' in raw_type or 'congé' in raw_type:
+            statut_label = 'en congé'
+        elif 'permission' in raw_type:
+            statut_label = 'permissionnaire'
+        else:
+            continue
+
+        demandeur = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
+        if not demandeur:
+            continue
+
+        date_debut_val = operation.date_debut or operation.date_depart
+        date_fin_val = operation.date_fin or operation.date_retour
+        date_debut_fmt = date_debut_val.strftime('%d/%m/%Y') if date_debut_val else '–'
+        date_fin_fmt = date_fin_val.strftime('%d/%m/%Y') if date_fin_val else '–'
+
+        civ = civ_map.get(demandeur.matricule, 'M.')
+        titre = f"{civ} {demandeur.prenom} {demandeur.nom} – {statut_label.capitalize()}"
+        message = (
+            f"{civ} {demandeur.prenom} {demandeur.nom} est {statut_label} "
+            f"du {date_debut_fmt} au {date_fin_fmt}."
+        )
+
+        for mat in matricules_actifs:
+            if mat == demandeur.matricule:
+                continue
+            # Anti-doublon : ne pas recréer si déjà notifié pour cette opération
+            already = db.query(Notification).filter(
+                Notification.matricule == mat,
+                Notification.id_operation == operation.id_operation,
+                Notification.titre == titre,
+            ).first()
+            if already:
+                continue
+            db.add(Notification(
+                matricule=mat,
+                type_notification=TypeNotificationEnum.AUTRE,
+                titre=titre,
+                message=message,
+                id_operation=operation.id_operation,
+            ))
+
+    db.commit()
+
+
 def ajouter_notifications_annulation_operation(
     operation: Operation,
     actor_matricule: Optional[int],
@@ -535,7 +713,7 @@ def ajouter_notifications_annulation_operation(
     type_demande = operation.type_demande or 'demande'
     titre = f"{type_demande} annulée"
     message = (
-        f"La demande #{operation.id_operation} ({type_demande}) a été annulée par {actor_label}."
+        f"La {type_demande.lower()} a été annulée par {actor_label}."
     )
 
     for matricule in recipients:

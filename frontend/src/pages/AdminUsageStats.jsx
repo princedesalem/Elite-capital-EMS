@@ -1,17 +1,50 @@
 import React, { useState, useEffect } from 'react'
-import { BarChart2, Calendar, TrendingUp, CalendarDays } from 'lucide-react'
+import { BarChart2, Calendar, TrendingUp, CalendarDays, RefreshCw, Users, Building2, GitBranch, Layers } from 'lucide-react'
 import api from '../services/api'
 import '../styles/AdminUsageStats.css'
+const DIM_LABELS_DEFAULT = {
+  emp: { label: 'Employés', icon: null },
+  dept: { label: 'Départements', icon: null },
+  direction: { label: 'Directions', icon: null },
+  entite: { label: 'Entités', icon: null },
+}
+
+function HorizontalBar({ label, minutes, sessions, maxMinutes }) {
+  const pct = minutes > 0 && maxMinutes > 0 ? Math.max(2, Math.round((minutes / maxMinutes) * 100)) : 0
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  const timeLabel = minutes === 0 ? '0 min' : (h > 0 ? `${h}h${m > 0 ? ` ${m}min` : ''}` : `${m}min`)
+  return (
+    <div className="hbar-row">
+      <div className="hbar-label" title={label}>{label}</div>
+      <div className="hbar-track">
+        {pct > 0 ? (
+          <div className="hbar-fill" style={{ width: `${pct}%` }}>
+            <span className="hbar-value-inside">{timeLabel}</span>
+          </div>
+        ) : (
+          <span className="hbar-zero">0 min</span>
+        )}
+      </div>
+      <div className="hbar-sessions">{sessions} sess.</div>
+    </div>
+  )
+}
 
 export default function AdminUsageStats() {
-  const [activePeriod, setActivePeriod] = useState('today') // today, week, month, year
+  const DIM_LABELS = {
+    emp: { label: "Employés", icon: <Users size={14}/> },
+    dept: { label: "Départements", icon: <Layers size={14}/> },
+    direction: { label: "Directions", icon: <GitBranch size={14}/> },
+    entite: { label: "Entités", icon: <Building2 size={14}/> },
+  }
+  const [activePeriod, setActivePeriod] = useState('today')
+  const [activeDim, setActiveDim] = useState('emp')
   const [summaryData, setSummaryData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    loadSummaryData()
-  }, [activePeriod])
+  useEffect(() => { loadSummaryData() }, [])
 
   const loadSummaryData = async () => {
     setLoading(true)
@@ -28,128 +61,125 @@ export default function AdminUsageStats() {
 
   const formatTime = (minutes) => {
     if (!minutes) return '0h 0min'
-    const hours = Math.floor(minutes / 60)
-    const mins = minutes % 60
-    return `${hours}h ${mins}min`
+    const h = Math.floor(minutes / 60)
+    const m = minutes % 60
+    return `${h}h ${m}min`
   }
 
-  const getPeriodLabel = () => {
-    const labels = {
-      'today': 'Aujourd\'hui',
-      'week': 'Cette semaine',
-      'month': 'Ce mois',
-      'year': 'Cette année'
-    }
-    return labels[activePeriod] || activePeriod
-  }
+  const getPeriodLabel = () => ({
+    today: "Aujourd'hui", week: "Semaine", month: "Mois", year: "Année"
+  })[activePeriod] || activePeriod
 
-  const getStats = () => {
-    if (!summaryData) return null
-    return summaryData[activePeriod] || {}
+  const getStats = () => summaryData ? (summaryData[activePeriod] || {}) : {}
+
+  const getRanking = () => {
+    const stats = getStats()
+    return (stats.ranking || {})[activeDim] || []
   }
 
   return (
     <div className="admin-usage-container">
       <header className="admin-header">
-        <h1 style={{display:'flex',alignItems:'center',gap:8}}><BarChart2 size={22}/> Statistiques Globales d'Utilisation</h1>
-        <p>Vue d'administration - Tous les utilisateurs</p>
+        <h1 style={{display:'flex',alignItems:'center',gap:8}}><BarChart2 size={22}/> {"Usage administration"}</h1>
+        <p>{"Statistiques d'utilisation — vue administration"}</p>
       </header>
 
       <div className="admin-content">
-        {/* Period Selection */}
+        {/* Period + Refresh */}
         <div className="period-buttons">
-          <button 
-            onClick={() => setActivePeriod('today')}
-            className={`period-btn ${activePeriod === 'today' ? 'active' : ''}`}
-          >
-            <Calendar size={13} style={{marginRight:4,verticalAlign:'middle'}}/> Aujourd'hui
-          </button>
-          <button 
-            onClick={() => setActivePeriod('week')}
-            className={`period-btn ${activePeriod === 'week' ? 'active' : ''}`}
-          >
-            <CalendarDays size={13} style={{marginRight:4,verticalAlign:'middle'}}/> Semaine
-          </button>
-          <button 
-            onClick={() => setActivePeriod('month')}
-            className={`period-btn ${activePeriod === 'month' ? 'active' : ''}`}
-          >
-            <BarChart2 size={13} style={{marginRight:4,verticalAlign:'middle'}}/> Mois
-          </button>
-          <button 
-            onClick={() => setActivePeriod('year')}
-            className={`period-btn ${activePeriod === 'year' ? 'active' : ''}`}
-          >
-            <TrendingUp size={13} style={{marginRight:4,verticalAlign:'middle'}}/> Année
+          {[
+            { key: 'today', icon: <Calendar size={13}/>, label: "Aujourd'hui" },
+            { key: 'week',  icon: <CalendarDays size={13}/>, label: "Semaine" },
+            { key: 'month', icon: <BarChart2 size={13}/>, label: "Mois" },
+            { key: 'year',  icon: <TrendingUp size={13}/>, label: "Année" },
+          ].map(({ key, icon, label }) => (
+            <button key={key} onClick={() => setActivePeriod(key)}
+              className={`period-btn ${activePeriod === key ? 'active' : ''}`}>
+              <span style={{marginRight:4,verticalAlign:'middle'}}>{icon}</span>{label}
+            </button>
+          ))}
+          <button onClick={loadSummaryData} className="period-btn"
+            style={{marginLeft:'auto', borderColor:'#1e40af', color:'#1e40af'}} disabled={loading}>
+            <RefreshCw size={13} style={{marginRight:4,verticalAlign:'middle'}}/> {"Rafraîchir"}
           </button>
         </div>
 
         {error && <div className="error-message">{error}</div>}
-        {loading && <div className="loading">Chargement...</div>}
+        {loading && <div className="loading">{"Chargement..."}</div>}
 
         {summaryData && !loading && (() => {
           const stats = getStats()
+          const ranking = getRanking()
+          const maxMinutes = ranking.length > 0 ? ranking[0].minutes : 0
+
           return (
             <div className="summary-grid">
-              {/* Overview Card */}
+              {/* KPI banner */}
               <div className="summary-card large">
-                <h2 style={{ margin: '0 0 20px 0' }}>Vue d'ensemble - {getPeriodLabel()}</h2>
+                <h2 style={{margin:'0 0 20px 0'}}>Vue d'ensemble — {getPeriodLabel()}</h2>
                 <div className="stats-rows">
                   <div className="stat-row">
-                    <div className="stat-item">
-                      <div className="stat-label">Temps Total</div>
-                      <div className="stat-value">{stats.total_hours || 0} heures</div>
-                      <div className="stat-meta">{stats.total_minutes || 0} minutes</div>
+                    <div className="admin-usage-container stat-item">
+                      <div className="admin-usage-container stat-label">{"Temps total"}</div>
+                      <div className="admin-usage-container stat-value">{stats.hours || 0}h</div>
+                      <div className="admin-usage-container stat-meta">{stats.minutes || 0} min</div>
                     </div>
-                    <div className="stat-item">
-                      <div className="stat-label">Nombre de Sessions</div>
-                      <div className="stat-value">{stats.sessions_count || 0}</div>
-                      <div className="stat-meta">Connexions</div>
+                    <div className="admin-usage-container stat-item">
+                      <div className="admin-usage-container stat-label">{"Nombre de Sessions"}</div>
+                      <div className="admin-usage-container stat-value">{stats.sessions || 0}</div>
+                      <div className="admin-usage-container stat-meta">connexions</div>
                     </div>
-                    <div className="stat-item">
-                      <div className="stat-label">Utilisateurs Actifs</div>
-                      <div className="stat-value">{stats.users_count || 0}</div>
-                      <div className="stat-meta">Personnes</div>
+                    <div className="admin-usage-container stat-item">
+                      <div className="admin-usage-container stat-label">{"Utilisateurs actifs"}</div>
+                      <div className="admin-usage-container stat-value">{stats.users || 0}</div>
+                      <div className="admin-usage-container stat-meta">personnes</div>
                     </div>
+                    {stats.users > 0 && (
+                      <div className="admin-usage-container stat-item">
+                        <div className="admin-usage-container stat-label">{"Moy. par utilisateur"}</div>
+                        <div className="admin-usage-container stat-value">{formatTime(Math.round((stats.minutes || 0) / stats.users))}</div>
+                        <div className="admin-usage-container stat-meta">{Math.round((stats.sessions || 0) / stats.users)} sess. moy.</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Average Stats Card */}
-              {stats.users_count > 0 && (
-                <div className="summary-card">
-                  <h3 style={{ margin: '0 0 15px 0' }}>Moyennes par Utilisateur</h3>
-                  <div className="average-stats">
-                    <div className="avg-stat">
-                      <div className="avg-label">Temps moyen</div>
-                      <div className="avg-value">
-                        {formatTime(Math.round((stats.total_minutes || 0) / stats.users_count))}
-                      </div>
-                    </div>
-                    <div className="avg-stat">
-                      <div className="avg-label">Sessions moyennes</div>
-                      <div className="avg-value">
-                        {Math.round((stats.sessions_count || 0) / stats.users_count)}
-                      </div>
-                    </div>
+              {/* Histogram card */}
+              <div className="summary-card full-width">
+                <div className="histogram-header">
+                  <h3 style={{margin:0}}>Classement par utilisation — {getPeriodLabel()}</h3>
+                  <div className="dim-tabs">
+                    {Object.entries(DIM_LABELS).map(([key, { label, icon }]) => (
+                      <button key={key} onClick={() => setActiveDim(key)}
+                        className={`dim-tab ${activeDim === key ? 'active' : ''}`}>
+                        {icon}<span style={{marginLeft:5}}>{label}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
-              )}
 
-              {/* Daily Breakdown (if available) */}
+                {ranking.length === 0 ? (
+                  <div style={{padding:'30px 0', textAlign:'center', color:'#aaa', fontSize:14}}>
+                    {"Aucune donnée pour cette période"}
+                  </div>
+                ) : (
+                  <div className="histogram-body">
+                    {ranking.map((row, i) => (
+                      <HorizontalBar key={i} label={row.label} minutes={row.minutes}
+                        sessions={row.sessions} maxMinutes={maxMinutes} formatTime={formatTime} />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Daily Breakdown */}
               {stats.daily_breakdown && (
                 <div className="summary-card full-width">
-                  <h3>Répartition Journalière</h3>
+                  <h3>{"Répartition journalière"}</h3>
                   <div className="breakdown-table">
                     <table>
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>Temps Total</th>
-                          <th>Sessions</th>
-                          <th>Utilisateurs</th>
-                        </tr>
-                      </thead>
+                      <thead><tr><th>{"Date"}</th><th>{"Temps total"}</th><th>{"Sessions"}</th><th>{"Utilisateurs"}</th></tr></thead>
                       <tbody>
                         {Object.entries(stats.daily_breakdown).map(([date, data]) => (
                           <tr key={date}>
@@ -165,27 +195,19 @@ export default function AdminUsageStats() {
                 </div>
               )}
 
-              {/* Monthly Breakdown (if available) */}
+              {/* Monthly Breakdown */}
               {stats.monthly_breakdown && (
                 <div className="summary-card full-width">
-                  <h3>Répartition Mensuelle</h3>
+                  <h3>{"Répartition mensuelle"}</h3>
                   <div className="breakdown-table">
                     <table>
-                      <thead>
-                        <tr>
-                          <th>Mois</th>
-                          <th>Temps Total</th>
-                          <th>Sessions</th>
-                          <th>Utilisateurs</th>
-                        </tr>
-                      </thead>
+                      <thead><tr><th>{"Mois"}</th><th>{"Temps total"}</th><th>{"Sessions"}</th><th>{"Utilisateurs"}</th></tr></thead>
                       <tbody>
                         {Object.entries(stats.monthly_breakdown).map(([month, data]) => {
-                          const monthNames = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-                                             'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+                          const names = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
                           return (
                             <tr key={month}>
-                              <td>{monthNames[parseInt(month)]}</td>
+                              <td>{names[parseInt(month)]}</td>
                               <td>{formatTime(data.total_minutes)}</td>
                               <td>{data.sessions_count}</td>
                               <td>{data.users_count}</td>
@@ -202,9 +224,7 @@ export default function AdminUsageStats() {
         })()}
 
         {!summaryData && !loading && (
-          <div className="no-data">
-            <p>Aucune donnée disponible</p>
-          </div>
+          <div className="no-data"><p>{"Aucune donnée disponible"}</p></div>
         )}
       </div>
     </div>

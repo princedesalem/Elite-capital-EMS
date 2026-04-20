@@ -211,7 +211,7 @@ def creer_demande_frais(
     
     operation_frais = Operation(
         matricule=matricule,
-        titre=f"Demande de frais mission #{id_operation}",
+        titre=f"Frais – {mission.ville or mission.pays or 'mission'}",
         commentaire=justificatif,
         type_demande='Frais de mission',
         statut='en attente',
@@ -253,7 +253,7 @@ def creer_demande_frais(
             matricule=prochain_matricule,
             type_notification='VALIDATION',
             titre='Nouvelle demande de frais de mission',
-            message=f"{_nom_emp} a soumis une demande de frais de mission (total : {total_frais} FCFA) pour l'opération #{id_operation}.",
+            message=f"{_nom_emp} a soumis une demande de frais de mission ({total_frais} FCFA) pour la mission de {mission.ville or mission.pays or 'destination'}.",
             id_operation=operation_frais.id_operation,
             db=db
         )
@@ -504,7 +504,7 @@ def verifier_missions_a_activer(db: Session):
                 type_notification=TypeNotificationEnum.RAPPEL_DEPART,
                 titre=f"{urgence}Rappel {type_rappel} – Activez votre mission avant le départ",
                 message=(
-                    f"La mission #{id_op} vers {destination} "
+                    f"La mission de {destination} "
                     f"débute le {operation.date_debut} (dans environ {heures_display}h) "
                     f"et n'est pas encore activée. "
                     f"Rendez-vous dans l'onglet « Reçu » de la page Missions pour l'activer."
@@ -632,7 +632,7 @@ def envoyer_relance_rapport(
         notification = Notification(
             matricule=matricule,
             type_notification=TypeNotificationEnum.AUTRE,
-            titre=f"⚠️ {numero_relance}: Rapport de mission #{mission.id_mission} non soumis",
+            titre=f"⚠️ {numero_relance}: Rapport non soumis – {mission.ville or mission.pays or 'mission'}",
             message=f"{message_contexte}. Veuillez téléverser votre rapport de mission dans les plus brefs délais.",
             id_operation=mission.id_mission
         )
@@ -692,7 +692,7 @@ def escalader_vers_rh_ig(
         notification = Notification(
             matricule=employe.matricule,
             type_notification=TypeNotificationEnum.AUTRE,
-            titre=f"🚨 ESCALADE: Rapport mission #{mission.id_mission} non soumis après 96H",
+            titre=f"🚨 ESCALADE: Rapport non soumis – {mission.ville or mission.pays or 'mission'} (>96H)",
             message=f"Les missionnaires ({noms_str}) n'ont pas soumis leur rapport de mission malgré 3 relances. "
                    f"Mission terminée il y a {jours_ecoules} jours. Destination: {mission.ville}, {mission.pays}. "
                    f"Action requise.",

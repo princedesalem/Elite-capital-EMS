@@ -8,7 +8,8 @@ from .utils.notifications import (
     envoyer_alerte_conges_fin_annee,
     envoyer_rappel_depart_conges,
     envoyer_rappel_retour_conges,
-    nettoyer_anciennes_notifications
+    nettoyer_anciennes_notifications,
+    notifier_tous_employes_debut_operation
 )
 from .utils.activation_cloture import verifier_delai_cloture
 from .utils.missions import verifier_alertes_rapport_mission, verifier_relances_rapport_mission, verifier_missions_a_activer
@@ -56,7 +57,11 @@ def job_quotidien():
         for perm in permissions:
             from .utils.permissions import envoyer_rappel_preuves_permission
             envoyer_rappel_preuves_permission(perm.id_perm_c, db)
-        
+
+        # 6. Notifier tous les employés des absences commençant aujourd'hui
+        print("  - Notification broadcast début d'absence...")
+        notifier_tous_employes_debut_operation(db)
+
         print(f"[{datetime.now()}] Tâches quotidiennes terminées avec succès.")
     
     except Exception as e:

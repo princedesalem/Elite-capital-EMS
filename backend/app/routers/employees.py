@@ -6,6 +6,7 @@ from ..db import get_db
 from .. import crud, schemas, models
 from ..utils import security
 from ..utils.world_data import WORLD_COUNTRIES, WORLD_CITIES
+from ..utils.audit import log_action
 from datetime import datetime, timedelta
 from typing import Optional
 from pydantic import BaseModel
@@ -117,6 +118,7 @@ def _notify_admin_employee_creation(
             titre='Nouvel employé créé',
             message=(
                 f"{creator_label} a créé l'employé {new_emp_label} (matricule {created.matricule})."
+                " Veuillez bien créer un compte d'utilisateur pour cet employé."
             ),
             id_operation=None,
             db=db,
@@ -370,6 +372,8 @@ def _prepare_employee_payload(payload: schemas.EmployeBase, db: Session):
             cleaned['sexe'] = 'F'
         elif sexe_raw in {'autre', 'other'}:
             cleaned['sexe'] = 'Autre'
+        else:
+            raise HTTPException(status_code=400, detail="Sexe invalide. Valeurs acceptées : M, F, Autre.")
 
     if cleaned.get('statut_matrimonial') is not None:
         raw = str(cleaned.get('statut_matrimonial') or '').strip().lower()
@@ -414,6 +418,9 @@ def _prepare_employee_payload(payload: schemas.EmployeBase, db: Session):
         if not direction:
             raise HTTPException(status_code=400, detail='Direction invalide')
         cleaned['id_direction'] = direction.id_direction
+    else:
+        # Allow clearing direction
+        cleaned['id_direction'] = None
 
     if departement_input:
         departement = db.query(models.Departement).filter(models.Departement.nom == departement_input).first()
@@ -422,6 +429,9 @@ def _prepare_employee_payload(payload: schemas.EmployeBase, db: Session):
         if not departement:
             raise HTTPException(status_code=400, detail='Département invalide')
         cleaned['dept_id'] = departement.dept_id
+    else:
+        # Allow clearing department
+        cleaned['dept_id'] = None
 
     # Harmoniser automatiquement la hiérarchie si un département est fourni
     if cleaned.get('dept_id'):
@@ -589,9 +599,13 @@ def _employee_export_rows(db: Session):
 def list_employees(
     id_pays: Optional[int] = Query(None),
     id_localisation: Optional[int] = Query(None),
+    include_deleted: bool = Query(False),
     db: Session = Depends(get_db)
 ):
-    employees = db.query(models.Employe).all()
+    q = db.query(models.Employe)
+    if not include_deleted:
+        q = q.filter(models.Employe.statut_employe != models.StatutEmployeEnum.CONGEDIE)
+    employees = q.all()
     employees = [e for e in employees if _employee_matches_geo_filters(e, db, id_pays, id_localisation)]
     return [_serialize_employee(e, db) for e in employees]
 
@@ -601,6 +615,7 @@ def list_employees_scoped(
     request: Request,
     id_pays: Optional[int] = Query(None),
     id_localisation: Optional[int] = Query(None),
+    include_deleted: bool = Query(False),
     db: Session = Depends(get_db)
 ):
     requester_matricule, requester_role = _get_token_context(request)
@@ -608,7 +623,10 @@ def list_employees_scoped(
 
     is_full_access = role in {'RH', 'ADMIN', 'PCA', 'AG'}
     if is_full_access:
-        employees = db.query(models.Employe).all()
+        q = db.query(models.Employe)
+        if not include_deleted:
+            q = q.filter(models.Employe.statut_employe != models.StatutEmployeEnum.CONGEDIE)
+        employees = q.all()
         employees = [e for e in employees if _employee_matches_geo_filters(e, db, id_pays, id_localisation)]
         return [_serialize_employee(e, db) for e in employees]
 
@@ -617,6 +635,8 @@ def list_employees_scoped(
         raise HTTPException(status_code=404, detail='Employé connecté introuvable')
 
     query = db.query(models.Employe)
+    if not include_deleted:
+        query = query.filter(models.Employe.statut_employe != models.StatutEmployeEnum.CONGEDIE)
     if role == 'DG':
         query = query.filter(models.Employe.id_entite == requester.id_entite)
     elif role == 'DIRECTEUR':
@@ -669,6 +689,7 @@ def create_employee(
             raise HTTPException(status_code=400, detail='Email existe déjà')
         raise HTTPException(status_code=400, detail='Erreur de sauvegarde')
     _notify_admin_employee_creation(db, created, creator_role, creator_matricule, background_tasks)
+    log_action(db, creator_matricule, 'EMPLOYEE_CREATED', 'employe', created.matricule, {'nom': data.get('nom'), 'prenom': data.get('prenom')}, ip_address=request.client.host if request.client else None)
     return _serialize_employee(created, db)
 
 
@@ -778,12 +799,131 @@ def get_employee(matricule: str, db: Session = Depends(get_db)):
     return _serialize_employee(e, db)
 
 
+@router.delete('/{matricule}')
+def soft_delete_employee(matricule: str, request: Request, db: Session = Depends(get_db)):
+    """Soft-delete: sets statut_employe to CONGEDIE and disables the user account (ADMIN only)."""
+    actor_matricule, actor_role = _get_token_context(request)
+    if str(actor_role or '').upper() != 'ADMIN':
+        raise HTTPException(status_code=403, detail='Réservé aux administrateurs')
+
+    e = db.query(models.Employe).filter(models.Employe.matricule == int(matricule)).first()
+    if not e:
+        raise HTTPException(status_code=404, detail='Employé introuvable')
+
+    if e.statut_employe == models.StatutEmployeEnum.CONGEDIE:
+        raise HTTPException(status_code=409, detail='Employé déjà supprimé')
+
+    e.statut_employe = models.StatutEmployeEnum.CONGEDIE
+    db.flush()
+
+    # Disable associated user account if any
+    utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.matricule == int(matricule)).first()
+    if utilisateur:
+        utilisateur.bloque_jusqua = datetime(9999, 12, 31)  # block permanently
+        db.flush()
+
+    log_action(
+        db,
+        actor_matricule,
+        'EMPLOYEE_SOFT_DELETED',
+        'employe',
+        str(matricule),
+        {'nom': e.nom, 'prenom': e.prenom, 'statut': 'CONGEDIE'},
+        ip_address=request.client.host if request.client else None,
+    )
+    db.commit()
+    return {'detail': 'Employé supprimé (soft delete)', 'matricule': matricule}
+
+
+# ── RGPD endpoints ────────────────────────────────────────────────────────────
+
+@router.get('/{matricule}/export-personal-data')
+def export_personal_data(matricule: str, request: Request, db: Session = Depends(get_db)):
+    """RGPD: Export all personal data for an employee (self or ADMIN/RH)."""
+    actor_matricule, actor_role = _get_token_context(request)
+    role = str(actor_role or '').upper()
+    requesting_own = str(actor_matricule) == str(matricule)
+    if not requesting_own and role not in {'ADMIN', 'RH', 'PCA', 'AG'}:
+        raise HTTPException(status_code=403, detail='Accès refusé')
+
+    e = db.query(models.Employe).filter(models.Employe.matricule == int(matricule)).first()
+    if not e:
+        raise HTTPException(status_code=404, detail='Employé introuvable')
+
+    operations = db.query(models.Operation).filter(models.Operation.matricule == int(matricule)).all()
+    missions = db.query(models.MissionnairesMission).filter(models.MissionnairesMission.matricule == int(matricule)).all()
+
+    data = {
+        'employe': {
+            'matricule': e.matricule,
+            'nom': e.nom,
+            'prenom': e.prenom,
+            'email': e.email,
+            'telephone': e.telephone,
+            'date_naissance': str(e.date_naissance) if e.date_naissance else None,
+            'lieu_naissance': getattr(e, 'lieu_naissance', None),
+            'adresse': getattr(e, 'adresse', None),
+            'nationalite': getattr(e, 'nationalite', None),
+            'statut_employe': e.statut_employe.value if e.statut_employe else None,
+            'fonction': e.fonction,
+            'date_embauche': str(e.date_embauche) if e.date_embauche else None,
+        },
+        'operations_count': len(operations),
+        'missions_count': len(missions),
+        'export_date': datetime.utcnow().isoformat(),
+        'exported_by': str(actor_matricule),
+    }
+    log_action(db, actor_matricule, 'RGPD_EXPORT', 'employe', str(matricule), {}, ip_address=request.client.host if request.client else None)
+    db.commit()
+    return data
+
+
+@router.post('/{matricule}/anonymize')
+def anonymize_employee(matricule: str, request: Request, db: Session = Depends(get_db)):
+    """RGPD: Anonymize all PII for a departed employee (ADMIN only). Keeps operational records."""
+    actor_matricule, actor_role = _get_token_context(request)
+    if str(actor_role or '').upper() != 'ADMIN':
+        raise HTTPException(status_code=403, detail='Réservé aux administrateurs')
+
+    e = db.query(models.Employe).filter(models.Employe.matricule == int(matricule)).first()
+    if not e:
+        raise HTTPException(status_code=404, detail='Employé introuvable')
+
+    if e.statut_employe != models.StatutEmployeEnum.CONGEDIE:
+        raise HTTPException(status_code=409, detail="L'employé doit être congédié avant anonymisation")
+
+    anon_label = f'ANONYME-{matricule}'
+    e.nom = anon_label
+    e.prenom = ''
+    e.email = None
+    e.telephone = None
+    e.date_naissance = None
+    e.lieu_naissance = None
+    e.adresse = None
+    e.nationalite = None
+
+    log_action(db, actor_matricule, 'RGPD_ANONYMIZE', 'employe', str(matricule), {'anon_label': anon_label}, ip_address=request.client.host if request.client else None)
+    db.commit()
+    return {'detail': 'Données personnelles anonymisées avec succès', 'matricule': matricule}
+
+
 @router.put('/{matricule}', response_model=schemas.EmployeOut)
-def update_employee(matricule: str, payload: schemas.EmployeBase, db: Session = Depends(get_db)):
+def update_employee(matricule: str, payload: schemas.EmployeBase, request: Request, db: Session = Depends(get_db)):
     data = _prepare_employee_payload(payload, db)
     e = crud.update_employe(db, matricule, data)
     if not e:
         raise HTTPException(status_code=404, detail='Non trouvé')
+    actor_matricule = None
+    auth = request.headers.get('authorization')
+    if auth and auth.lower().startswith('bearer '):
+        try:
+            from ..utils import security
+            token_payload = security.jwt.decode(auth.split(None, 1)[1], security.SECRET_KEY, algorithms=[security.ALGORITHM])
+            actor_matricule = token_payload.get('matricule') or token_payload.get('sub')
+            actor_matricule = int(actor_matricule) if actor_matricule is not None else None
+        except Exception:
+            actor_matricule = None
+    log_action(db, actor_matricule, 'EMPLOYEE_UPDATED', 'employe', matricule, {'nom': data.get('nom'), 'prenom': data.get('prenom')}, ip_address=request.client.host if request.client else None)
     return _serialize_employee(e, db)
 
 
@@ -1616,24 +1756,44 @@ def record_session_logout(id_session: int, db: Session = Depends(get_db)):
     return {'status': 'logged_out', 'duree_minutes': session.duree_minutes}
 
 
+def _resolve_minutes(session, today) -> int:
+    """Compute effective session duration in minutes, including abandoned sessions.
+
+    Priority:
+    1. duree_minutes already set (clean logout) → use it.
+    2. date_deconnexion set but duree_minutes missing → compute from timestamps.
+    3. Session abandoned today (no deconnexion) → elapsed time capped at 8h (may still be active).
+    4. Old abandoned session (no deconnexion, not today) → conservative 30-min estimate.
+    """
+    if session.duree_minutes is not None:
+        return session.duree_minutes
+    if session.date_deconnexion:
+        return max(0, int((session.date_deconnexion - session.date_connexion).total_seconds() / 60))
+    # Abandoned session
+    conn_date = session.date_connexion.date() if hasattr(session.date_connexion, 'date') else session.date_connexion
+    if conn_date >= today:
+        elapsed = max(0, int((datetime.utcnow() - session.date_connexion).total_seconds() / 60))
+        return min(elapsed, 480)  # cap at 8h — user may still be connected
+    return 30  # old abandoned session: conservative 30-min estimate
+
+
 @router.get('/stats/usage/{matricule}/today')
 def get_usage_today(matricule: int, request: Request, db: Session = Depends(get_db)):
     """Statistiques d'utilisation du jour"""
     _check_admin_role(request)
-    
+
     today = datetime.utcnow().date()
     sessions = db.query(models.SessionUtilisation).filter(
         models.SessionUtilisation.matricule == matricule,
         func.date(models.SessionUtilisation.date_connexion) == today,
-        models.SessionUtilisation.duree_minutes != None
     ).all()
-    
-    total_minutes = sum(s.duree_minutes or 0 for s in sessions)
+
+    total_minutes = sum(_resolve_minutes(s, today) for s in sessions)
     return {
         'date': today.isoformat(),
         'total_minutes': total_minutes,
         'total_hours': round(total_minutes / 60, 2) if total_minutes > 0 else 0,
-        'sessions_count': len(sessions)
+        'sessions_count': len(sessions),
     }
 
 
@@ -1641,33 +1801,30 @@ def get_usage_today(matricule: int, request: Request, db: Session = Depends(get_
 def get_usage_week(matricule: int, request: Request, db: Session = Depends(get_db)):
     """Statistiques d'utilisation de la semaine"""
     _check_admin_role(request)
-    
+
     today = datetime.utcnow().date()
     week_start = today - timedelta(days=today.weekday())
-    
+
     sessions = db.query(models.SessionUtilisation).filter(
         models.SessionUtilisation.matricule == matricule,
         func.date(models.SessionUtilisation.date_connexion) >= week_start,
         func.date(models.SessionUtilisation.date_connexion) <= today,
-        models.SessionUtilisation.duree_minutes != None
     ).all()
-    
-    # Group by day
+
     daily_data = {}
-    for session in sessions:
-        day = session.date_connexion.date()
-        if day not in daily_data:
-            daily_data[day] = 0
-        daily_data[day] += session.duree_minutes or 0
-    
+    for s in sessions:
+        day = s.date_connexion.date()
+        daily_data.setdefault(day, 0)
+        daily_data[day] += _resolve_minutes(s, today)
+
     total_minutes = sum(daily_data.values())
     return {
         'week_start': week_start.isoformat(),
         'week_end': today.isoformat(),
         'total_minutes': total_minutes,
         'total_hours': round(total_minutes / 60, 2) if total_minutes > 0 else 0,
-        'daily_breakdown': {str(k): v for k, v in daily_data.items()},
-        'sessions_count': len(sessions)
+        'daily_breakdown': {str(k): v for k, v in sorted(daily_data.items())},
+        'sessions_count': len(sessions),
     }
 
 
@@ -1676,35 +1833,31 @@ def get_usage_month(matricule: int, month: int = None, year: int = None, request
     """Statistiques d'utilisation du mois"""
     if request:
         _check_admin_role(request)
-    
+
     today = datetime.utcnow().date()
     if month is None:
         month = today.month
     if year is None:
         year = today.year
-    
-    # Get first and last day of month
+
     first_day = datetime(year, month, 1).date()
     if month == 12:
         last_day = datetime(year + 1, 1, 1).date() - timedelta(days=1)
     else:
         last_day = datetime(year, month + 1, 1).date() - timedelta(days=1)
-    
+
     sessions = db.query(models.SessionUtilisation).filter(
         models.SessionUtilisation.matricule == matricule,
         func.date(models.SessionUtilisation.date_connexion) >= first_day,
         func.date(models.SessionUtilisation.date_connexion) <= last_day,
-        models.SessionUtilisation.duree_minutes != None
     ).all()
-    
-    # Group by day
+
     daily_data = {}
-    for session in sessions:
-        day = session.date_connexion.date()
-        if day not in daily_data:
-            daily_data[day] = 0
-        daily_data[day] += session.duree_minutes or 0
-    
+    for s in sessions:
+        day = s.date_connexion.date()
+        daily_data.setdefault(day, 0)
+        daily_data[day] += _resolve_minutes(s, today)
+
     total_minutes = sum(daily_data.values())
     return {
         'month': month,
@@ -1713,8 +1866,8 @@ def get_usage_month(matricule: int, month: int = None, year: int = None, request
         'month_end': last_day.isoformat(),
         'total_minutes': total_minutes,
         'total_hours': round(total_minutes / 60, 2) if total_minutes > 0 else 0,
-        'daily_breakdown': {str(k): v for k, v in daily_data.items()},
-        'sessions_count': len(sessions)
+        'daily_breakdown': {str(k): v for k, v in sorted(daily_data.items())},
+        'sessions_count': len(sessions),
     }
 
 
@@ -1723,29 +1876,26 @@ def get_usage_year(matricule: int, year: int = None, request: Request = None, db
     """Statistiques d'utilisation de l'année"""
     if request:
         _check_admin_role(request)
-    
+
     today = datetime.utcnow().date()
     if year is None:
         year = today.year
-    
+
     first_day = datetime(year, 1, 1).date()
     last_day = datetime(year, 12, 31).date()
-    
+
     sessions = db.query(models.SessionUtilisation).filter(
         models.SessionUtilisation.matricule == matricule,
         func.date(models.SessionUtilisation.date_connexion) >= first_day,
         func.date(models.SessionUtilisation.date_connexion) <= last_day,
-        models.SessionUtilisation.duree_minutes != None
     ).all()
-    
-    # Group by month
+
     monthly_data = {}
-    for session in sessions:
-        month = session.date_connexion.month
-        if month not in monthly_data:
-            monthly_data[month] = 0
-        monthly_data[month] += session.duree_minutes or 0
-    
+    for s in sessions:
+        m = s.date_connexion.month
+        monthly_data.setdefault(m, 0)
+        monthly_data[m] += _resolve_minutes(s, today)
+
     total_minutes = sum(monthly_data.values())
     return {
         'year': year,
@@ -1753,72 +1903,213 @@ def get_usage_year(matricule: int, year: int = None, request: Request = None, db
         'year_end': last_day.isoformat(),
         'total_minutes': total_minutes,
         'total_hours': round(total_minutes / 60, 2) if total_minutes > 0 else 0,
-        'monthly_breakdown': {str(k): v for k, v in monthly_data.items()},
-        'sessions_count': len(sessions)
+        'monthly_breakdown': {str(k): v for k, v in sorted(monthly_data.items())},
+        'sessions_count': len(sessions),
     }
 
 
 @router.get('/stats/usage/all/summary')
 def get_usage_summary(request: Request, db: Session = Depends(get_db)):
-    """Statistiques globales pour tous les utilisateurs (Admin seulement)"""
+    """Statistiques globales pour tous les utilisateurs (Admin seulement).
+
+    Inclut toutes les sessions — y compris abandonnées (sans logout) —
+    en estimant la durée via _resolve_minutes.
+    Retourne les 4 périodes + breakdowns journaliers/mensuels + ranking
+    par employé, département, direction, entité.
+    """
     _check_admin_role(request)
-    
+
     today = datetime.utcnow().date()
-    
-    # Today
-    today_sessions = db.query(models.SessionUtilisation).filter(
-        func.date(models.SessionUtilisation.date_connexion) == today,
-        models.SessionUtilisation.duree_minutes != None
-    ).all()
-    today_minutes = sum(s.duree_minutes or 0 for s in today_sessions)
-    
-    # This week
     week_start = today - timedelta(days=today.weekday())
-    week_sessions = db.query(models.SessionUtilisation).filter(
-        func.date(models.SessionUtilisation.date_connexion) >= week_start,
-        models.SessionUtilisation.duree_minutes != None
-    ).all()
-    week_minutes = sum(s.duree_minutes or 0 for s in week_sessions)
-    
-    # This month
     month_start = datetime(today.year, today.month, 1).date()
-    month_sessions = db.query(models.SessionUtilisation).filter(
-        func.date(models.SessionUtilisation.date_connexion) >= month_start,
-        models.SessionUtilisation.duree_minutes != None
-    ).all()
-    month_minutes = sum(s.duree_minutes or 0 for s in month_sessions)
-    
-    # This year
     year_start = datetime(today.year, 1, 1).date()
-    year_sessions = db.query(models.SessionUtilisation).filter(
+
+    # Fetch ALL sessions from the start of this year (covers today/week/month/year)
+    all_sessions = db.query(models.SessionUtilisation).filter(
         func.date(models.SessionUtilisation.date_connexion) >= year_start,
-        models.SessionUtilisation.duree_minutes != None
     ).all()
-    year_minutes = sum(s.duree_minutes or 0 for s in year_sessions)
-    
+
+    # Build employee info map: matricule → {nom, prenom, departement, direction, entite, dept_id, id_direction, id_entite}
+    employees = db.query(models.Employe).all()
+    entites_map = {e.id_entite: e.nom for e in db.query(models.Entite).all()}
+    directions_map = {d.id_direction: d.nom for d in db.query(models.Direction).all()}
+    departements_map = {d.dept_id: d.nom for d in db.query(models.Departement).all()}
+    emp_info: dict = {}
+    for e in employees:
+        emp_info[e.matricule] = {
+            'nom': f'{e.prenom} {e.nom}',
+            'dept_id': e.dept_id,
+            'id_direction': e.id_direction,
+            'id_entite': e.id_entite,
+            'departement': departements_map.get(e.dept_id, 'N/A') if e.dept_id else 'N/A',
+            'direction': directions_map.get(e.id_direction, 'N/A') if e.id_direction else 'N/A',
+            'entite': entites_map.get(e.id_entite, 'N/A') if e.id_entite else 'N/A',
+        }
+
+    # Accumulators
+    today_mins = 0; today_sessions = []; today_users = set()
+    week_mins = 0;  week_sessions = [];  week_users = set()
+    month_mins = 0; month_sessions = []; month_users = set()
+    year_mins = 0;  year_sessions = [];  year_users = set()
+
+    # Breakdowns time
+    week_daily: dict = {}
+    month_daily: dict = {}
+    year_monthly: dict = {}
+
+    # Org breakdowns per period: mat → {minutes, sessions}
+    def _new_period_orgs():
+        return {'emp': {}, 'dept': {}, 'direction': {}, 'entite': {}}
+
+    today_orgs = _new_period_orgs()
+    week_orgs = _new_period_orgs()
+    month_orgs = _new_period_orgs()
+    year_orgs = _new_period_orgs()
+
+    def _acc_orgs(orgs: dict, mat: int, mins: int):
+        info = emp_info.get(mat, {})
+        # Employee
+        k = str(mat)
+        label = info.get('nom', f'#{mat}')
+        if k not in orgs['emp']:
+            orgs['emp'][k] = {'id': k, 'label': label, 'minutes': 0, 'sessions': 0}
+        orgs['emp'][k]['minutes'] += mins
+        orgs['emp'][k]['sessions'] += 1
+        # Département
+        dept_id = info.get('dept_id')
+        if dept_id:
+            dk = str(dept_id)
+            dlabel = info.get('departement', 'N/A')
+            if dk not in orgs['dept']:
+                orgs['dept'][dk] = {'id': dk, 'label': dlabel, 'minutes': 0, 'sessions': 0}
+            orgs['dept'][dk]['minutes'] += mins
+            orgs['dept'][dk]['sessions'] += 1
+        # Direction
+        dir_id = info.get('id_direction')
+        if dir_id:
+            dirk = str(dir_id)
+            dirlabel = info.get('direction', 'N/A')
+            if dirk not in orgs['direction']:
+                orgs['direction'][dirk] = {'id': dirk, 'label': dirlabel, 'minutes': 0, 'sessions': 0}
+            orgs['direction'][dirk]['minutes'] += mins
+            orgs['direction'][dirk]['sessions'] += 1
+        # Entité
+        ent_id = info.get('id_entite')
+        if ent_id:
+            ek = str(ent_id)
+            elabel = info.get('entite', 'N/A')
+            if ek not in orgs['entite']:
+                orgs['entite'][ek] = {'id': ek, 'label': elabel, 'minutes': 0, 'sessions': 0}
+            orgs['entite'][ek]['minutes'] += mins
+            orgs['entite'][ek]['sessions'] += 1
+
+    for s in all_sessions:
+        mins = _resolve_minutes(s, today)
+        conn_date = s.date_connexion.date() if hasattr(s.date_connexion, 'date') else s.date_connexion
+        mat = s.matricule
+
+        year_mins += mins; year_sessions.append(s); year_users.add(mat)
+        _acc_orgs(year_orgs, mat, mins)
+
+        if conn_date >= month_start:
+            month_mins += mins; month_sessions.append(s); month_users.add(mat)
+            _acc_orgs(month_orgs, mat, mins)
+
+        if conn_date >= week_start:
+            week_mins += mins; week_sessions.append(s); week_users.add(mat)
+            _acc_orgs(week_orgs, mat, mins)
+
+        if conn_date == today:
+            today_mins += mins; today_sessions.append(s); today_users.add(mat)
+            _acc_orgs(today_orgs, mat, mins)
+
+        # Time breakdowns
+        key_m = str(conn_date.month)
+        if key_m not in year_monthly:
+            year_monthly[key_m] = {'total_minutes': 0, 'sessions_count': 0, 'users': set()}
+        year_monthly[key_m]['total_minutes'] += mins
+        year_monthly[key_m]['sessions_count'] += 1
+        year_monthly[key_m]['users'].add(mat)
+
+        if conn_date >= month_start:
+            key_d = str(conn_date)
+            if key_d not in month_daily:
+                month_daily[key_d] = {'total_minutes': 0, 'sessions_count': 0, 'users': set()}
+            month_daily[key_d]['total_minutes'] += mins
+            month_daily[key_d]['sessions_count'] += 1
+            month_daily[key_d]['users'].add(mat)
+
+        if conn_date >= week_start:
+            key_d = str(conn_date)
+            if key_d not in week_daily:
+                week_daily[key_d] = {'total_minutes': 0, 'sessions_count': 0, 'users': set()}
+            week_daily[key_d]['total_minutes'] += mins
+            week_daily[key_d]['sessions_count'] += 1
+            week_daily[key_d]['users'].add(mat)
+
+    # Fill zeros: include every employee/dept/direction/entite even with no sessions
+    for period_orgs in [today_orgs, week_orgs, month_orgs, year_orgs]:
+        for mat, info in emp_info.items():
+            k = str(mat)
+            if k not in period_orgs['emp']:
+                period_orgs['emp'][k] = {'id': k, 'label': info['nom'], 'minutes': 0, 'sessions': 0}
+            dept_id = info.get('dept_id')
+            if dept_id:
+                dk = str(dept_id)
+                if dk not in period_orgs['dept']:
+                    period_orgs['dept'][dk] = {'id': dk, 'label': info.get('departement', 'N/A'), 'minutes': 0, 'sessions': 0}
+            dir_id = info.get('id_direction')
+            if dir_id:
+                dirk = str(dir_id)
+                if dirk not in period_orgs['direction']:
+                    period_orgs['direction'][dirk] = {'id': dirk, 'label': info.get('direction', 'N/A'), 'minutes': 0, 'sessions': 0}
+            ent_id = info.get('id_entite')
+            if ent_id:
+                ek = str(ent_id)
+                if ek not in period_orgs['entite']:
+                    period_orgs['entite'][ek] = {'id': ek, 'label': info.get('entite', 'N/A'), 'minutes': 0, 'sessions': 0}
+
+    def _serialize_breakdown(bd: dict) -> dict:
+        return {k: {'total_minutes': v['total_minutes'], 'sessions_count': v['sessions_count'],
+                    'users_count': len(v['users'])} for k, v in sorted(bd.items())}
+
+    def _serialize_orgs(orgs: dict) -> dict:
+        """Serialize and sort each org dimension by minutes DESC (zeros at bottom)."""
+        result = {}
+        for dim, entries in orgs.items():
+            result[dim] = sorted(entries.values(), key=lambda x: x['minutes'], reverse=True)
+        return result
+
     return {
         'today': {
-            'minutes': today_minutes,
-            'hours': round(today_minutes / 60, 2) if today_minutes > 0 else 0,
+            'minutes': today_mins,
+            'hours': round(today_mins / 60, 2) if today_mins > 0 else 0,
             'sessions': len(today_sessions),
-            'users': len(set(s.matricule for s in today_sessions))
+            'users': len(today_users),
+            'ranking': _serialize_orgs(today_orgs),
         },
         'week': {
-            'minutes': week_minutes,
-            'hours': round(week_minutes / 60, 2) if week_minutes > 0 else 0,
+            'minutes': week_mins,
+            'hours': round(week_mins / 60, 2) if week_mins > 0 else 0,
             'sessions': len(week_sessions),
-            'users': len(set(s.matricule for s in week_sessions))
+            'users': len(week_users),
+            'daily_breakdown': _serialize_breakdown(week_daily),
+            'ranking': _serialize_orgs(week_orgs),
         },
         'month': {
-            'minutes': month_minutes,
-            'hours': round(month_minutes / 60, 2) if month_minutes > 0 else 0,
+            'minutes': month_mins,
+            'hours': round(month_mins / 60, 2) if month_mins > 0 else 0,
             'sessions': len(month_sessions),
-            'users': len(set(s.matricule for s in month_sessions))
+            'users': len(month_users),
+            'daily_breakdown': _serialize_breakdown(month_daily),
+            'ranking': _serialize_orgs(month_orgs),
         },
         'year': {
-            'minutes': year_minutes,
-            'hours': round(year_minutes / 60, 2) if year_minutes > 0 else 0,
+            'minutes': year_mins,
+            'hours': round(year_mins / 60, 2) if year_mins > 0 else 0,
             'sessions': len(year_sessions),
-            'users': len(set(s.matricule for s in year_sessions))
-        }
+            'users': len(year_users),
+            'monthly_breakdown': _serialize_breakdown(year_monthly),
+            'ranking': _serialize_orgs(year_orgs),
+        },
     }

@@ -55,6 +55,20 @@ def seed_multi_city(db_session, seed_reference_data):
     db_session.add(dept_yaounde)
     db_session.flush()
 
+    # Explicit city liaisons via DEPARTEMENT_IMPLANTATION
+    # Operations (ELCAM) → Douala
+    dept_douala = refs['departement']
+    db_session.add(models.DepartementImplantation(
+        dept_id=dept_douala.dept_id,
+        id_localisation=loc_douala.id_localisation,
+    ))
+    # Finance (ECG) → Yaoundé
+    db_session.add(models.DepartementImplantation(
+        dept_id=dept_yaounde.dept_id,
+        id_localisation=loc_yaounde.id_localisation,
+    ))
+    db_session.flush()
+
     db_session.commit()
     return {
         **refs,
@@ -108,3 +122,52 @@ class TestDepartementsFilterByLocalisation:
         resp = client.get('/employees/departements?id_localisation=99999', headers=headers)
         assert resp.status_code == 200
         assert resp.json() == []
+
+    def test_localisation_nom_reflects_filtered_city(self, client, db_session, seed_multi_city):
+        """localisation_nom must match the filtered city, not just the first DI row.
+
+        Regression: when a dept is linked to both Douala AND Yaoundé, filtering
+        by Douala must return localisation_nom='Douala', not 'Yaoundé'.
+        """
+        refs = seed_multi_city
+        dept_douala = refs['departement']
+        loc_yaounde = refs['loc_yaounde']
+        loc_douala = refs['loc_douala']
+        entite_elcam = refs['entite']
+
+        # Also link Operations (ELCAM) to Yaoundé — requires Yaoundé implantation for ELCAM
+        db_session.add(models.Implantation(
+            id_localisation=loc_yaounde.id_localisation,
+            id_entite=entite_elcam.id_entite,
+        ))
+        db_session.add(models.DepartementImplantation(
+            dept_id=dept_douala.dept_id,
+            id_localisation=loc_yaounde.id_localisation,
+        ))
+        db_session.commit()
+
+        headers = _auth_headers()
+        # Filter by Douala — Operations should show localisation_nom=Douala
+        resp = client.get(
+            f'/employees/departements?id_localisation={loc_douala.id_localisation}',
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        ops = next((d for d in data if d['nom'] == 'Operations'), None)
+        assert ops is not None
+        assert ops['localisation_nom'] == 'Douala', (
+            f"Expected 'Douala' but got '{ops['localisation_nom']}'"
+        )
+
+        # Filter by Yaoundé — same dept should now show localisation_nom=Yaoundé
+        resp2 = client.get(
+            f'/employees/departements?id_localisation={loc_yaounde.id_localisation}',
+            headers=headers,
+        )
+        data2 = resp2.json()
+        ops2 = next((d for d in data2 if d['nom'] == 'Operations'), None)
+        assert ops2 is not None
+        assert ops2['localisation_nom'] == 'Yaoundé', (
+            f"Expected 'Yaoundé' but got '{ops2['localisation_nom']}'"
+        )

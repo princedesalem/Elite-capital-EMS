@@ -48,6 +48,9 @@ export default function Organisation() {
   const [showAddVilleModal, setShowAddVilleModal] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(null)
   const [showEditModal, setShowEditModal] = useState(null)
+  const [showLinkDeptModal, setShowLinkDeptModal] = useState(false)
+  const [linkableDepts, setLinkableDepts] = useState([])
+  const [linkDeptId, setLinkDeptId] = useState('')
   const [editingItem, setEditingItem] = useState(null)
   const [newPaysQuery, setNewPaysQuery] = useState('')
   const [newVilleQuery, setNewVilleQuery] = useState('')
@@ -240,7 +243,7 @@ export default function Organisation() {
   // Delete pays
   const handleDeletePays = async (id_pays, e) => {
     e.stopPropagation()
-    if (window.confirm('Confirmer suppression?')) {
+    if (window.confirm("Êtes-vous sûr de vouloir supprimer ?")) {
       try {
         await api.delete(`/employees/pays/${id_pays}`)
         await loadPays()
@@ -253,7 +256,7 @@ export default function Organisation() {
   // Delete ville
   const handleDeleteVille = async (id_localisation, e) => {
     e.stopPropagation()
-    if (window.confirm('Confirmer suppression?')) {
+    if (window.confirm("Êtes-vous sûr de vouloir supprimer ?")) {
       try {
         await api.delete(`/employees/villes/${id_localisation}`)
         if (selectedPays) {
@@ -347,7 +350,7 @@ export default function Organisation() {
 
   // Handle delete item
   const handleDeleteItem = async (type, id) => {
-    if (window.confirm('Confirmer la suppression?')) {
+    if (window.confirm("Êtes-vous sûr de vouloir supprimer ?")) {
       try {
         if (type === 'entite') {
           await api.delete(`/employees/entites/${id}`)
@@ -362,6 +365,50 @@ export default function Organisation() {
       } catch (err) {
         alert('Erreur: ' + (err.response?.data?.detail || err.message))
       }
+    }
+  }
+
+  // Unlink a department from the current city (does NOT delete the dept globally)
+  const handleUnlinkDept = async (dept) => {
+    if (!window.confirm(`Retirer "${dept.nom}" de ${selectedVille?.ville} ?\nLe département reste dans l'Administration.`)) return
+    try {
+      await api.delete(`/employees/departements/${dept.dept_id}/villes/${selectedVille.id_localisation}`)
+      await loadDataByTab('departements', selectedVille.id_localisation)
+    } catch (err) {
+      alert('Erreur: ' + (err.response?.data?.detail || err.message))
+    }
+  }
+
+  // Open "Lier un département existant" modal
+  const handleOpenLinkDeptModal = async () => {
+    try {
+      const [allRes, entitesRes] = await Promise.all([
+        api.get('/employees/departements'),
+        api.get(`/employees/entites?id_localisation=${selectedVille.id_localisation}`),
+      ])
+      const linkedIds = new Set(departementsData.map((d) => d.dept_id))
+      const implantedEntiteIds = new Set(entitesRes.data.map((e) => e.id_entite))
+      const linkable = (allRes.data || []).filter(
+        (d) => implantedEntiteIds.has(d.id_entite) && !linkedIds.has(d.dept_id)
+      )
+      setLinkableDepts(linkable)
+      setLinkDeptId('')
+      setShowLinkDeptModal(true)
+    } catch (err) {
+      alert('Erreur: ' + (err.response?.data?.detail || err.message))
+    }
+  }
+
+  // Confirm link from modal
+  const handleLinkDept = async () => {
+    if (!linkDeptId) return
+    try {
+      await api.post(`/employees/departements/${linkDeptId}/villes/${selectedVille.id_localisation}`)
+      setShowLinkDeptModal(false)
+      setLinkDeptId('')
+      await loadDataByTab('departements', selectedVille.id_localisation)
+    } catch (err) {
+      alert('Erreur: ' + (err.response?.data?.detail || err.message))
     }
   }
 
@@ -434,7 +481,7 @@ export default function Organisation() {
   return (
     <div className="organisation-container">
       <header className="org-header">
-        <h1 style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><Building2 size={20} /> Organisation</h1>
+        <h1 style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><Building2 size={20} /> {"Organisation"}</h1>
         <p>Gestion des Pays, Villes et Structure Organisationnelle</p>
       </header>
 
@@ -601,7 +648,7 @@ export default function Organisation() {
             {/* Tabs Content */}
             <div className="tabs-content">
               {loading ? (
-                <div className="loading-state">Chargement...</div>
+                <div className="loading-state">{"Chargement..."}</div>
               ) : (
                 <div>
                   {/* Entités Tab */}
@@ -642,18 +689,18 @@ export default function Organisation() {
                                     <button
                                       className="btn-edit"
                                       onClick={() => handleEditItem('entite', entite)}
-                                      title="Modifier"
+                                      title={"Modifier"}
                                       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                                     >
-                                      <Pencil size={13} /> Modifier
+                                      <Pencil size={13} /> {"Modifier"}
                                     </button>
                                     <button
                                       className="btn-delete"
                                       onClick={() => handleDeleteItem('entite', entite.id_entite)}
-                                      title="Supprimer"
+                                      title={"Supprimer"}
                                       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                                     >
-                                      <Trash2 size={13} /> Supprimer
+                                      <Trash2 size={13} /> {"Supprimer"}
                                     </button>
                                   </div>
                                 )}
@@ -689,7 +736,7 @@ export default function Organisation() {
                             className="input"
                             value={sortDirectionsBy}
                             onChange={(e) => setSortDirectionsBy(e.target.value)}
-                            style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #e5e7eb', minWidth: '140px', fontSize: '0.9rem' }}
+                            style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border)', minWidth: '140px', fontSize: '0.9rem' }}
                           >
                             <option value="nom">Trier par Nom</option>
                             <option value="entite">Trier par Entité</option>
@@ -699,7 +746,7 @@ export default function Organisation() {
                               className="input"
                               value={filterDirectionsByEntite}
                               onChange={(e) => setFilterDirectionsByEntite(e.target.value)}
-                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #e5e7eb', minWidth: '140px', fontSize: '0.9rem' }}
+                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border)', minWidth: '140px', fontSize: '0.9rem' }}
                             >
                               <option value="">Filtrer par Entité</option>
                               {Array.from(new Set(directionsData.map(d => d.entite_nom).filter(Boolean))).sort().map(ent => (
@@ -744,18 +791,18 @@ export default function Organisation() {
                                     <button
                                       className="btn-edit"
                                       onClick={() => handleEditItem('direction', direction)}
-                                      title="Modifier"
+                                      title={"Modifier"}
                                       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                                     >
-                                      <Pencil size={13} /> Modifier
+                                      <Pencil size={13} /> {"Modifier"}
                                     </button>
                                     <button
                                       className="btn-delete"
                                       onClick={() => handleDeleteItem('direction', direction.id_direction)}
-                                      title="Supprimer"
+                                      title={"Supprimer"}
                                       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                                     >
-                                      <Trash2 size={13} /> Supprimer
+                                      <Trash2 size={13} /> {"Supprimer"}
                                     </button>
                                   </div>
                                 )}
@@ -790,7 +837,7 @@ export default function Organisation() {
                             className="input"
                             value={sortDepartmentsBy}
                             onChange={(e) => setSortDepartmentsBy(e.target.value)}
-                            style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #e5e7eb', minWidth: '140px', fontSize: '0.9rem' }}
+                            style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border)', minWidth: '140px', fontSize: '0.9rem' }}
                           >
                             <option value="nom">Trier par Nom</option>
                             <option value="entite">Trier par Entité</option>
@@ -801,7 +848,7 @@ export default function Organisation() {
                               className="input"
                               value={filterDepartmentsBy}
                               onChange={(e) => setFilterDepartmentsBy(e.target.value)}
-                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #e5e7eb', minWidth: '140px', fontSize: '0.9rem' }}
+                              style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border)', minWidth: '140px', fontSize: '0.9rem' }}
                             >
                               <option value="">{`Filtrer par ${getDepartmentFilterLabel()}`}</option>
                               {getDepartmentFilterOptions().map(opt => (
@@ -810,9 +857,14 @@ export default function Organisation() {
                             </select>
                           )}
                           {peutModifierOrganisation && (
-                            <button className="btn-add" onClick={() => handleOpenCreateModal('departement')} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                              <Plus size={14} /> Créer
-                            </button>
+                            <>
+                              <button className="btn-add" onClick={() => handleOpenLinkDeptModal()} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#6366f1' }}>
+                                <Plus size={14} /> Lier
+                              </button>
+                              <button className="btn-add" onClick={() => handleOpenCreateModal('departement')} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                <Plus size={14} /> Créer
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -828,7 +880,7 @@ export default function Organisation() {
                                 <div style={{ flex: 1 }}>
                                   <h4>{dept.nom}</h4>
                                   <p className="meta-info">
-                                    {dept.entite_nom || 'N/A'} • {dept.localisation_nom || dept.direction_nom || 'N/A'}
+                                    {dept.entite_nom || 'N/A'} • {selectedVille?.ville || dept.localisation_nom || dept.direction_nom || 'N/A'}
                                   </p>
                                 </div>
                                 {peutModifierOrganisation && (
@@ -836,18 +888,26 @@ export default function Organisation() {
                                     <button
                                       className="btn-edit"
                                       onClick={() => handleEditItem('departement', dept)}
-                                      title="Modifier"
+                                      title={"Modifier"}
                                       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                                     >
-                                      <Pencil size={13} /> Modifier
+                                      <Pencil size={13} /> {"Modifier"}
+                                    </button>
+                                    <button
+                                      className="btn-delete"
+                                      onClick={() => handleUnlinkDept(dept)}
+                                      title="Retirer de cette ville"
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#f59e0b', color: '#fff' }}
+                                    >
+                                      <X size={13} /> Retirer
                                     </button>
                                     <button
                                       className="btn-delete"
                                       onClick={() => handleDeleteItem('departement', dept.dept_id)}
-                                      title="Supprimer"
+                                      title="Supprimer (global)"
                                       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                                     >
-                                      <Trash2 size={13} /> Supprimer
+                                      <Trash2 size={13} /> {"Supprimer"}
                                     </button>
                                   </div>
                                 )}
@@ -920,7 +980,7 @@ export default function Organisation() {
               ))}
             </div>
             <button className="btn-cancel" onClick={() => setShowAddPaysModal(false)}>
-              Annuler
+              {"Annuler"}
             </button>
           </div>
         </div>
@@ -974,7 +1034,7 @@ export default function Organisation() {
               </div>
             )}
             <button className="btn-cancel" onClick={() => setShowAddVilleModal(false)}>
-              Annuler
+              {"Annuler"}
             </button>
           </div>
         </div>
@@ -1044,10 +1104,10 @@ export default function Organisation() {
               )}
               <div className="modal-buttons">
                 <button type="submit" className="btn-submit">
-                  Créer
+                  {"Créer"}
                 </button>
                 <button type="button" className="btn-cancel" onClick={() => setShowCreateModal(null)}>
-                  Annuler
+                  {"Annuler"}
                 </button>
               </div>
             </form>
@@ -1119,10 +1179,10 @@ export default function Organisation() {
               )}
               <div className="modal-buttons">
                 <button type="submit" className="btn-submit">
-                  Mettre à jour
+                  {"Mettre à jour"}
                 </button>
                 <button type="button" className="btn-cancel" onClick={() => setShowEditModal(null)}>
-                  Annuler
+                  {"Annuler"}
                 </button>
               </div>
             </form>
@@ -1130,9 +1190,50 @@ export default function Organisation() {
         </div>
       )}
 
+      {/* Modal: Lier un département existant à cette ville */}
+      {showLinkDeptModal && (
+        <div className="modal-overlay" onClick={() => setShowLinkDeptModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Lier un département à {selectedVille?.ville}</h2>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+              Seuls les départements dont l'entité est implantée dans cette ville sont listés.
+            </p>
+            {linkableDepts.length === 0 ? (
+              <p className="empty-state">Aucun département disponible à lier (tous déjà liés ou aucune entité implantée).</p>
+            ) : (
+              <select
+                value={linkDeptId}
+                onChange={(e) => setLinkDeptId(e.target.value)}
+                className="modal-input"
+              >
+                <option value="">-- Sélectionner un département --</option>
+                {linkableDepts.map((d) => (
+                  <option key={d.dept_id} value={d.dept_id}>
+                    {d.nom} ({d.entite_nom})
+                  </option>
+                ))}
+              </select>
+            )}
+            <div className="modal-buttons">
+              <button
+                type="button"
+                className="btn-submit"
+                onClick={handleLinkDept}
+                disabled={!linkDeptId}
+              >
+                Lier
+              </button>
+              <button type="button" className="btn-cancel" onClick={() => setShowLinkDeptModal(false)}>
+                {"Annuler"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="error-message">
-          {error} <button onClick={() => setError(null)}>Fermer</button>
+          {error} <button onClick={() => setError(null)}>{"Fermer"}</button>
         </div>
       )}
     </div>

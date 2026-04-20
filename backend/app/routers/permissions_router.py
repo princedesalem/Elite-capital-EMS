@@ -328,7 +328,7 @@ async def televerser_preuves(
                     matricule=mat_v,
                     type_notification='INFO',
                     titre='Preuve de permission téléversée',
-                    message=f'Une preuve a été téléversée pour la permission #{id_operation}. Vous pouvez la consulter en lecture seule.',
+                    message=f'Une preuve a été téléversée pour la permission de {employe_op.prenom} {employe_op.nom}. Vous pouvez la consulter en lecture seule.',
                     id_operation=id_operation,
                     db=db
                 )

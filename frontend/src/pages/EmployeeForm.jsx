@@ -3,85 +3,85 @@ import api from '../services/api'
 import {useNavigate, useParams} from 'react-router-dom'
 import AutocompleteInput from '../components/AutocompleteInput'
 
-/* ── Country dial codes with flag emojis ── */
+/* -- Country dial codes with flag emojis -- */
 const COUNTRY_CODES = [
-  {code:'+93',country:'Afghanistan',flag:'🇦🇫'},{code:'+355',country:'Albanie',flag:'🇦🇱'},
-  {code:'+213',country:'Algérie',flag:'🇩🇿'},{code:'+376',country:'Andorre',flag:'🇦🇩'},
-  {code:'+244',country:'Angola',flag:'🇦🇴'},{code:'+54',country:'Argentine',flag:'🇦🇷'},
-  {code:'+374',country:'Arménie',flag:'🇦🇲'},{code:'+61',country:'Australie',flag:'🇦🇺'},
-  {code:'+43',country:'Autriche',flag:'🇦🇹'},{code:'+994',country:'Azerbaïdjan',flag:'🇦🇿'},
-  {code:'+1-242',country:'Bahamas',flag:'🇧🇸'},{code:'+973',country:'Bahreïn',flag:'🇧🇭'},
-  {code:'+880',country:'Bangladesh',flag:'🇧🇩'},{code:'+32',country:'Belgique',flag:'🇧🇪'},
-  {code:'+229',country:'Bénin',flag:'🇧🇯'},{code:'+975',country:'Bhoutan',flag:'🇧🇹'},
-  {code:'+591',country:'Bolivie',flag:'🇧🇴'},{code:'+387',country:'Bosnie',flag:'🇧🇦'},
-  {code:'+267',country:'Botswana',flag:'🇧🇼'},{code:'+55',country:'Brésil',flag:'🇧🇷'},
-  {code:'+226',country:'Burkina Faso',flag:'🇧🇫'},{code:'+257',country:'Burundi',flag:'🇧🇮'},
-  {code:'+855',country:'Cambodge',flag:'🇰🇭'},{code:'+237',country:'Cameroun',flag:'🇨🇲'},
-  {code:'+1',country:'Canada / USA',flag:'🇨🇦'},{code:'+238',country:'Cap-Vert',flag:'🇨🇻'},
-  {code:'+236',country:'Centrafrique',flag:'🇨🇫'},{code:'+235',country:'Tchad',flag:'🇹🇩'},
-  {code:'+56',country:'Chili',flag:'🇨🇱'},{code:'+86',country:'Chine',flag:'🇨🇳'},
-  {code:'+57',country:'Colombie',flag:'🇨🇴'},{code:'+269',country:'Comores',flag:'🇰🇲'},
-  {code:'+242',country:'Congo (Brazzaville)',flag:'🇨🇬'},{code:'+243',country:'Congo (RDC)',flag:'🇨🇩'},
-  {code:'+506',country:'Costa Rica',flag:'🇨🇷'},{code:'+225',country:"Côte d'lvoire",flag:'🇨🇮'},
-  {code:'+385',country:'Croatie',flag:'🇭🇷'},{code:'+53',country:'Cuba',flag:'🇨🇺'},
-  {code:'+45',country:'Danemark',flag:'🇩🇰'},{code:'+253',country:'Djibouti',flag:'🇩🇯'},
-  {code:'+20',country:'Égypte',flag:'🇪🇬'},{code:'+503',country:'El Salvador',flag:'🇸🇻'},
-  {code:'+971',country:'Émirats',flag:'🇦🇪'},{code:'+593',country:'Équateur',flag:'🇪🇨'},
-  {code:'+291',country:'Érythrée',flag:'🇪🇷'},{code:'+34',country:'Espagne',flag:'🇪🇸'},
-  {code:'+372',country:'Estonie',flag:'🇪🇪'},{code:'+251',country:'Éthiopie',flag:'🇪🇹'},
-  {code:'+679',country:'Fidji',flag:'🇫🇯'},{code:'+358',country:'Finlande',flag:'🇫🇮'},
-  {code:'+33',country:'France',flag:'🇫🇷'},{code:'+241',country:'Gabon',flag:'🇬🇦'},
-  {code:'+220',country:'Gambie',flag:'🇬🇲'},{code:'+995',country:'Géorgie',flag:'🇬🇪'},
-  {code:'+233',country:'Ghana',flag:'🇬🇭'},{code:'+30',country:'Grèce',flag:'🇬🇷'},
-  {code:'+502',country:'Guatemala',flag:'🇬🇹'},{code:'+224',country:'Guinée',flag:'🇬🇳'},
-  {code:'+245',country:'Guinée-Bissau',flag:'🇬🇼'},{code:'+240',country:'Guinée Équatoriale',flag:'🇬🇶'},
-  {code:'+509',country:'Haïti',flag:'🇭🇹'},{code:'+504',country:'Honduras',flag:'🇭🇳'},
-  {code:'+36',country:'Hongrie',flag:'🇭🇺'},{code:'+91',country:'Inde',flag:'🇮🇳'},
-  {code:'+62',country:'Indonésie',flag:'🇮🇩'},{code:'+98',country:'Iran',flag:'🇮🇷'},
-  {code:'+964',country:'Irak',flag:'🇮🇶'},{code:'+353',country:'Irlande',flag:'🇮🇪'},
-  {code:'+972',country:'Israël',flag:'🇮🇱'},{code:'+39',country:'Italie',flag:'🇮🇹'},
-  {code:'+1-876',country:'Jamaïque',flag:'🇯🇲'},{code:'+81',country:'Japon',flag:'🇯🇵'},
-  {code:'+962',country:'Jordanie',flag:'🇯🇴'},{code:'+7',country:'Kazakhstan',flag:'🇰🇿'},
-  {code:'+254',country:'Kenya',flag:'🇰🇪'},{code:'+965',country:'Koweït',flag:'🇰🇼'},
-  {code:'+996',country:'Kirghizstan',flag:'🇰🇬'},{code:'+856',country:'Laos',flag:'🇱🇦'},
-  {code:'+371',country:'Lettonie',flag:'🇱🇻'},{code:'+961',country:'Liban',flag:'🇱🇧'},
-  {code:'+266',country:'Lesotho',flag:'🇱🇸'},{code:'+231',country:'Libéria',flag:'🇱🇷'},
-  {code:'+218',country:'Libye',flag:'🇱🇾'},{code:'+370',country:'Lituanie',flag:'🇱🇹'},
-  {code:'+352',country:'Luxembourg',flag:'🇱🇺'},{code:'+261',country:'Madagascar',flag:'🇲🇬'},
-  {code:'+265',country:'Malawi',flag:'🇲🇼'},{code:'+60',country:'Malaisie',flag:'🇲🇾'},
-  {code:'+960',country:'Maldives',flag:'🇲🇻'},{code:'+223',country:'Mali',flag:'🇲🇱'},
-  {code:'+356',country:'Malte',flag:'🇲🇹'},{code:'+222',country:'Mauritanie',flag:'🇲🇷'},
-  {code:'+230',country:'Maurice',flag:'🇲🇺'},{code:'+52',country:'Mexique',flag:'🇲🇽'},
-  {code:'+373',country:'Moldavie',flag:'🇲🇩'},{code:'+212',country:'Maroc',flag:'🇲🇦'},
-  {code:'+258',country:'Mozambique',flag:'🇲🇿'},{code:'+264',country:'Namibie',flag:'🇳🇦'},
-  {code:'+977',country:'Népal',flag:'🇳🇵'},{code:'+31',country:'Pays-Bas',flag:'🇳🇱'},
-  {code:'+64',country:'Nouvelle-Zélande',flag:'🇳🇿'},{code:'+505',country:'Nicaragua',flag:'🇳🇮'},
-  {code:'+227',country:'Niger',flag:'🇳🇪'},{code:'+234',country:'Nigéria',flag:'🇳🇬'},
-  {code:'+47',country:'Norvège',flag:'🇳🇴'},{code:'+968',country:'Oman',flag:'🇴🇲'},
-  {code:'+92',country:'Pakistan',flag:'🇵🇰'},{code:'+507',country:'Panama',flag:'🇵🇦'},
-  {code:'+595',country:'Paraguay',flag:'🇵🇾'},{code:'+51',country:'Pérou',flag:'🇵🇪'},
-  {code:'+63',country:'Philippines',flag:'🇵🇭'},{code:'+48',country:'Pologne',flag:'🇵🇱'},
-  {code:'+351',country:'Portugal',flag:'🇵🇹'},{code:'+974',country:'Qatar',flag:'🇶🇦'},
-  {code:'+40',country:'Roumanie',flag:'🇷🇴'},{code:'+7',country:'Russie',flag:'🇷🇺'},
-  {code:'+250',country:'Rwanda',flag:'🇷🇼'},{code:'+966',country:'Arabie Saoudite',flag:'🇸🇦'},
-  {code:'+221',country:'Sénégal',flag:'🇸🇳'},{code:'+381',country:'Serbie',flag:'🇷🇸'},
-  {code:'+232',country:'Sierra Leone',flag:'🇸🇱'},{code:'+65',country:'Singapour',flag:'🇸🇬'},
-  {code:'+421',country:'Slovaquie',flag:'🇸🇰'},{code:'+386',country:'Slovénie',flag:'🇸🇮'},
-  {code:'+252',country:'Somalie',flag:'🇸🇴'},{code:'+27',country:'Afrique du Sud',flag:'🇿🇦'},
-  {code:'+211',country:'Soudan du Sud',flag:'🇸🇸'},{code:'+34',country:'Espagne',flag:'🇪🇸'},
-  {code:'+94',country:'Sri Lanka',flag:'🇱🇰'},{code:'+249',country:'Soudan',flag:'🇸🇩'},
-  {code:'+46',country:'Suède',flag:'🇸🇪'},{code:'+41',country:'Suisse',flag:'🇨🇭'},
-  {code:'+963',country:'Syrie',flag:'🇸🇾'},{code:'+886',country:'Taïwan',flag:'🇹🇼'},
-  {code:'+255',country:'Tanzanie',flag:'🇹🇿'},{code:'+228',country:'Togo',flag:'🇹🇬'},
-  {code:'+216',country:'Tunisie',flag:'🇹🇳'},{code:'+90',country:'Turquie',flag:'🇹🇷'},
-  {code:'+256',country:'Ouganda',flag:'🇺🇬'},{code:'+380',country:'Ukraine',flag:'🇺🇦'},
-  {code:'+44',country:'Royaume-Uni',flag:'🇬🇧'},{code:'+598',country:'Uruguay',flag:'🇺🇾'},
-  {code:'+998',country:'Ouzbékistan',flag:'🇺🇿'},{code:'+58',country:'Venezuela',flag:'🇻🇪'},
-  {code:'+84',country:'Viêt Nam',flag:'🇻🇳'},{code:'+967',country:'Yémen',flag:'🇾🇪'},
-  {code:'+260',country:'Zambie',flag:'🇿🇲'},{code:'+263',country:'Zimbabwe',flag:'🇿🇼'},
+  {code:'+93',country:'Afghanistan',iso:'AF'},{code:'+355',country:'Albanie',iso:'AL'},
+  {code:'+213',country:'Algérie',iso:'DZ'},{code:'+376',country:'Andorre',iso:'AD'},
+  {code:'+244',country:'Angola',iso:'AO'},{code:'+54',country:'Argentine',iso:'AR'},
+  {code:'+374',country:'Arménie',iso:'AM'},{code:'+61',country:'Australie',iso:'AU'},
+  {code:'+43',country:'Autriche',iso:'AT'},{code:'+994',country:'Azerbaïdjan',iso:'AZ'},
+  {code:'+1-242',country:'Bahamas',iso:'BS'},{code:'+973',country:'Bahreïn',iso:'BH'},
+  {code:'+880',country:'Bangladesh',iso:'BD'},{code:'+32',country:'Belgique',iso:'BE'},
+  {code:'+229',country:'Bénin',iso:'BJ'},{code:'+975',country:'Bhoutan',iso:'BT'},
+  {code:'+591',country:'Bolivie',iso:'BO'},{code:'+387',country:'Bosnie',iso:'BA'},
+  {code:'+267',country:'Botswana',iso:'BW'},{code:'+55',country:'Brésil',iso:'BR'},
+  {code:'+226',country:'Burkina Faso',iso:'BF'},{code:'+257',country:'Burundi',iso:'BI'},
+  {code:'+855',country:'Cambodge',iso:'KH'},{code:'+237',country:'Cameroun',iso:'CM'},
+  {code:'+1',country:'Canada / USA',iso:'CA'},{code:'+238',country:'Cap-Vert',iso:'CV'},
+  {code:'+236',country:'Centrafrique',iso:'CF'},{code:'+235',country:'Tchad',iso:'TD'},
+  {code:'+56',country:'Chili',iso:'CL'},{code:'+86',country:'Chine',iso:'CN'},
+  {code:'+57',country:'Colombie',iso:'CO'},{code:'+269',country:'Comores',iso:'KM'},
+  {code:'+242',country:'Congo (Brazzaville)',iso:'CG'},{code:'+243',country:'Congo (RDC)',iso:'CD'},
+  {code:'+506',country:'Costa Rica',iso:'CR'},{code:'+225',country:"Côte d'lvoire",flag:'????'},
+  {code:'+385',country:'Croatie',iso:'HR'},{code:'+53',country:'Cuba',iso:'CU'},
+  {code:'+45',country:'Danemark',iso:'DK'},{code:'+253',country:'Djibouti',iso:'DJ'},
+  {code:'+20',country:'Égypte',iso:'EG'},{code:'+503',country:'El Salvador',iso:'SV'},
+  {code:'+971',country:'Émirats',iso:'AE'},{code:'+593',country:'Équateur',iso:'EC'},
+  {code:'+291',country:'Érythrée',iso:'ER'},{code:'+34',country:'Espagne',iso:'ES'},
+  {code:'+372',country:'Estonie',iso:'EE'},{code:'+251',country:'Éthiopie',iso:'ET'},
+  {code:'+679',country:'Fidji',iso:'FJ'},{code:'+358',country:'Finlande',iso:'FI'},
+  {code:'+33',country:'France',iso:'FR'},{code:'+241',country:'Gabon',iso:'GA'},
+  {code:'+220',country:'Gambie',iso:'GM'},{code:'+995',country:'Géorgie',iso:'GE'},
+  {code:'+233',country:'Ghana',iso:'GH'},{code:'+30',country:'Grèce',iso:'GR'},
+  {code:'+502',country:'Guatemala',iso:'GT'},{code:'+224',country:'Guinée',iso:'GN'},
+  {code:'+245',country:'Guinée-Bissau',iso:'GW'},{code:'+240',country:'Guinée Équatoriale',iso:'GQ'},
+  {code:'+509',country:'Haïti',iso:'HT'},{code:'+504',country:'Honduras',iso:'HN'},
+  {code:'+36',country:'Hongrie',iso:'HU'},{code:'+91',country:'Inde',iso:'IN'},
+  {code:'+62',country:'Indonésie',iso:'ID'},{code:'+98',country:'Iran',iso:'IR'},
+  {code:'+964',country:'Irak',iso:'IQ'},{code:'+353',country:'Irlande',iso:'IE'},
+  {code:'+972',country:'Israël',iso:'IL'},{code:'+39',country:'Italie',iso:'IT'},
+  {code:'+1-876',country:'Jamaïque',iso:'JM'},{code:'+81',country:'Japon',iso:'JP'},
+  {code:'+962',country:'Jordanie',iso:'JO'},{code:'+7',country:'Kazakhstan',iso:'KZ'},
+  {code:'+254',country:'Kenya',iso:'KE'},{code:'+965',country:'Koweït',iso:'KW'},
+  {code:'+996',country:'Kirghizstan',iso:'KG'},{code:'+856',country:'Laos',iso:'LA'},
+  {code:'+371',country:'Lettonie',iso:'LV'},{code:'+961',country:'Liban',iso:'LB'},
+  {code:'+266',country:'Lesotho',iso:'LS'},{code:'+231',country:'Libéria',iso:'LR'},
+  {code:'+218',country:'Libye',iso:'LY'},{code:'+370',country:'Lituanie',iso:'LT'},
+  {code:'+352',country:'Luxembourg',iso:'LU'},{code:'+261',country:'Madagascar',iso:'MG'},
+  {code:'+265',country:'Malawi',iso:'MW'},{code:'+60',country:'Malaisie',iso:'MY'},
+  {code:'+960',country:'Maldives',iso:'MV'},{code:'+223',country:'Mali',iso:'ML'},
+  {code:'+356',country:'Malte',iso:'MT'},{code:'+222',country:'Mauritanie',iso:'MR'},
+  {code:'+230',country:'Maurice',iso:'MU'},{code:'+52',country:'Mexique',iso:'MX'},
+  {code:'+373',country:'Moldavie',iso:'MD'},{code:'+212',country:'Maroc',iso:'MA'},
+  {code:'+258',country:'Mozambique',iso:'MZ'},{code:'+264',country:'Namibie',iso:'NA'},
+  {code:'+977',country:'Népal',iso:'NP'},{code:'+31',country:'Pays-Bas',iso:'NL'},
+  {code:'+64',country:'Nouvelle-Zélande',iso:'NZ'},{code:'+505',country:'Nicaragua',iso:'NI'},
+  {code:'+227',country:'Niger',iso:'NE'},{code:'+234',country:'Nigéria',iso:'NG'},
+  {code:'+47',country:'Norvège',iso:'NO'},{code:'+968',country:'Oman',iso:'OM'},
+  {code:'+92',country:'Pakistan',iso:'PK'},{code:'+507',country:'Panama',iso:'PA'},
+  {code:'+595',country:'Paraguay',iso:'PY'},{code:'+51',country:'Pérou',iso:'PE'},
+  {code:'+63',country:'Philippines',iso:'PH'},{code:'+48',country:'Pologne',iso:'PL'},
+  {code:'+351',country:'Portugal',iso:'PT'},{code:'+974',country:'Qatar',iso:'QA'},
+  {code:'+40',country:'Roumanie',iso:'RO'},{code:'+7',country:'Russie',iso:'RU'},
+  {code:'+250',country:'Rwanda',iso:'RW'},{code:'+966',country:'Arabie Saoudite',iso:'SA'},
+  {code:'+221',country:'Sénégal',iso:'SN'},{code:'+381',country:'Serbie',iso:'RS'},
+  {code:'+232',country:'Sierra Leone',iso:'SL'},{code:'+65',country:'Singapour',iso:'SG'},
+  {code:'+421',country:'Slovaquie',iso:'SK'},{code:'+386',country:'Slovénie',iso:'SI'},
+  {code:'+252',country:'Somalie',iso:'SO'},{code:'+27',country:'Afrique du Sud',iso:'ZA'},
+  {code:'+211',country:'Soudan du Sud',iso:'SS'},{code:'+34',country:'Espagne',iso:'ES'},
+  {code:'+94',country:'Sri Lanka',iso:'LK'},{code:'+249',country:'Soudan',iso:'SD'},
+  {code:'+46',country:'Suède',iso:'SE'},{code:'+41',country:'Suisse',iso:'CH'},
+  {code:'+963',country:'Syrie',iso:'SY'},{code:'+886',country:'Taïwan',iso:'TW'},
+  {code:'+255',country:'Tanzanie',iso:'TZ'},{code:'+228',country:'Togo',iso:'TG'},
+  {code:'+216',country:'Tunisie',iso:'TN'},{code:'+90',country:'Turquie',iso:'TR'},
+  {code:'+256',country:'Ouganda',iso:'UG'},{code:'+380',country:'Ukraine',iso:'UA'},
+  {code:'+44',country:'Royaume-Uni',iso:'GB'},{code:'+598',country:'Uruguay',iso:'UY'},
+  {code:'+998',country:'Ouzbékistan',iso:'UZ'},{code:'+58',country:'Venezuela',iso:'VE'},
+  {code:'+84',country:'Viêt Nam',iso:'VN'},{code:'+967',country:'Yémen',iso:'YE'},
+  {code:'+260',country:'Zambie',iso:'ZM'},{code:'+263',country:'Zimbabwe',iso:'ZW'},
 ]
 
-/* ── Parse existing telephone value into code + number ── */
+/* -- Parse existing telephone value into code + number -- */
 function parseTelephone(val) {
   if (!val) return { dialCode: '+237', localNumber: '' }
   const ordered = [...COUNTRY_CODES].sort((a, b) => b.code.length - a.code.length)
@@ -99,7 +99,7 @@ function getCountryIsoFromFlag(flag) {
   return letters.join('') || 'XX'
 }
 
-/* ── PhoneInput component ── */
+/* -- PhoneInput component -- */
 function PhoneInput({ value, onChange, placeholder = 'Numéro de téléphone' }) {
   const parsed = parseTelephone(value)
   const [dialCode, setDialCode] = useState(parsed.dialCode)
@@ -163,7 +163,7 @@ function PhoneInput({ value, onChange, placeholder = 'Numéro de téléphone' })
   }
 
   const selected = COUNTRY_CODES.find(c => c.code === dialCode) || COUNTRY_CODES[0]
-  const selectedLabel = `${getCountryIsoFromFlag(selected.flag)} (${selected.code})`
+  const selectedLabel = `${selected.iso || getCountryIsoFromFlag(selected.flag)} (${selected.code})`
 
   return (
     <div className="input" style={{ padding: 0, display: 'flex', alignItems: 'stretch', overflow: 'visible', width: '100%' }}>
@@ -174,15 +174,15 @@ function PhoneInput({ value, onChange, placeholder = 'Numéro de téléphone' })
           title="Choisir le code pays"
           onClick={() => setOpen(prev => !prev)}
           onKeyDown={handleToggleButtonKeyDown}
-          style={{ width: '100%', height: '100%', minHeight: 35, padding: '0 8px', background: '#f1f5f9', border: 'none', borderRight: '1px solid #e5e7eb', cursor: 'pointer', fontSize: '0.82rem', outline: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}
+          style={{ width: '100%', height: '100%', minHeight: 35, padding: '0 8px', background: 'var(--bg)', border: 'none', borderRight: '1px solid #e5e7eb', cursor: 'pointer', fontSize: '0.82rem', outline: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}
         >
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedLabel}</span>
-          <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>▼</span>
+          <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>?</span>
         </button>
         {open && (
           <div
             onKeyDown={handleDropdownKeyDown}
-            style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 1000, width: 240, maxHeight: 240, overflowY: 'auto', background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
+            style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 1000, width: 240, maxHeight: 240, overflowY: 'auto', background: 'var(--card)', border: '1px solid #d1d5db', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
           >
             {COUNTRY_CODES.map((c, i) => (
               <button
@@ -211,7 +211,7 @@ function PhoneInput({ value, onChange, placeholder = 'Numéro de téléphone' })
   )
 }
 
-/* ── Valid DB enum categories ── */
+/* -- Valid DB enum categories -- */
 const CATEGORIES_DB = [
   {value:'Cadre supérieur',label:'Cadre supérieur'},
   {value:'Cadre moyen',label:'Cadre moyen'},
@@ -372,13 +372,18 @@ export default function EmployeeForm(){
 
   useEffect(() => {
     const deptOption = findOptionByInput(options.departement, form.departement)
-    api.get('/employees/autocomplete/fonctions', {params: deptOption ? {dept_id:deptOption._id} : {}}).catch(()=>({data:[]}))
-      .then(res => {
-        const seen = new Set()
-        const merged = [...FUNCTION_SUGGESTIONS, ...(res.data||[]).map(o=>o.label||o.value).filter(Boolean)]
-          .filter(v => { const k = String(v||'').trim().toLowerCase(); if (!k||seen.has(k)) return false; seen.add(k); return true })
-        setOptions(prev=>({...prev, fonction:merged.map(v=>({value:v,label:v}))}))
-      })
+    const params = deptOption ? {dept_id:deptOption._id} : {}
+    Promise.all([
+      api.get('/employees/autocomplete/fonctions', {params}).catch(()=>({data:[]})),
+      api.get('/employees/admin/fonctions-reference').catch(()=>({data:[]})),
+    ]).then(([autoRes, refRes]) => {
+      const autoLabels = (autoRes.data||[]).map(o=>o.label||o.value).filter(Boolean)
+      const refLabels = (refRes.data||[]).map(o=>o.libelle||o.label||o.value).filter(Boolean)
+      const seen = new Set()
+      const merged = [...FUNCTION_SUGGESTIONS, ...refLabels, ...autoLabels]
+        .filter(v => { const k = String(v||'').trim().toLowerCase(); if (!k||seen.has(k)) return false; seen.add(k); return true })
+      setOptions(prev=>({...prev, fonction:merged.map(v=>({value:v,label:v}))}))
+    })
   }, [form.departement, options.departement])
 
   async function submit(e){
@@ -386,13 +391,6 @@ export default function EmployeeForm(){
     const isStagiaire = /stagiaire/i.test(String(form.fonction || '')) || /stagiaire/i.test(String(form.categorie || ''))
     if (!isStagiaire && age !== '' && Number(age) < 18) {
       setErr("L'âge minimum est 18 ans (sauf stagiaires).")
-      return
-    }
-    const fonctionSaisie = String(form.fonction||'').trim()
-    const fonctionsDisponibles = (options.fonction?.length ? options.fonction.map(o=>o.label) : FUNCTION_SUGGESTIONS)
-      .map(v=>String(v||'').trim().toLowerCase()).filter(Boolean)
-    if (!fonctionSaisie || !fonctionsDisponibles.includes(fonctionSaisie.toLowerCase())) {
-      setErr("Veuillez choisir une fonction existante dans la liste d'autocompletion.")
       return
     }
     if (!form.entite) { setErr("L'entité est obligatoire."); return }

@@ -1,13 +1,9 @@
-import React, {useState, useEffect} from 'react'
+import React, {useState, useEffect, useRef} from 'react'
 import {NavLink, Outlet, useLocation} from 'react-router-dom'
 import {useAuth} from '../contexts/AuthContext'
 import api from '../services/api'
 
-const SIDEBAR_BG = '#112033'
-const SIDEBAR_BG_ALT = '#17283d'
-const SIDEBAR_BORDER = 'rgba(255,255,255,0.08)'
-const SIDEBAR_TEXT = '#f3f6fb'
-const SIDEBAR_MUTED = 'rgba(243,246,251,0.64)'
+// All colors sourced from CSS vars — see index.css [data-theme]
 const ACCENT = '#ce2b2b'
 
 function Icon({name, size = 18, stroke = 1.8}) {
@@ -60,43 +56,50 @@ const MODULES = [
     icon: 'users',
     label: 'Ressources Humaines',
     subs: [
-      {label: 'Employés', path: '/rh/employees'},
-      {label: 'Administration', path: '/rh/administration'},
+      {label: 'Employés',              path: '/rh/employees'},
+      {label: 'Administration',        path: '/rh/administration'},
       {label: 'Absences', path: '/rh/absences', isGroup: true, groupSubs: [
-        {label: 'Congés',            path: '/rh/conges'},
-        {label: 'Permissions',       path: '/rh/permissions'},
-        {label: 'Demandes de Sortie',path: '/rh/sorties'},
-        {label: 'Remplaçants',       path: '/rh/remplacants'},
+        {label: 'Congés',              path: '/rh/conges'},
+        {label: 'Permissions',         path: '/rh/permissions'},
+        {label: 'Demandes de Sorties', path: '/rh/sorties'},
+        {label: 'Remplaçants',         path: '/rh/remplacants'},
       ]},
       {label: 'Missions', path: '/rh/missions', isGroup: true, groupSubs: [
-        {label: 'Missions',          path: '/rh/missions'},
-        {label: 'Frais de mission',  path: '/rh/frais'},
-        {label: 'Missions IG',       path: '/rh/missions-ig'},
+        {label: 'Missions',            path: '/rh/missions'},
+        {label: 'Frais de Mission',    path: '/rh/frais'},
+        {label: 'Missions IG',         path: '/rh/missions-ig'},
       ]},
-      {label: 'Évaluations', path: '/rh/evaluations'},
-      {label: 'Calendrier Congés', path: '/rh/calendrier-conge'},
-      {label: 'Workflow', path: '/rh/workflow'},
-      {label: 'Tâches', path: '/rh/tasks'},
-      {label: 'Événements', path: '/rh/events'},
-      {label: 'Analytics RH', path: '/rh/analytics'},
-      {label: 'Parcours Employé', path: '/rh/timeline'},
-      {label: 'Performance 360°', path: '/rh/performance'},
-      {label: 'Workforce Planning', path: '/rh/workforce'},
-      {label: 'Talent Management', path: '/rh/talent'},
-      {label: 'Club Review', path: '/rh/club-review'},
-      {label: 'Sandbox', path: '/rh/sandbox'},
+      {label: 'Évaluations',            path: '/rh/evaluations'},
+      {label: 'Calendrier Congés',     path: '/rh/calendrier-conge'},
+      {label: 'Workflow',              path: '/rh/workflow'},
+      {label: 'Tâches',               path: '/rh/tasks'},
+      {label: 'Événements',             path: '/rh/events'},
+      {label: 'Analytics RH',          path: '/rh/analytics'},
+      {label: 'Parcours',               path: '/rh/timeline'},
+      {label: 'Performances 360',      path: '/rh/performance'},
+      {label: 'Planification effectifs', path: '/rh/workforce'},
+      {label: 'Gestion des talents',   path: '/rh/talent'},
+      {label: 'Club Review',           path: '/rh/club-review'},
+      {label: 'Sandbox',               path: '/rh/sandbox'},
     ]
   },
-  {id:'achats',    icon:'box', label:'Achats',                subs:[{label:'Prochainement', path:'/rh/module/achats'}]},
-  {id:'commercial',icon:'briefcase', label:'Commercial',      subs:[{label:'Prochainement', path:'/rh/module/commercial'}]},
-  {id:'marketing', icon:'megaphone', label:'Marketing',       subs:[{label:'Prochainement', path:'/rh/module/marketing'}]},
-  {id:'comms',     icon:'signal', label:'Communication',      subs:[{label:'Prochainement', path:'/rh/module/communication'}]},
-  {id:'si',        icon:'monitor', label:"Système d'Information", subs:[{label:'Prochainement', path:'/rh/module/si'}]},
-  {id:'flotte',    icon:'car', label:'Flotte',                subs:[{label:'Prochainement', path:'/rh/module/flotte'}]},
-  {id:'audit',     icon:'audit', label:'Audit',               subs:[{label:'Prochainement', path:'/rh/module/audit'}]},
-  {id:'projets',   icon:'folder', label:'Gestion des Projets', subs:[{label:'Prochainement', path:'/rh/module/projets'}]},
-  {id:'crm',       icon:'handshake', label:'CRM',             subs:[{label:'Prochainement', path:'/rh/module/crm'}]},
+  {id:'achats',    icon:'box',       label:'Achats',        subs:[{label:'Bientôt disponible', path:'/rh/module/achats'}]},
+  {id:'commercial',icon:'briefcase', label:'Commercial',    subs:[{label:'Bientôt disponible', path:'/rh/module/commercial'}]},
+  {id:'marketing', icon:'megaphone', label:'Marketing',     subs:[{label:'Bientôt disponible', path:'/rh/module/marketing'}]},
+  {id:'comms',     icon:'signal',    label:'Communication', subs:[{label:'Bientôt disponible', path:'/rh/module/communication'}]},
+  {id:'si',        icon:'monitor',   label:"Système D'Information",  subs:[{label:'Bientôt disponible', path:'/rh/module/si'}]},
+  {id:'flotte',    icon:'car',       label:'Flotte',        subs:[{label:'Bientôt disponible', path:'/rh/module/flotte'}]},
+  {id:'audit',     icon:'audit',     label:'Audit',         subs:[{label:'Bientôt disponible', path:'/rh/module/audit'}]},
+  {id:'projets',   icon:'folder',    label:'Projets',       subs:[{label:'Bientôt disponible', path:'/rh/module/projets'}]},
+  {id:'crm',       icon:'handshake', label:'CRM',           subs:[{label:'Bientôt disponible', path:'/rh/module/crm'}]},
 ]
+
+const HIDDEN_BY_ROLE_KEYS = {
+  EMPLOYE:    new Set(['/rh/tasks', '/rh/analytics', '/rh/workforce', '/rh/talent', '/rh/sandbox']),
+  RESPONSABLE:new Set(['/rh/tasks', '/rh/workforce', '/rh/talent', '/rh/sandbox']),
+  DIRECTEUR:  new Set(['/rh/tasks', '/rh/workforce', '/rh/talent', '/rh/sandbox']),
+  DG:         new Set(['/rh/tasks', '/rh/workforce', '/rh/talent', '/rh/sandbox']),
+}
 
 function getInitialOpen(pathname) {
   if (!pathname || pathname === '/rh' || pathname === '/rh/' || pathname === '/rh/home' || pathname === '/rh/dashboard') return null
@@ -109,7 +112,7 @@ function quickLink(isActive) {
     display:'flex', alignItems:'center', gap:'8px',
     padding:'10px 12px', borderRadius:'8px',
     textDecoration:'none', fontSize:'0.92rem', fontWeight:700,
-    color: SIDEBAR_TEXT,
+    color: 'var(--sidebar-text)',
     background: isActive ? 'linear-gradient(90deg, rgba(206,43,43,0.24), rgba(206,43,43,0.08))' : 'transparent',
     borderLeft: isActive ? `3px solid ${ACCENT}` : '3px solid transparent',
     marginBottom:'4px', transition:'background 0.15s, color 0.15s',
@@ -120,7 +123,7 @@ function subLink(isActive) {
   return {
     display:'flex', alignItems:'center', gap:'10px', padding:'8px 10px', borderRadius:'7px',
     textDecoration:'none', fontSize:'0.86rem', fontWeight:600,
-    color: isActive ? SIDEBAR_TEXT : SIDEBAR_MUTED,
+    color: isActive ? 'var(--sidebar-text)' : 'var(--sidebar-muted)',
     background: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
     borderLeft: isActive ? `2px solid ${ACCENT}` : '2px solid transparent',
     marginBottom:'3px', transition:'background 0.15s, color 0.15s',
@@ -145,23 +148,17 @@ export default function RHLayout() {
   }, [user])
 
   const isFullAccessRole = ['ADMIN', 'PCA', 'AG'].includes(role)
-  const hiddenByRole = {
-    EMPLOYE: new Set(['Tâches', 'Analytics RH', 'Workforce Planning', 'Talent Management', 'Sandbox']),
-    RESPONSABLE: new Set(['Tâches', 'Workforce Planning', 'Talent Management', 'Sandbox']),
-    DIRECTEUR: new Set(['Tâches', 'Workforce Planning', 'Talent Management', 'Sandbox']),
-    DG: new Set(['Tâches', 'Workforce Planning', 'Talent Management', 'Sandbox']),
-  }
 
   const canSeeModule = () => true
 
   const canSeeSub = (sub) => {
-    if (sub.label === 'Missions IG') {
+    if (sub.path === '/rh/missions-ig') {
       return String(userFonction).toLowerCase().includes('inspecteur')
     }
     if (isFullAccessRole || role === 'RH') return true
-    const hidden = hiddenByRole[role]
+    const hidden = HIDDEN_BY_ROLE_KEYS[role]
     if (!hidden) return true
-    return !hidden.has(sub.label)
+    return !hidden.has(sub.path)
   }
 
   const [open, setOpen] = useState(() => ({[getInitialOpen(location.pathname)]: true}))
@@ -177,25 +174,76 @@ export default function RHLayout() {
   })
   const toggleGroup = key => setOpenGroups(p => ({...p, [key]: !p[key]}))
 
+  // Mobile sidebar state
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+
+  // Close sidebar on route change (mobile)
+  useEffect(() => { setSidebarOpen(false) }, [location.pathname])
+
+  const sidebarRef = useRef(null)
+
   return (
-    <div style={{display:'flex', minHeight:'calc(100vh - 50px)'}}>
+    <div style={{display:'flex', minHeight:'calc(100vh - 50px)', position:'relative'}}>
+
+      {/* Mobile overlay */}
+      {isMobile && sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position:'fixed', inset:0, background:'rgba(0,0,0,0.5)',
+            zIndex:998, top:50,
+          }}
+        />
+      )}
+
+      {/* Mobile hamburger button */}
+      {isMobile && (
+        <button
+          onClick={() => setSidebarOpen(p => !p)}
+          aria-label="Ouvrir le menu"
+          style={{
+            position:'fixed', top:57, left:8, zIndex:1001,
+            width:36, height:36, borderRadius:8, border:'none',
+            background:'var(--sidebar-bg)', color:'var(--sidebar-text)',
+            cursor:'pointer', display:'flex', flexDirection:'column',
+            alignItems:'center', justifyContent:'center', gap:5, padding:8,
+          }}
+        >
+          <span style={{width:18, height:2, background:'currentColor', borderRadius:1, display:'block'}} />
+          <span style={{width:18, height:2, background:'currentColor', borderRadius:1, display:'block'}} />
+          <span style={{width:18, height:2, background:'currentColor', borderRadius:1, display:'block'}} />
+        </button>
+      )}
 
       {/* ── Sidebar ── */}
-      <aside style={{
-        width:'250px', minWidth:'250px', background:SIDEBAR_BG,
-        display:'flex', flexDirection:'column',
-        position:'sticky', top:'50px',
-        height:'calc(100vh - 50px)', overflowY:'auto', zIndex:10,
-        borderRight:`1px solid ${SIDEBAR_BORDER}`,
-      }}>
+      <aside
+        ref={sidebarRef}
+        style={{
+          width:'250px', minWidth:'250px',
+          background:'var(--sidebar-bg)',
+          display:'flex', flexDirection:'column',
+          position: isMobile ? 'fixed' : 'sticky',
+          top:'50px',
+          height:'calc(100vh - 50px)', overflowY:'auto', zIndex:999,
+          borderRight:`1px solid var(--sidebar-border)`,
+          transform: isMobile ? (sidebarOpen ? 'translateX(0)' : 'translateX(-260px)') : 'none',
+          transition: isMobile ? 'transform 0.25s cubic-bezier(.4,0,.2,1)' : 'none',
+        }}
+      >
         {/* Brand */}
-        <div style={{padding:'16px 16px 12px', borderBottom:`1px solid ${SIDEBAR_BORDER}`, background:SIDEBAR_BG_ALT}}>
-          <div style={{fontSize:'0.72rem', color:SIDEBAR_MUTED, letterSpacing:'0.09em', textTransform:'uppercase'}}>Elite Capital</div>
-          <div style={{fontSize:'1.05rem', fontWeight:800, color:SIDEBAR_TEXT, marginTop:'2px'}}>EMS Platform</div>
+        <div style={{padding:'16px 16px 12px', borderBottom:`1px solid var(--sidebar-border)`, background:'var(--sidebar-bg-alt)'}}>
+          <div style={{fontSize:'0.72rem', color:'var(--sidebar-muted)', letterSpacing:'0.09em', textTransform:'uppercase'}}>Elite Capital</div>
+          <div style={{fontSize:'1.05rem', fontWeight:800, color:'var(--sidebar-text)', marginTop:'2px'}}>EMS Platform</div>
         </div>
 
         <nav style={{padding:'10px', flex:1}}>
-          <div style={{fontSize:'0.72rem', color:SIDEBAR_MUTED, padding:'0 8px 8px', letterSpacing:'0.07em', textTransform:'uppercase', fontWeight:700}}>Modules</div>
+          <div style={{fontSize:'0.72rem', color:'var(--sidebar-muted)', padding:'0 8px 8px', letterSpacing:'0.07em', textTransform:'uppercase', fontWeight:700}}>{"Modules"}</div>
 
           {/* Accordion modules */}
           {MODULES.filter(canSeeModule).map(mod => {
@@ -221,7 +269,7 @@ export default function RHLayout() {
                 <button onClick={() => toggle(mod.id)} style={{
                   width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
                   padding:'10px 12px', background:isOpen ? 'rgba(255,255,255,0.05)' : 'transparent', border:'none', borderRadius:'8px',
-                  cursor:'pointer', color:SIDEBAR_TEXT, fontSize:'0.93rem', fontWeight:700,
+                  cursor:'pointer', color:'var(--sidebar-text)', fontSize:'0.93rem', fontWeight:700,
                 }}>
                   <span style={{display:'flex', alignItems:'center', gap:'10px'}}><Icon name={mod.icon} /> {mod.label}</span>
                   <span style={{fontSize:'0.7rem', opacity:0.65}}>{isOpen ? '▲' : '▼'}</span>
@@ -279,28 +327,34 @@ export default function RHLayout() {
             )
           })}
 
-          <div style={{height:'1px', background:SIDEBAR_BORDER, margin:'10px 0'}} />
+          <div style={{height:'1px', background:'var(--sidebar-border)', margin:'10px 0'}} />
 
           {/* Stats & admin */}
-          {['ADMIN','PCA','AG'].includes(role) && <NavLink to="/rh/utilisateurs" style={({isActive})=>quickLink(isActive)}><Icon name="users" /> Utilisateurs</NavLink>}
-          <NavLink to="/rh/usage-stats" style={({isActive})=>quickLink(isActive)}><Icon name="usage" /> Utilisation</NavLink>
-          {isAdminStats && <NavLink to="/rh/admin/usage-stats" style={({isActive})=>quickLink(isActive)}><Icon name="shield" /> Stats Admin</NavLink>}
+          {['ADMIN','PCA','AG'].includes(role) && <NavLink to="/rh/utilisateurs" style={({isActive})=>quickLink(isActive)}><Icon name="users" /> {"Utilisateurs"}</NavLink>}
+          {role === 'ADMIN' && <NavLink to="/rh/usage-stats" style={({isActive})=>quickLink(isActive)}><Icon name="usage" /> {"Statistiques d'usage"}</NavLink>}
+          {role === 'ADMIN' && <NavLink to="/rh/admin/usage-stats" style={({isActive})=>quickLink(isActive)}><Icon name="shield" /> {"Stats administration"}</NavLink>}
+          {role === 'ADMIN' && <NavLink to="/rh/audit-logs" style={({isActive})=>quickLink(isActive)}><Icon name="audit" /> {"Journal d'audit"}</NavLink>}
 
-          <div style={{height:'1px', background:SIDEBAR_BORDER, margin:'10px 0'}} />
+          <div style={{height:'1px', background:'var(--sidebar-border)', margin:'10px 0'}} />
 
-          <NavLink to="/rh/notifications" style={({isActive})=>quickLink(isActive)}><Icon name="bell" /> Notifications</NavLink>
+          <NavLink to="/rh/notifications" style={({isActive})=>quickLink(isActive)}><Icon name="bell" /> {"Notifications"}</NavLink>
 
-          <div style={{height:'1px', background:SIDEBAR_BORDER, margin:'10px 0'}} />
+          <div style={{height:'1px', background:'var(--sidebar-border)', margin:'10px 0'}} />
 
           {/* Bottom */}
-          <NavLink to="/rh/parametrage" style={({isActive})=>quickLink(isActive)}><Icon name="settings" /> Paramétrage</NavLink>
-          <NavLink to="/rh/password"    style={({isActive})=>quickLink(isActive)}><Icon name="key" /> Mot de passe</NavLink>
-          <NavLink to="/rh/mfa"         style={({isActive})=>quickLink(isActive)}><Icon name="lock" /> MFA</NavLink>
+          <NavLink to="/rh/parametrage" style={({isActive})=>quickLink(isActive)}><Icon name="settings" /> {"Paramètres"}</NavLink>
+          <NavLink to="/rh/password"    style={({isActive})=>quickLink(isActive)}><Icon name="key" /> {"Mot de passe"}</NavLink>
+          <NavLink to="/rh/mfa"         style={({isActive})=>quickLink(isActive)}><Icon name="lock" /> {"Authentification MFA"}</NavLink>
         </nav>
       </aside>
 
       {/* ── Content area ── */}
-      <main style={{flex:1, minWidth:0, padding:'16px', background:'#f4f5f7', overflowY:'auto'}}>
+      <main style={{
+        flex:1, minWidth:0, padding:'16px',
+        background:'var(--bg)', color:'var(--text)',
+        overflowY:'auto',
+        paddingLeft: isMobile ? '52px' : '16px',
+      }}>
         <Outlet />
       </main>
     </div>

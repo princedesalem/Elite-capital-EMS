@@ -226,21 +226,20 @@ def get_directions_structure_by_ville(id_localisation: int, db: Session = Depend
 
 @router.get('/villes/{id_localisation}/departements')
 def get_departements_by_ville(id_localisation: int, db: Session = Depends(get_db)):
-    """Get departments for a city via Implantation chain (Ville → Entité → Département)."""
+    """Get departments explicitly linked to a city via DEPARTEMENT_IMPLANTATION."""
     ville = db.query(models.Localisation).filter(models.Localisation.id_localisation == id_localisation).first()
     if not ville:
         raise HTTPException(status_code=404, detail='Ville non trouvée')
 
-    # Find entities implanted in this city
-    implantations = db.query(models.Implantation).filter(
-        models.Implantation.id_localisation == id_localisation
+    liaisons = db.query(models.DepartementImplantation).filter(
+        models.DepartementImplantation.id_localisation == id_localisation
     ).all()
-    entite_ids = list({i.id_entite for i in implantations})
-    if not entite_ids:
+    dept_ids = [li.dept_id for li in liaisons]
+    if not dept_ids:
         return []
 
     depts = db.query(models.Departement).filter(
-        models.Departement.id_entite.in_(entite_ids)
+        models.Departement.dept_id.in_(dept_ids)
     ).all()
 
     result = []
@@ -454,51 +453,82 @@ def create_direction(data: dict, db: Session = Depends(get_db)):
 
 # ==================== DEPARTEMENTS ====================
 
+@router.get('/villes')
+def get_villes_by_entite(id_entite: int = None, db: Session = Depends(get_db)):
+    """Return all cities where a given entity is implanted (used by Administration create-dept form)."""
+    if id_entite is None:
+        raise HTTPException(status_code=400, detail='id_entite est requis')
+    from ..utils.world_data import get_flag_by_code
+    implantations = db.query(models.Implantation).filter(
+        models.Implantation.id_entite == id_entite
+    ).all()
+    result = []
+    for impl in implantations:
+        loc = db.query(models.Localisation).filter(
+            models.Localisation.id_localisation == impl.id_localisation
+        ).first()
+        if loc:
+            pays = db.query(models.Pays).filter(models.Pays.id_pays == loc.id_pays).first()
+            flag = get_flag_by_code(pays.code_pays) if pays else ''
+            result.append({
+                'id_localisation': loc.id_localisation,
+                'ville': loc.ville,
+                'id_pays': loc.id_pays,
+                'flag': flag,
+            })
+    return result
+
+
 @router.get('/departements')
 def get_all_departements(id_localisation: int = None, id_pays: int = None, db: Session = Depends(get_db)):
-    """Get all departements, optionally filtered by localisation or pays via Implantation chain."""
+    """Get all departements, optionally filtered by localisation or pays via DEPARTEMENT_IMPLANTATION."""
     if id_pays is not None:
-        # Pays → Localisation → Implantation → Entité → Département
+        # Pays → Localisation → DEPARTEMENT_IMPLANTATION → Département
         locs = db.query(models.Localisation).filter(models.Localisation.id_pays == id_pays).all()
         loc_ids = [l.id_localisation for l in locs]
         if not loc_ids:
             return []
-        implantations = db.query(models.Implantation).filter(
-            models.Implantation.id_localisation.in_(loc_ids)
+        liaisons = db.query(models.DepartementImplantation).filter(
+            models.DepartementImplantation.id_localisation.in_(loc_ids)
         ).all()
-        entite_ids = list({i.id_entite for i in implantations})
-        if not entite_ids:
+        dept_ids = list({li.dept_id for li in liaisons})
+        if not dept_ids:
             return []
         departements = db.query(models.Departement).filter(
-            models.Departement.id_entite.in_(entite_ids)
+            models.Departement.dept_id.in_(dept_ids)
         ).all()
     elif id_localisation is not None:
-        # Localisation → Implantation → Entité → Département
-        implantations = db.query(models.Implantation).filter(
-            models.Implantation.id_localisation == id_localisation
+        # Localisation → DEPARTEMENT_IMPLANTATION → Département
+        liaisons = db.query(models.DepartementImplantation).filter(
+            models.DepartementImplantation.id_localisation == id_localisation
         ).all()
-        entite_ids = list({i.id_entite for i in implantations})
-        if not entite_ids:
+        dept_ids = [li.dept_id for li in liaisons]
+        if not dept_ids:
             return []
         departements = db.query(models.Departement).filter(
-            models.Departement.id_entite.in_(entite_ids)
+            models.Departement.dept_id.in_(dept_ids)
         ).all()
     else:
         departements = db.query(models.Departement).all()
+
     result = []
     for d in departements:
         entite = db.query(models.Entite).filter(models.Entite.id_entite == d.id_entite).first()
         direction = None
         if d.id_direction:
             direction = db.query(models.Direction).filter(models.Direction.id_direction == d.id_direction).first()
-        # Resolve localisation from Implantation chain
-        localisation_nom = None
-        pays_nom = None
+        # When filtering by a specific city, use that city directly to avoid
+        # .first() returning a different linked city (e.g. Yaoundé when browsing Douala)
+        if id_localisation is not None:
+            id_loc = id_localisation
+        else:
+            di = db.query(models.DepartementImplantation).filter(
+                models.DepartementImplantation.dept_id == d.dept_id
+            ).first()
+            id_loc = di.id_localisation if di else None
+        localisation_nom = ''
+        pays_nom = ''
         pays_id = None
-        impl = db.query(models.Implantation).filter(
-            models.Implantation.id_entite == d.id_entite
-        ).first()
-        id_loc = impl.id_localisation if impl else None
         if id_loc:
             loc = db.query(models.Localisation).filter(models.Localisation.id_localisation == id_loc).first()
             if loc:
@@ -516,42 +546,72 @@ def get_all_departements(id_localisation: int = None, id_pays: int = None, db: S
             'id_direction': d.id_direction,
             'direction_nom': direction.nom if direction else '',
             'id_localisation': id_loc,
-            'localisation_nom': localisation_nom or '',
+            'localisation_nom': localisation_nom,
             'id_pays': pays_id,
-            'pays_nom': pays_nom or '',
+            'pays_nom': pays_nom,
         })
     return result
 
 
 @router.post('/departements')
 def create_departement(data: dict, db: Session = Depends(get_db)):
-    """Create a new departement"""
+    """Create a new departement.
+
+    Optional city-linking fields:
+    - id_localisation (int): single city — used by Organisation (city context).
+    - villes_ids (list[int]): multiple cities — used by Administration.
+    Both are validated: (id_entite, id_localisation) must exist in Implantation.
+    """
     nom = data.get('nom')
     id_entite = data.get('id_entite')
     id_direction = data.get('id_direction')
-    
+    id_localisation = data.get('id_localisation')  # from Organisation
+    villes_ids = data.get('villes_ids') or []      # from Administration
+
     if not nom or not id_entite:
         raise HTTPException(status_code=400, detail='Nom et id_entite sont requis')
-    
-    # Check if entite exists
+
     entite = db.query(models.Entite).filter(models.Entite.id_entite == id_entite).first()
     if not entite:
         raise HTTPException(status_code=400, detail='Entité invalide')
 
-    # Check if direction exists (if specified)
     direction = None
     if id_direction:
         direction = db.query(models.Direction).filter(models.Direction.id_direction == id_direction).first()
         if not direction:
             raise HTTPException(status_code=400, detail='Direction invalide')
-    
-    # Create departement
+
+    # Build the full list of city ids to link
+    all_loc_ids = list({int(i) for i in villes_ids})
+    if id_localisation:
+        all_loc_ids = list({*all_loc_ids, int(id_localisation)})
+
+    # Validate each city: entity must be implanted there
+    for loc_id in all_loc_ids:
+        impl = db.query(models.Implantation).filter(
+            models.Implantation.id_entite == id_entite,
+            models.Implantation.id_localisation == loc_id,
+        ).first()
+        if not impl:
+            raise HTTPException(
+                status_code=400,
+                detail=f"L'entité n'est pas implantée dans la ville id={loc_id}"
+            )
+
     departement = models.Departement(
         nom=nom,
         id_entite=id_entite,
         id_direction=id_direction,
     )
     db.add(departement)
+    db.flush()  # get dept_id before creating liaisons
+
+    for loc_id in all_loc_ids:
+        db.add(models.DepartementImplantation(
+            dept_id=departement.dept_id,
+            id_localisation=loc_id,
+        ))
+
     db.commit()
     db.refresh(departement)
 
@@ -563,6 +623,56 @@ def create_departement(data: dict, db: Session = Depends(get_db)):
         'id_direction': departement.id_direction,
         'direction_nom': direction.nom if direction else '',
     }
+
+
+@router.post('/departements/{dept_id}/villes/{id_localisation}')
+def link_departement_to_ville(dept_id: int, id_localisation: int, db: Session = Depends(get_db)):
+    """Link an existing department to a city (Organisation — Lier un département)."""
+    dept = db.query(models.Departement).filter(models.Departement.dept_id == dept_id).first()
+    if not dept:
+        raise HTTPException(status_code=404, detail='Département non trouvé')
+
+    loc = db.query(models.Localisation).filter(models.Localisation.id_localisation == id_localisation).first()
+    if not loc:
+        raise HTTPException(status_code=404, detail='Ville non trouvée')
+
+    impl = db.query(models.Implantation).filter(
+        models.Implantation.id_entite == dept.id_entite,
+        models.Implantation.id_localisation == id_localisation,
+    ).first()
+    if not impl:
+        raise HTTPException(
+            status_code=400,
+            detail="L'entité de ce département n'est pas implantée dans cette ville"
+        )
+
+    existing = db.query(models.DepartementImplantation).filter(
+        models.DepartementImplantation.dept_id == dept_id,
+        models.DepartementImplantation.id_localisation == id_localisation,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail='Département déjà lié à cette ville')
+
+    db.add(models.DepartementImplantation(dept_id=dept_id, id_localisation=id_localisation))
+    db.commit()
+    return {'status': 'ok', 'dept_id': dept_id, 'id_localisation': id_localisation}
+
+
+@router.delete('/departements/{dept_id}/villes/{id_localisation}')
+def unlink_departement_from_ville(dept_id: int, id_localisation: int, db: Session = Depends(get_db)):
+    """Remove a department from a city (Organisation — Retirer de cette ville).
+    Does NOT delete the department itself.
+    """
+    liaison = db.query(models.DepartementImplantation).filter(
+        models.DepartementImplantation.dept_id == dept_id,
+        models.DepartementImplantation.id_localisation == id_localisation,
+    ).first()
+    if not liaison:
+        raise HTTPException(status_code=404, detail='Liaison département-ville non trouvée')
+
+    db.delete(liaison)
+    db.commit()
+    return {'status': 'ok', 'message': 'Département retiré de la ville'}
 
 
 # ==================== ENTITES - DELETE & UPDATE ====================

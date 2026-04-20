@@ -79,7 +79,7 @@ export default function NotificationToast({ notification, onDismiss }) {
         background: '#ffffff',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',
-        border: '1px solid #e2e8f0',
+        border: '1px solid var(--border)',
         boxShadow: '0 10px 40px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.04)',
         transform: isVisible ? 'translateX(0) scale(1)' : 'translateX(calc(100% + 28px)) scale(0.95)',
         opacity: isVisible ? 1 : 0,
@@ -125,7 +125,7 @@ export default function NotificationToast({ notification, onDismiss }) {
             </div>
 
             <div style={{
-              fontWeight: 700, fontSize: '0.9rem', color: '#0f172a',
+              fontWeight: 700, fontSize: '0.9rem', color: 'var(--text)',
               lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>
               {notification?.titre || 'Nouvelle notification'}
@@ -138,7 +138,7 @@ export default function NotificationToast({ notification, onDismiss }) {
             aria-label="Fermer"
             style={{
               width: 26, height: 26, border: 'none',
-              background: '#f1f5f9',
+              background: 'var(--bg)',
               cursor: 'pointer', borderRadius: 7,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: '#94a3b8', flexShrink: 0, padding: 0,

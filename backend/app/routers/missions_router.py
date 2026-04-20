@@ -526,7 +526,7 @@ def creer_mission_multi_segments(
                 matricule=mat,
                 type_notification='INFO',
                 titre=f"Vous avez été assigné à une mission{comment_label}",
-                message=f"Vous êtes missionnaire pour la mission vers {destinations_str} (du {date_debut_mission} au {date_fin_mission}). Veuillez soumettre votre demande de frais une fois la mission validée.",
+                message=f"Vous êtes missionnaire pour la mission de {destinations_str} (du {date_debut_mission} au {date_fin_mission}). Veuillez soumettre votre demande de frais une fois la mission validée.",
                 id_operation=operation.id_operation,
                 db=db
             )
@@ -602,6 +602,370 @@ def obtenir_segments_mission(id_mission: int, db: Session = Depends(get_db)):
             for seg in segments
         ]
     }
+
+
+@router.put('/{id_mission}/segments')
+def modifier_segments_mission(
+    id_mission: int,
+    segments: List[SegmentMission],
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Remplacer tous les segments d'une mission.
+    Seulement avant la première validation.
+    """
+    mission = db.query(models.Mission).filter(models.Mission.id_mission == id_mission).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+
+    operation = db.query(models.Operation).filter(models.Operation.id_operation == id_mission).first()
+    if not operation:
+        raise HTTPException(status_code=404, detail="Opération introuvable")
+
+    actor_matricule, actor_role = access_control.get_actor_from_request(request)
+    if operation.matricule != actor_matricule and not access_control.can_access_globally(str(actor_role or '').upper()):
+        raise HTTPException(status_code=403, detail="Vous n'êtes pas autorisé à modifier cette mission")
+
+    if operation.statut and str(operation.statut).lower() != 'en attente':
+        raise HTTPException(status_code=400, detail="Seules les demandes en attente peuvent être modifiées")
+
+    if workflow.operation_a_deja_ete_validee(id_mission, db):
+        raise HTTPException(status_code=400, detail="Impossible de modifier les segments après la première validation")
+
+    if not segments or len(segments) == 0:
+        raise HTTPException(status_code=400, detail="Au moins un segment est requis")
+
+    from ..utils.world_geo_service import validate_country_city
+
+    # Validate all segments geo
+    for i, seg in enumerate(segments):
+        geo_ok, geo_message, geo_data = validate_country_city(
+            country_name=seg.pays, city_name=seg.ville, country_code=seg.country_code
+        )
+        if not geo_ok:
+            raise HTTPException(status_code=400, detail=f"Segment {i+1}: {geo_message}")
+
+    # Delete existing segments
+    db.query(models.MissionSegment).filter(models.MissionSegment.id_mission == id_mission).delete()
+
+    # Create new segments
+    new_segments = []
+    for i, seg in enumerate(segments):
+        geo_ok, geo_message, geo_data = validate_country_city(
+            country_name=seg.pays, city_name=seg.ville, country_code=seg.country_code
+        )
+        nombre_nuits = (seg.date_fin - seg.date_debut).days if seg.date_fin and seg.date_debut else 0
+        new_seg = models.MissionSegment(
+            id_mission=id_mission,
+            pays=geo_data['country_name'],
+            ville=geo_data['city_name'],
+            date_debut=seg.date_debut,
+            date_fin=seg.date_fin,
+            heure_depart=seg.heure_depart,
+            heure_arrivee=seg.heure_arrivee,
+            heure_retour=seg.heure_retour,
+            moyen_transport=seg.moyen_transport or 'aerien',
+            nombre_nuits=nombre_nuits,
+            ordre=i + 1
+        )
+        db.add(new_seg)
+        new_segments.append(new_seg)
+
+    # Update operation dates from segments
+    all_debuts = [s.date_debut for s in segments if s.date_debut]
+    all_fins = [s.date_fin for s in segments if s.date_fin]
+    if all_debuts:
+        operation.date_debut = min(all_debuts)
+    if all_fins:
+        operation.date_fin = max(all_fins)
+    operation.est_modifie = True
+    operation.date_modification = datetime.utcnow()
+
+    db.commit()
+
+    return {
+        "id_mission": id_mission,
+        "message": f"Segments mis à jour ({len(new_segments)} segment(s))",
+        "segments_count": len(new_segments)
+    }
+
+
+@router.post('/{id_mission}/missionnaires/{matricule}')
+def ajouter_missionnaire(
+    id_mission: int,
+    matricule: int,
+    role_mission: str = Query(default='participant'),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Ajouter un missionnaire à une mission existante.
+    Seulement avant la première validation.
+    """
+    mission = db.query(models.Mission).filter(models.Mission.id_mission == id_mission).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+
+    operation = db.query(models.Operation).filter(models.Operation.id_operation == id_mission).first()
+    if not operation:
+        raise HTTPException(status_code=404, detail="Opération introuvable")
+
+    if request is not None:
+        actor_matricule, actor_role = access_control.get_actor_from_request(request)
+        if operation.matricule != actor_matricule and not access_control.can_access_globally(str(actor_role or '').upper()):
+            raise HTTPException(status_code=403, detail="Non autorisé")
+
+    if operation.statut and str(operation.statut).lower() != 'en attente':
+        raise HTTPException(status_code=400, detail="Seules les demandes en attente peuvent être modifiées")
+
+    if workflow.operation_a_deja_ete_validee(id_mission, db):
+        raise HTTPException(status_code=400, detail="Impossible de modifier après la première validation")
+
+    # Check employee exists
+    employe = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
+    if not employe:
+        raise HTTPException(status_code=404, detail="Employé introuvable")
+
+    # Check not already added
+    existing = db.query(models.MissionnairesMission).filter(
+        models.MissionnairesMission.id_mission == id_mission,
+        models.MissionnairesMission.matricule == matricule
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Ce missionnaire est déjà assigné à cette mission")
+
+    # Check date conflict
+    if operation.date_debut and operation.date_fin:
+        conflict_ops = db.query(models.Operation).filter(
+            models.Operation.matricule == matricule,
+            models.Operation.id_operation != id_mission,
+            models.Operation.type_demande.in_(['Mission', 'Congé', 'Permission']),
+            models.Operation.statut.notin_(['annulé', 'refusé']),
+            models.Operation.date_debut <= operation.date_fin,
+            models.Operation.date_fin >= operation.date_debut
+        ).first()
+        if conflict_ops:
+            raise HTTPException(status_code=400, detail="Conflit de dates: cet employé a déjà une opération sur cette période")
+
+    new_miss = models.MissionnairesMission(
+        id_mission=id_mission,
+        matricule=matricule,
+        role_mission=role_mission,
+        date_ajout=datetime.utcnow()
+    )
+    db.add(new_miss)
+    db.commit()
+
+    return {
+        "message": f"Missionnaire {matricule} ajouté avec succès",
+        "id_mission": id_mission,
+        "matricule": matricule,
+        "role_mission": role_mission
+    }
+
+
+@router.delete('/{id_mission}/missionnaires/{matricule}')
+def retirer_missionnaire(
+    id_mission: int,
+    matricule: int,
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Retirer un missionnaire d'une mission.
+    Ne peut pas retirer le dernier responsable.
+    """
+    mission = db.query(models.Mission).filter(models.Mission.id_mission == id_mission).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+
+    operation = db.query(models.Operation).filter(models.Operation.id_operation == id_mission).first()
+    if not operation:
+        raise HTTPException(status_code=404, detail="Opération introuvable")
+
+    if request is not None:
+        actor_matricule, actor_role = access_control.get_actor_from_request(request)
+        if operation.matricule != actor_matricule and not access_control.can_access_globally(str(actor_role or '').upper()):
+            raise HTTPException(status_code=403, detail="Non autorisé")
+
+    if operation.statut and str(operation.statut).lower() != 'en attente':
+        raise HTTPException(status_code=400, detail="Seules les demandes en attente peuvent être modifiées")
+
+    if workflow.operation_a_deja_ete_validee(id_mission, db):
+        raise HTTPException(status_code=400, detail="Impossible de modifier après la première validation")
+
+    missionnaire = db.query(models.MissionnairesMission).filter(
+        models.MissionnairesMission.id_mission == id_mission,
+        models.MissionnairesMission.matricule == matricule
+    ).first()
+    if not missionnaire:
+        raise HTTPException(status_code=404, detail="Missionnaire non trouvé dans cette mission")
+
+    # Cannot remove last responsable
+    if missionnaire.role_mission == 'responsable':
+        responsables_count = db.query(models.MissionnairesMission).filter(
+            models.MissionnairesMission.id_mission == id_mission,
+            models.MissionnairesMission.role_mission == 'responsable'
+        ).count()
+        if responsables_count <= 1:
+            raise HTTPException(status_code=400, detail="Impossible de retirer le dernier responsable de la mission")
+
+    db.delete(missionnaire)
+    db.commit()
+
+    return {
+        "message": f"Missionnaire {matricule} retiré de la mission",
+        "id_mission": id_mission,
+        "matricule": matricule
+    }
+
+
+# ── Frais individuels par missionnaire ──────────────────────────────────────
+
+class FraisMissionnaireSchema(BaseModel):
+    frais_transport: float = 0
+    frais_hotel: float = 0
+    frais_deplacement: float = 0
+    frais_nutrition: float = 0
+    justificatif: Optional[str] = None
+
+
+@router.post('/{id_mission}/frais-missionnaire')
+def creer_frais_missionnaire(
+    id_mission: int,
+    matricule: int = Query(...),
+    data: FraisMissionnaireSchema = Body(...),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """Soumettre les frais individuels d'un missionnaire."""
+    mission = db.query(models.Mission).filter(models.Mission.id_mission == id_mission).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+
+    # Verify missionary is part of this mission
+    missionnaire = db.query(models.MissionnairesMission).filter(
+        models.MissionnairesMission.id_mission == id_mission,
+        models.MissionnairesMission.matricule == matricule
+    ).first()
+    if not missionnaire:
+        raise HTTPException(status_code=400, detail="Cet employé n'est pas missionnaire de cette mission")
+
+    # Check no duplicate
+    existing = db.query(models.FraisMissionnaire).filter(
+        models.FraisMissionnaire.id_mission == id_mission,
+        models.FraisMissionnaire.matricule == matricule
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Des frais existent déjà pour ce missionnaire. Utilisez PUT pour modifier.")
+
+    total = data.frais_transport + data.frais_hotel + data.frais_deplacement + data.frais_nutrition
+    frais = models.FraisMissionnaire(
+        id_mission=id_mission,
+        matricule=matricule,
+        frais_transport=data.frais_transport,
+        frais_hotel=data.frais_hotel,
+        frais_deplacement=data.frais_deplacement,
+        frais_nutrition=data.frais_nutrition,
+        total_frais=total,
+        justificatif=data.justificatif,
+        statut='soumis',
+        date_soumission=datetime.utcnow()
+    )
+    db.add(frais)
+    db.commit()
+    db.refresh(frais)
+
+    return {"message": "Frais soumis", "id": frais.id, "total_frais": float(total)}
+
+
+@router.get('/{id_mission}/frais-missionnaire')
+def obtenir_frais_missionnaires(
+    id_mission: int,
+    db: Session = Depends(get_db)
+):
+    """Obtenir tous les frais individuels des missionnaires d'une mission."""
+    frais_list = db.query(models.FraisMissionnaire).filter(
+        models.FraisMissionnaire.id_mission == id_mission
+    ).all()
+
+    result = []
+    for f in frais_list:
+        emp = db.query(models.Employe).filter(models.Employe.matricule == f.matricule).first()
+        result.append({
+            "id": f.id,
+            "matricule": f.matricule,
+            "nom_complet": f"{emp.prenom} {emp.nom}" if emp else str(f.matricule),
+            "frais_transport": float(f.frais_transport or 0),
+            "frais_hotel": float(f.frais_hotel or 0),
+            "frais_deplacement": float(f.frais_deplacement or 0),
+            "frais_nutrition": float(f.frais_nutrition or 0),
+            "total_frais": float(f.total_frais or 0),
+            "justificatif": f.justificatif,
+            "statut": f.statut,
+            "date_soumission": f.date_soumission.isoformat() if f.date_soumission else None,
+        })
+
+    return {"id_mission": id_mission, "frais_missionnaires": result}
+
+
+@router.get('/{id_mission}/frais-missionnaire/{mat}')
+def obtenir_frais_missionnaire_par_matricule(
+    id_mission: int,
+    mat: int,
+    db: Session = Depends(get_db)
+):
+    """Obtenir les frais d'un missionnaire spécifique."""
+    frais = db.query(models.FraisMissionnaire).filter(
+        models.FraisMissionnaire.id_mission == id_mission,
+        models.FraisMissionnaire.matricule == mat
+    ).first()
+    if not frais:
+        raise HTTPException(status_code=404, detail="Aucun frais trouvé pour ce missionnaire")
+
+    emp = db.query(models.Employe).filter(models.Employe.matricule == mat).first()
+    return {
+        "id": frais.id,
+        "matricule": frais.matricule,
+        "nom_complet": f"{emp.prenom} {emp.nom}" if emp else str(mat),
+        "frais_transport": float(frais.frais_transport or 0),
+        "frais_hotel": float(frais.frais_hotel or 0),
+        "frais_deplacement": float(frais.frais_deplacement or 0),
+        "frais_nutrition": float(frais.frais_nutrition or 0),
+        "total_frais": float(frais.total_frais or 0),
+        "justificatif": frais.justificatif,
+        "statut": frais.statut,
+        "date_soumission": frais.date_soumission.isoformat() if frais.date_soumission else None,
+    }
+
+
+@router.put('/{id_mission}/frais-missionnaire/{mat}')
+def modifier_frais_missionnaire(
+    id_mission: int,
+    mat: int,
+    data: FraisMissionnaireSchema = Body(...),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """Modifier les frais d'un missionnaire."""
+    frais = db.query(models.FraisMissionnaire).filter(
+        models.FraisMissionnaire.id_mission == id_mission,
+        models.FraisMissionnaire.matricule == mat
+    ).first()
+    if not frais:
+        raise HTTPException(status_code=404, detail="Aucun frais trouvé pour ce missionnaire")
+
+    frais.frais_transport = data.frais_transport
+    frais.frais_hotel = data.frais_hotel
+    frais.frais_deplacement = data.frais_deplacement
+    frais.frais_nutrition = data.frais_nutrition
+    frais.total_frais = data.frais_transport + data.frais_hotel + data.frais_deplacement + data.frais_nutrition
+    frais.justificatif = data.justificatif
+
+    db.commit()
+
+    return {"message": "Frais mis à jour", "total_frais": float(frais.total_frais)}
 
 
 @router.put('/{id_operation}/modifier')
@@ -751,11 +1115,18 @@ async def televerser_rapport(
             mat_v = workflow.obtenir_validateur_pour_role(employe_op, role, db)
             if mat_v and mat_v not in notifies:
                 notifies.add(mat_v)
+                _miss_rapport = db.query(models.Mission).filter(models.Mission.id_mission == id_operation).first()
+                _dest_rapport = (_miss_rapport.ville or _miss_rapport.pays) if _miss_rapport else None
+                _msg_rapport = (
+                    f'Le rapport pour la mission de {_dest_rapport} a été téléversé. Vous pouvez le consulter en lecture seule.'
+                    if _dest_rapport else
+                    'Un rapport de mission a été téléversé. Vous pouvez le consulter en lecture seule.'
+                )
                 notifications.creer_notification(
                     matricule=mat_v,
                     type_notification='INFO',
                     titre='Rapport de mission téléversé',
-                    message=f'Le rapport pour la mission #{id_operation} a été téléversé. Vous pouvez le consulter en lecture seule.',
+                    message=_msg_rapport,
                     id_operation=id_operation,
                     db=db
                 )
@@ -1391,14 +1762,15 @@ def valider_frais_missionnaire(
     _emp_miss = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
     _nom_miss = f"{_emp_miss.prenom} {_emp_miss.nom}" if _emp_miss else f"Matricule {matricule}"
     _op_miss = db.query(models.Operation).filter(models.Operation.id_operation == id_mission).first()
-    _titre_miss = (_op_miss.titre or f"Mission #{id_mission}") if _op_miss else f"Mission #{id_mission}"
+    _dest_miss = (mission.ville or mission.pays) if mission else None
+    _titre_miss = (_op_miss.titre if _op_miss and _op_miss.titre else (f"Mission de {_dest_miss}" if _dest_miss else "Mission"))
 
     for rh in rh_employees:
         notifications.creer_notification(
             matricule=rh.matricule,
             type_notification=models.TypeNotificationEnum.VALIDATION,
             titre=f"Paiement frais requis – {_titre_miss}",
-            message=f"{_nom_miss} a confirmé la réception des frais pour la mission #{id_mission} ({_titre_miss}). Rendez-vous dans Frais de Mission (onglet Reçu) pour valider le paiement.",
+            message=f"{_nom_miss} a confirmé la réception des frais pour {_titre_miss.lower()}. Rendez-vous dans Frais de Mission (onglet Reçu) pour valider le paiement.",
             id_operation=id_mission,
             db=db
         )
@@ -1475,12 +1847,14 @@ def valider_paiement_rh(
     for miss in missionnaires:
         matricules_notifies.add(miss.matricule)
     
+    _dest_pay1 = (mission.ville or mission.pays) if mission else None
+    _label_pay1 = f"mission de {_dest_pay1}" if _dest_pay1 else "mission"
     for mat in matricules_notifies:
         notifications.creer_notification(
             matricule=mat,
             type_notification=models.TypeNotificationEnum.AUTRE,
-            titre=f"Paiement frais – Mission #{id_mission} confirmé",
-            message=f"Le RH a validé le paiement de vos frais pour la mission #{id_mission}.",
+            titre="Paiement frais confirmé",
+            message=f"Le RH a validé le paiement de vos frais pour la {_label_pay1}.",
             id_operation=id_mission,
             db=db
         )
@@ -1491,14 +1865,15 @@ def valider_paiement_rh(
         models.Validation.statut_validation == 'validé'
     ).all()
     _op_pay = db.query(models.Operation).filter(models.Operation.id_operation == id_mission).first()
-    _titre_pay = (_op_pay.titre or f"Mission #{id_mission}") if _op_pay else f"Mission #{id_mission}"
+    _dest_pay2 = (mission.ville or mission.pays) if mission else None
+    _titre_pay = (_op_pay.titre if _op_pay and _op_pay.titre else (f"Mission de {_dest_pay2}" if _dest_pay2 else "Mission"))
     for _v in _validateurs_pay:
         if _v.matricule_validateur and _v.matricule_validateur not in matricules_notifies:
             notifications.creer_notification(
                 matricule=_v.matricule_validateur,
                 type_notification=models.TypeNotificationEnum.AUTRE,
                 titre=f"Paiement frais – {_titre_pay}",
-                message=f"Les frais de la mission #{id_mission} ({_titre_pay}) ont été payés et confirmés par le RH.",
+                message=f"Les frais de {_titre_pay.lower()} ont été payés et confirmés par le RH.",
                 id_operation=id_mission,
                 db=db
             )
@@ -1616,11 +1991,13 @@ def marquer_frais_paye(id_mission: int, request: Request, db: Session = Depends(
     for miss in missionnaires:
         matricules_notifies.add(miss.matricule)
     for mat in matricules_notifies:
+        _dest_marq = (mission.ville or mission.pays) if mission else None
+        _label_marq = f"la mission de {_dest_marq}" if _dest_marq else "la mission"
         notifications.creer_notification(
             matricule=mat,
             type_notification=models.TypeNotificationEnum.AUTRE,
-            titre=f"Paiement frais – Mission #{id_mission} confirmé",
-            message=f"Le RH a confirmé le paiement des frais pour la mission #{id_mission}.",
+            titre="Paiement frais confirmé",
+            message=f"Le RH a confirmé le paiement des frais pour {_label_marq}.",
             id_operation=id_mission,
             db=db
         )

@@ -34,6 +34,8 @@ def seed_remplacants(db_session, seed_reference_data):
 
     c1 = _add(2101, 'Collegue1')
     c2 = _add(2102, 'Collegue2')
+    # c1 est subordonné direct de l'employé (n1 requis par l'algo) ; c2 reste sans lien hiérarchique
+    c1.n1 = refs['employe'].matricule
     db_session.commit()
     return {**refs, 'c1': c1, 'c2': c2}
 

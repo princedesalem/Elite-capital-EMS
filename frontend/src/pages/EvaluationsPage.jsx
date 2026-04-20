@@ -29,7 +29,7 @@ export default function EvaluationsPage() {
       setEvaluations(Array.isArray(evals.data) ? evals.data : [])
       setFichePoste(fiche.data)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Erreur de chargement')
+      setError(e.response?.data?.detail || "Erreur de chargement")
     } finally {
       setLoading(false)
     }
@@ -38,7 +38,7 @@ export default function EvaluationsPage() {
   return (
     <div className="container" style={{ maxWidth: '1000px', marginTop: '20px' }}>
       <div className="card">
-        <h1 style={{display:'flex',alignItems:'center',gap:8}}><BarChart2 size={20}/> Mes Évaluations</h1>
+        <h1 style={{display:'flex',alignItems:'center',gap:8}}><BarChart2 size={20}/> {"Évaluations"}</h1>
 
         {/* Tabs */}
         {(() => {
@@ -67,17 +67,17 @@ export default function EvaluationsPage() {
               </div>
 
               {error && <div style={{ color: '#e74c3c', padding: '12px', background: '#fadbd8', borderRadius: '6px', marginBottom: '20px', display:'flex', alignItems:'center', gap:6 }}><XCircle size={14}/> {error}</div>}
-              {loading && <p style={{display:'flex',alignItems:'center',gap:6}}><Loader size={14} style={{animation:'spin 1s linear infinite'}}/> Chargement des évaluations...</p>}
+              {loading && <p style={{display:'flex',alignItems:'center',gap:6}}><Loader size={14} style={{animation:'spin 1s linear infinite'}}/> {"Chargement des évaluations..."}</p>}
 
               {!loading && displayed.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#7f8c8d' }}>
-                  <p>Aucune évaluation {evalTab === 'recu' ? 'reçue' : 'envoyée'} actuellement</p>
+                  <p>{"Aucune évaluation"}</p>
                 </div>
               )}
 
               {!loading && displayed.length > 0 && (
                 <div>
-                  <h2>Mes Périodes d'Évaluation</h2>
+                  <h2>{"Périodes d'évaluation"}</h2>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px', marginBottom: '40px' }}>
                     {displayed.map((evaluation) => (
                 <div
@@ -99,13 +99,13 @@ export default function EvaluationsPage() {
                       <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #ecf0f1' }}>
                         {evaluation.auto_evaluation && (
                           <>
-                            <h4>Auto-Évaluation</h4>
+                            <h4>{"Auto-évaluation"}</h4>
                             <p>{evaluation.auto_evaluation}</p>
                           </>
                         )}
                         {evaluation.evaluation_hierarchique && (
                           <>
-                            <h4>Évaluation Hiérarchique</h4>
+                            <h4>{"Évaluation hiérarchique"}</h4>
                             <p>{evaluation.evaluation_hierarchique}</p>
                           </>
                         )}
@@ -121,8 +121,8 @@ export default function EvaluationsPage() {
 
         {fichePoste && (
           <div style={{ marginTop: '40px', padding: '20px', background: '#ecf0f1', borderRadius: '8px' }}>
-            <h2 style={{display:'flex',alignItems:'center',gap:6}}><ClipboardList size={16}/> Fiche de Poste</h2>
-            <div style={{ background: 'white', padding: '15px', borderRadius: '6px', fontFamily: 'monospace', fontSize: '0.9em', overflowX: 'auto', maxHeight: '400px', overflowY: 'auto' }}>
+            <h2 style={{display:'flex',alignItems:'center',gap:6}}><ClipboardList size={16}/> {"Fiche de poste"}</h2>
+            <div style={{ background: 'var(--card)', padding: '15px', borderRadius: '6px', fontFamily: 'monospace', fontSize: '0.9em', overflowX: 'auto', maxHeight: '400px', overflowY: 'auto' }}>
               <pre>{JSON.stringify(fichePoste, null, 2)}</pre>
             </div>
           </div>

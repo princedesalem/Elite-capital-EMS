@@ -5,10 +5,11 @@ import { useAuth } from '../contexts/AuthContext'
 import WorkflowModal from '../components/WorkflowModal'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import ModifiedBadge from '../components/ModifiedBadge'
-import { Eye, Pencil, CheckCircle, XCircle, Zap, Lock, CornerUpLeft, UserCheck } from 'lucide-react'
+import { operationLabel } from '../utils/operationLabel'
+import { Eye, Pencil, CheckCircle, XCircle, Zap, Lock, CornerUpLeft, UserCheck, FileDown } from 'lucide-react'
 
-const th = { padding: '6px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', fontSize: '0.66rem', color: '#64748b', fontWeight: 700, whiteSpace: 'nowrap' }
-const td = { padding: '6px', borderBottom: '1px solid #f1f5f9', fontSize: '0.7rem', color: '#111827', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+const th = { padding: '6px', textAlign: 'left', borderBottom: '1px solid var(--border)', fontSize: '0.66rem', color: '#64748b', fontWeight: 700, whiteSpace: 'nowrap' }
+const td = { padding: '6px', borderBottom: '1px solid #f1f5f9', fontSize: '0.7rem', color: 'var(--text)', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
 const rowBtn = { padding: '3px 6px', border: 'none', borderRadius: 5, fontWeight: 700, cursor: 'pointer', fontSize: '0.64rem', color: '#fff', lineHeight: 1.2 }
 const primaryBtn = { ...rowBtn, background: '#2563eb' }
 const dangerBtn = { ...rowBtn, background: '#ef4444' }
@@ -101,8 +102,8 @@ const fmtDateTime = (value) => value ? new Date(value).toLocaleString('fr-FR') :
 
 function Tabs({ active, setActive, counts }) {
   return (
-    <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
-      {[['envoye', 'Envoye', counts.envoye], ['recu', 'Recu', counts.recu]].map(([key, label, count]) => (
+    <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+      {[['envoye', "Envoyé", counts.envoye], ['recu', "Recu", counts.recu]].map(([key, label, count]) => (
         <button key={key} onClick={() => setActive(key)} style={{ flex: 1, padding: '10px 8px', border: 'none', cursor: 'pointer', background: active === key ? '#fff' : '#f9fafb', fontWeight: active === key ? 700 : 500, fontSize: '0.82rem', borderBottom: active === key ? '2px solid #ce2b2b' : '2px solid transparent', color: active === key ? '#ce2b2b' : '#6b7280' }}>
           {label}
           {count > 0 && <span style={{ marginLeft: 5, padding: '1px 6px', borderRadius: 999, fontSize: '0.68rem', background: active === key ? '#ce2b2b' : '#e5e7eb', color: active === key ? '#fff' : '#374151' }}>{count}</span>}
@@ -126,7 +127,7 @@ function FilterBar({ date, setDate, statut, setStatut, source, setSource, emette
         <option value="">Tous etats</option>
         {['--', 'AttenteRH', 'Active', 'ClotureDemandee', 'Cloturee'].map(value => <option key={value} value={value}>{value}</option>)}
       </select>
-      {(date || statut || source || emetteur || etat) && <button onClick={() => { setDate(''); setStatut(''); setSource(''); setEmetteur(''); setEtat('') }} style={{ padding: '5px 9px', borderRadius: 5, border: '1px solid #f87171', background: '#fee2e2', color: '#991b1b', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}>Reinitialiser</button>}
+      {(date || statut || source || emetteur || etat) && <button onClick={() => { setDate(''); setStatut(''); setSource(''); setEmetteur(''); setEtat('') }} style={{ padding: '5px 9px', borderRadius: 5, border: '1px solid #f87171', background: '#fee2e2', color: '#991b1b', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}>{"Réinitialiser les filtres"}</button>}
     </div>
   )
 }
@@ -140,6 +141,7 @@ export default function SortiesPage() {
 
   const [activeTab, setActiveTab] = useState('envoye')
   const [showNewForm, setShowNewForm] = useState(false)
+  const [downloadingPdf, setDownloadingPdf] = useState(null)
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState(null)
   const [selectedOperationForWorkflow, setSelectedOperationForWorkflow] = useState(null)
@@ -246,11 +248,11 @@ export default function SortiesPage() {
     setMsg(null)
 
     if (!form.heure_sortie) {
-      setMsg({ type: 'error', text: 'Veuillez indiquer heure de départ.' })
+      setMsg({ type: 'error', text: "L'heure de départ est obligatoire" })
       return
     }
     if (!form.heure_retour) {
-      setMsg({ type: 'error', text: 'Veuillez indiquer heure de retour.' })
+      setMsg({ type: 'error', text: "L'heure de retour est obligatoire" })
       return
     }
     const departMinutes = parseTimeToMinutes(form.heure_sortie)
@@ -289,10 +291,10 @@ export default function SortiesPage() {
             commentaire: res.data.commentaire,
           }
         }))
-        setMsg({ type: 'success', text: 'Demande de sortie modifiée.' })
+        setMsg({ type: 'success', text: "Sortie modifiée avec succès" })
       } else {
         await api.post('/api/sorties/', payload)
-        setMsg({ type: 'success', text: 'Demande de sortie enregistrée.' })
+        setMsg({ type: 'success', text: "Sortie enregistrée avec succès" })
       }
 
       setEditOperationId(null)
@@ -317,7 +319,7 @@ export default function SortiesPage() {
   }
 
   const handleAnnuler = async (idOperation) => {
-    if (!confirm('Annuler cette demande ?')) return
+    if (!confirm("Êtes-vous sûr de vouloir annuler cette demande ?")) return
     try {
       await api.put(`/api/sorties/${idOperation}/annuler`)
       setMsg({ type: 'success', text: `Opération #${idOperation} annulée.` })
@@ -373,7 +375,7 @@ export default function SortiesPage() {
   }
 
   const handleRetourAnticipe = async (idOperation) => {
-    if (!confirm('Confirmer le retour anticipé ? Les jours restants seront restitués au solde.')) return
+    if (!confirm("Êtes-vous sûr de vouloir déclarer un retour anticipé ?")) return
     setLoadingOp(idOperation)
     try {
       const today = new Date().toISOString().split('T')[0]
@@ -427,6 +429,7 @@ export default function SortiesPage() {
     const isLoading = loadingOp === id
     const btnStyle = (base) => ({ ...base, opacity: isLoading ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 3 })
     const eyeBtn = <button key="eye" onClick={(e) => { e.stopPropagation(); setDetailSortieItem({ ...(item.__sortie || {}), ...item }) }} style={{ ...rowBtn, background: '#6366f1', display: 'inline-flex', alignItems: 'center' }} title="Voir détails"><Eye size={12} /></button>
+    const pdfBtn = isValid ? <button key="pdf" onClick={(e) => { e.stopPropagation(); setDownloadingPdf(id); api.get(`/api/pdf/sortie/${id}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `sortie_${id}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }).finally(() => setDownloadingPdf(null)) }} style={{ ...rowBtn, background: '#0e7490', display: 'inline-flex', alignItems: 'center', opacity: downloadingPdf === id ? 0.6 : 1 }} disabled={downloadingPdf === id} title="Télécharger PDF"><FileDown size={13} /></button> : null
 
     if (isRefus) return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{eyeBtn}</div>
 
@@ -434,11 +437,11 @@ export default function SortiesPage() {
       const canApprove = !isValid && item.__workflow_bucket === 'recu'
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'validé') }} style={btnStyle(okBtn)} disabled={isLoading}><CheckCircle size={11} /> Approuver</button>}
-          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'refusé') }} style={btnStyle(dangerBtn)} disabled={isLoading}><XCircle size={11} /> Refuser</button>}
+          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'validé') }} style={btnStyle(okBtn)} disabled={isLoading}><CheckCircle size={11} /> {"Approuver"}</button>}
+          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'refusé') }} style={btnStyle(dangerBtn)} disabled={isLoading}><XCircle size={11} /> {"Refuser"}</button>}
           {estRh && isValid && etat === 'AttenteRH' && <button onClick={(e) => { e.stopPropagation(); handleActiverRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : <><Zap size={11} /> Activer</>}</button>}
-          {estRh && isValid && etat === 'Active' && <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : <><Lock size={11} /> Clôturer</>}</button>}
-          {eyeBtn}
+          {estRh && isValid && etat === 'Active' && <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : <><Lock size={11} /> {"Clôturer le congé"}</>}</button>}
+          {pdfBtn}{eyeBtn}
         </div>
       )
     }
@@ -446,36 +449,36 @@ export default function SortiesPage() {
     if (!isValid) {
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <button onClick={(e) => { e.stopPropagation(); handleModifier(item) }} style={btnStyle(primaryBtn)}>Modifier</button>
-          <button onClick={(e) => { e.stopPropagation(); handleAnnuler(id) }} style={btnStyle(dangerBtn)}>Annuler</button>
+          <button onClick={(e) => { e.stopPropagation(); handleModifier(item) }} style={btnStyle(primaryBtn)}>{"Modifier"}</button>
+          <button onClick={(e) => { e.stopPropagation(); handleAnnuler(id) }} style={btnStyle(dangerBtn)}>{"Annuler"}</button>
           {eyeBtn}
         </div>
       )
     }
 
     if (etat === '--') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleActiver(id) }} style={btnStyle(okBtn)} disabled={isLoading}>{isLoading ? '…' : <><Zap size={11} /> Activer</>}</button>{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleActiver(id) }} style={btnStyle(okBtn)} disabled={isLoading}>{isLoading ? '…' : <><Zap size={11} /> Activer</>}</button>{pdfBtn}{eyeBtn}</div>
     }
 
     if (etat === 'AttenteRH') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#92400e', background: '#fef3c7' }}><UserCheck size={10} /> En att. RH</span>{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#92400e', background: '#fef3c7' }}><UserCheck size={10} /> En att. RH</span>{pdfBtn}{eyeBtn}</div>
     }
 
     if (etat === 'Active') {
       const dateFin = item.date_fin || item.date_retour || item.date_sortie
       const canRetourAnticipe = dateFin && new Date() < new Date(dateFin)
       return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-        <button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : <><Lock size={11} /> Clôturer</>}</button>
+        <button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : <><Lock size={11} /> {"Clôturer le congé"}</>}</button>
         {canRetourAnticipe && <button onClick={(e) => { e.stopPropagation(); handleRetourAnticipe(id) }} style={btnStyle({ ...primaryBtn, background: '#3b82f6' })} disabled={isLoading}>{isLoading ? '…' : <><CornerUpLeft size={11} /> Retour ant.</>}</button>}
-        {eyeBtn}
+        {pdfBtn}{eyeBtn}
       </div>
     }
 
     if (etat === 'ClotureDemandee') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#92400e', background: '#fef3c7' }}><UserCheck size={10} /> Att. confirmation RH</span>{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#92400e', background: '#fef3c7' }}><UserCheck size={10} /> Att. confirmation RH</span>{pdfBtn}{eyeBtn}</div>
     }
 
-    return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{eyeBtn}</div>
+    return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{pdfBtn}{eyeBtn}</div>
   }
 
   const renderRows = (rows, isRecu) => {
@@ -488,9 +491,9 @@ export default function SortiesPage() {
 
       return (
         <tr key={`${activeTab}-${item.id_operation}`} onClick={() => setSelectedOperationForWorkflow(item.id_operation)} style={{ cursor: 'pointer' }}>
-          <td style={td} title={item.motif || item.titre || `Sortie #${item.id_operation}`}>
+          <td style={td} title={operationLabel(item)}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 600 }}>{item.motif || item.titre || `Sortie #${item.id_operation}`}</span>
+              <span style={{ fontWeight: 600 }}>{operationLabel(item)}</span>
               <ModifiedBadge estModifie={item.est_modifie} dateModification={item.date_modification} />
             </div>
           </td>
@@ -541,12 +544,12 @@ export default function SortiesPage() {
     })
   }
 
-  if (loading) return <div style={{ padding: 24 }}>Chargement...</div>
+  if (loading) return <div style={{ padding: 24 }}>{"Chargement..."}</div>
 
   return (
     <div style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#021630' }}>Gestion des sorties</h1>
+        <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#021630' }}>{"Gestion des Sorties"}</h1>
         <button
           onClick={() => {
             setShowNewForm((prev) => !prev)
@@ -574,23 +577,23 @@ export default function SortiesPage() {
       )}
 
       {showNewForm && (
-        <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(15,23,42,0.07)', padding: '24px 28px', marginBottom: 16 }}>
+        <div style={{ background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)', boxShadow: '0 4px 20px rgba(15,23,42,0.07)', padding: '24px 28px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20, paddingBottom: 14, borderBottom: '1px solid #f1f5f9' }}>
             <div style={{ width: 4, height: 20, background: '#ce2b2b', borderRadius: 2, marginRight: 10, flexShrink: 0 }} />
-            <span style={{ fontWeight: 700, fontSize: '0.97rem', color: '#0f172a' }}>{editOperationId ? 'Modifier la demande de sortie' : 'Nouvelle demande de sortie'}</span>
+            <span style={{ fontWeight: 700, fontSize: '0.97rem', color: 'var(--text)' }}>{editOperationId ? 'Modifier la demande de sortie' : 'Nouvelle demande de sortie'}</span>
           </div>
           <form onSubmit={handleCreateOrEdit} style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(4, 1fr)' }}>
             <div>
               <label style={fieldLabel}>Date de départ</label>
-              <input type="date" value={form.date_sortie} min={today} onChange={(e) => setField('date_sortie', e.target.value)} style={{ padding: '9px 12px', borderRadius: 7, border: '1.5px solid #d1d5db', width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', color: '#1e293b' }} required />
+              <input type="date" value={form.date_sortie} min={today} onChange={(e) => setField('date_sortie', e.target.value)} style={{ padding: '9px 12px', borderRadius: 7, border: '1.5px solid #d1d5db', width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', color: 'var(--text)' }} required />
             </div>
             <div>
               <label style={fieldLabel}>Heure de départ</label>
-              <input type="time" value={form.heure_sortie} onChange={(e) => setField('heure_sortie', e.target.value)} style={{ padding: '9px 12px', borderRadius: 7, border: '1.5px solid #d1d5db', width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', color: '#1e293b' }} required />
+              <input type="time" value={form.heure_sortie} onChange={(e) => setField('heure_sortie', e.target.value)} style={{ padding: '9px 12px', borderRadius: 7, border: '1.5px solid #d1d5db', width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', color: 'var(--text)' }} required />
             </div>
             <div>
               <label style={fieldLabel}>Heure de retour</label>
-              <input type="time" value={form.heure_retour} onChange={(e) => setField('heure_retour', e.target.value)} style={{ padding: '9px 12px', borderRadius: 7, border: '1.5px solid #d1d5db', width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', color: '#1e293b' }} required />
+              <input type="time" value={form.heure_retour} onChange={(e) => setField('heure_retour', e.target.value)} style={{ padding: '9px 12px', borderRadius: 7, border: '1.5px solid #d1d5db', width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', color: 'var(--text)' }} required />
             </div>
             <div>
               <label style={fieldLabel}>Durée effective</label>
@@ -604,17 +607,17 @@ export default function SortiesPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={fieldLabel}>Motif</label>
-              <textarea value={form.commentaire} onChange={(e) => setField('commentaire', e.target.value)} rows={2} placeholder="Précisez le motif de la sortie" style={{ padding: '9px 12px', borderRadius: 7, border: '1.5px solid #d1d5db', width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', color: '#1e293b', resize: 'vertical', fontFamily: 'inherit' }} />
+              <textarea value={form.commentaire} onChange={(e) => setField('commentaire', e.target.value)} rows={2} placeholder="Précisez le motif de la sortie" style={{ padding: '9px 12px', borderRadius: 7, border: '1.5px solid #d1d5db', width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', color: 'var(--text)', resize: 'vertical', fontFamily: 'inherit' }} />
             </div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4, borderTop: '1px solid #f1f5f9', marginTop: 4 }}>
-              <button type="button" onClick={() => { setShowNewForm(false); setEditOperationId(null); setForm({ date_sortie: today, heure_sortie: '', heure_retour: '', commentaire: '' }) }} style={{ padding: '9px 18px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 7, fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' }}>Annuler</button>
-              <button type="submit" style={{ padding: '9px 22px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>{editOperationId ? 'Enregistrer la modification' : 'Soumettre la demande'}</button>
+              <button type="button" onClick={() => { setShowNewForm(false); setEditOperationId(null); setForm({ date_sortie: today, heure_sortie: '', heure_retour: '', commentaire: '' }) }} style={{ padding: '9px 18px', background: 'var(--bg)', color: '#475569', border: '1px solid var(--border)', borderRadius: 7, fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' }}>{"Annuler"}</button>
+              <button type="submit" style={{ padding: '9px 22px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>{editOperationId ? "Enregistrer" : 'Soumettre la demande'}</button>
             </div>
           </form>
         </div>
       )}
 
-      <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+      <div style={{ background: 'var(--card)', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <Tabs active={activeTab} setActive={(tab) => { setActiveTab(tab); setFilterDate(''); setFilterStatut(''); setFilterSource(''); setFilterEmetteur(''); setFilterEtat('') }} counts={{ envoye: workflowEnvoye.length, recu: recu.length }} />
         <FilterBar date={filterDate} setDate={setFilterDate} statut={filterStatut} setStatut={setFilterStatut} source={filterSource} setSource={setFilterSource} emetteur={filterEmetteur} setEmetteur={setFilterEmetteur} etat={filterEtat} setEtat={setFilterEtat} />
         <div>
@@ -653,12 +656,12 @@ export default function SortiesPage() {
           onClick={(e) => { if (e.target === e.currentTarget) setDetailSortieItem(null) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
-          <div style={{ background: '#fff', borderRadius: 12, padding: 28, width: '90%', maxWidth: 560, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
+          <div style={{ background: 'var(--card)', borderRadius: 12, padding: 28, width: '90%', maxWidth: 560, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <strong style={{ fontSize: '1.1rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <strong style={{ fontSize: '1.1rem', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Eye size={15} style={{ color: '#6366f1' }} /> Détails sortie #{detailSortieItem.id_operation}
               </strong>
-              <button onClick={() => setDetailSortieItem(null)} style={{ padding: '7px 14px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Fermer</button>
+              <button onClick={() => setDetailSortieItem(null)} style={{ padding: '7px 14px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>{"Fermer"}</button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px', fontSize: '0.86rem' }}>
               {detailSortieItem.motif && <div style={{ gridColumn: '1 / -1' }}><span style={{ color: '#64748b', fontWeight: 600 }}>Motif: </span>{detailSortieItem.motif}</div>}

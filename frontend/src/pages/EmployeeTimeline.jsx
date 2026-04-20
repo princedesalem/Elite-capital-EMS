@@ -150,12 +150,12 @@ export default function EmployeeTimeline() {
       <div style={{ display: 'grid', gridTemplateColumns: isAdmin ? '280px 1fr' : '1fr', gap: 18 }}>
         {/* Sidebar — employee selector (admin only) */}
         {isAdmin && (
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', height: 'fit-content' }}>
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', height: 'fit-content' }}>
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
               <div style={{ position: 'relative' }}>
                 <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                 <input
-                  style={{ width: '100%', padding: '7px 10px 7px 30px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: '0.82rem', boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '7px 10px 7px 30px', border: '1px solid var(--border)', borderRadius: 7, fontSize: '0.82rem', boxSizing: 'border-box' }}
                   placeholder="Rechercher un employé..."
                   value={searchQ}
                   onChange={e => setSearchQ(e.target.value)}
@@ -165,11 +165,11 @@ export default function EmployeeTimeline() {
             <div style={{ maxHeight: 400, overflowY: 'auto' }}>
               {filteredEmployees.map(e => (
                 <button key={e.matricule} onClick={() => setSelectedMatricule(e.matricule)} style={{
-                  width: '100%', padding: '10px 14px', borderBottom: '1px solid #f1f5f9', border: 'none', borderBottom: '1px solid #f1f5f9',
+                  width: '100%', padding: '10px 14px', border: 'none', borderBottom: '1px solid #f1f5f9',
                   background: String(selectedMatricule) === String(e.matricule) ? '#fef2f2' : 'white', cursor: 'pointer', textAlign: 'left',
                   borderLeft: String(selectedMatricule) === String(e.matricule) ? `3px solid ${ACCENT}` : '3px solid transparent',
                 }}>
-                  <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.85rem' }}>{e.prenom} {e.nom}</div>
+                  <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.85rem' }}>{e.prenom} {e.nom}</div>
                   <div style={{ fontSize: '0.72rem', color: '#64748b' }}>#{e.matricule} • {e.fonction || 'N/A'}</div>
                 </button>
               ))}
@@ -189,7 +189,7 @@ export default function EmployeeTimeline() {
           ) : (
             <>
               {/* Employee card */}
-              <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '18px 20px', marginBottom: 18, display: 'flex', gap: 18, alignItems: 'center' }}>
+              <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '18px 20px', marginBottom: 18, display: 'flex', gap: 18, alignItems: 'center' }}>
                 <AvatarCircle
                   photoUrl={employee.photo_url}
                   letter={`${employee.prenom?.[0] || ''}${employee.nom?.[0] || '?'}`}
@@ -225,7 +225,7 @@ export default function EmployeeTimeline() {
 
               {/* Timeline */}
               {filtered.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 24px', color: '#94a3b8', background: 'white', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                <div style={{ textAlign: 'center', padding: '40px 24px', color: '#94a3b8', background: 'var(--card)', borderRadius: 10, border: '1px solid var(--border)' }}>
                   <Clock size={32} style={{ opacity: 0.3, marginBottom: 12 }} />
                   <p>Aucun événement pour ce filtre</p>
                 </div>
@@ -241,7 +241,7 @@ export default function EmployeeTimeline() {
                         <div style={{ position: 'absolute', left: -32, top: 10, width: 22, height: 22, borderRadius: '50%', background: type.bg, border: `2px solid ${type.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem' }}
                         />
                         {/* Card */}
-                        <div style={{ background: 'white', border: `1px solid ${type.color}33`, borderLeft: `3px solid ${type.color}`, borderRadius: 8, padding: '10px 14px' }}>
+                        <div style={{ background: 'var(--card)', border: `1px solid ${type.color}33`, borderLeft: `3px solid ${type.color}`, borderRadius: 8, padding: '10px 14px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
                             <span style={{ fontWeight: 700, color: DARK, fontSize: '0.88rem' }}>{ev.title}</span>
                             <span style={{ fontSize: '0.72rem', color: '#94a3b8', flexShrink: 0, marginLeft: 10 }}>{ev.date ? new Date(ev.date).toLocaleDateString('fr-FR') : 'Date N/A'}</span>

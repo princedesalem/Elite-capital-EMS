@@ -5,7 +5,6 @@ import dayjs from 'dayjs'
 import { Search, AlertTriangle, CheckCircle, Lock } from 'lucide-react'
 import MissionDetailModal from '../components/MissionDetailModal'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
-
 export default function MissionsIG() {
   const { user } = useAuth()
   const [missions, setMissions] = useState([])
@@ -71,22 +70,22 @@ export default function MissionsIG() {
     return true
   })
 
-  if (fonctionLoading || loading) return <div style={{ padding: '20px' }}>Chargement...</div>
+  if (fonctionLoading || loading) return <div style={{ padding: '20px' }}>{"Chargement..."}</div>
 
   if (!isIG()) return (
     <div style={{ padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
       <Lock size={40} color="#dc2626" />
-      <h2 style={{ margin: 0, color: '#dc2626' }}>Accès non autorisé</h2>
-      <p style={{ color: '#6b7280', margin: 0 }}>Cette page est réservée à l'Inspecteur Général.</p>
+      <h2 style={{ margin: 0, color: '#dc2626' }}>{"Accès non autorisé"}</h2>
+      <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{"Réservé à l'Inspection Générale"}</p>
     </div>
   )
 
   return (
     <div style={{ padding: '20px' }}>
       <div style={{ marginBottom: '20px' }}>
-        <h2 style={{ margin: '0 0 10px 0', display:'flex', alignItems:'center', gap:8 }}><Search size={18}/> Vue Inspecteur Général - Toutes les missions</h2>
-        <p style={{ margin: 0, color: '#6b7280' }}>
-          Vue complète de toutes les missions en cours et terminées
+        <h2 style={{ margin: '0 0 10px 0', display:'flex', alignItems:'center', gap:8 }}><Search size={18}/> {"Missions IG"}</h2>
+        <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+          {"Suivi des missions de l'Inspection Générale"}
         </p>
       </div>
 
@@ -97,7 +96,7 @@ export default function MissionsIG() {
       )}
 
       {/* Filtres */}
-      <div style={{ background: 'white', padding: '20px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div style={{ background: 'var(--card)', padding: '20px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'center' }}>
           <div>
             <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>Filtre:</label>
@@ -141,36 +140,36 @@ export default function MissionsIG() {
                 cursor: 'pointer'
               }}
             >
-              Actualiser
+              {"Rafraîchir"}
             </button>
           </div>
         </div>
         
-        <div style={{ marginTop: '15px', fontSize: '0.9rem', color: '#6b7280' }}>
+        <div style={{ marginTop: '15px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
           {missionsFiltrees.length} mission(s) trouvée(s)
         </div>
       </div>
 
       {/* Table des missions */}
-      <div style={{ background: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div style={{ background: 'var(--card)', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ background: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
+            <tr style={{ background: 'var(--bg)', borderBottom: '2px solid #e5e7eb' }}>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>ID</th>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Employé(s)</th>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Destination</th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Dates</th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Statut</th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Rapport</th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Paiement frais</th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Actions</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>{"Dates"}</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>{"Statut"}</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>{"Rapport"}</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>{"Paiement des frais"}</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>{"Actions"}</th>
             </tr>
           </thead>
           <tbody>
             {missionsFiltrees.length === 0 ? (
               <tr>
                 <td colSpan="8" style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>
-                  Aucune mission trouvée
+                  {"Aucune mission"}
                 </td>
               </tr>
             ) : (
@@ -183,14 +182,14 @@ export default function MissionsIG() {
                   : 0
                 
                 return (
-                  <tr key={mission.id_mission} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                  <tr key={mission.id_mission} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '12px' }}>
                       <strong>#{mission.id_mission}</strong>
                     </td>
                     <td style={{ padding: '12px' }}>
                       {mission.nom_employe}
                       {mission.nb_missionnaires > 1 && (
-                        <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                           +{mission.nb_missionnaires - 1} autre(s)
                         </div>
                       )}
@@ -198,7 +197,7 @@ export default function MissionsIG() {
                     <td style={{ padding: '12px' }}>
                       <div>{mission.ville}, {mission.pays}</div>
                       {mission.nb_segments > 1 && (
-                        <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                           {mission.nb_segments} destinations
                         </div>
                       )}
@@ -207,7 +206,7 @@ export default function MissionsIG() {
                       <div style={{ fontSize: '0.85rem' }}>
                         {dayjs(mission.date_debut).format('DD/MM/YYYY')}
                       </div>
-                      <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                         → {dayjs(mission.date_fin).format('DD/MM/YYYY')}
                       </div>
                     </td>
@@ -220,7 +219,7 @@ export default function MissionsIG() {
                           borderRadius: '12px', 
                           fontSize: '0.85rem' 
                         }}>
-                          En cours
+                          {"En cours"}
                         </span>
                       ) : (
                         <span style={{ 
@@ -230,14 +229,14 @@ export default function MissionsIG() {
                           borderRadius: '12px', 
                           fontSize: '0.85rem' 
                         }}>
-                          Terminée
+                          {"Terminé"}
                         </span>
                       )}
                     </td>
                     <td style={{ padding: '12px' }}>
                       {mission.rapport_televerse ? (
                         <span style={{ color: '#059669', fontSize: '0.9rem' }}>
-                          Soumis
+                          {"Soumis"}
                         </span>
                       ) : joursSansRapport > 0 ? (
                         <span style={{ color: '#dc2626', fontSize: '0.9rem', display:'inline-flex', alignItems:'center', gap:4 }}>
@@ -245,11 +244,11 @@ export default function MissionsIG() {
                         </span>
                       ) : enCours ? (
                         <span style={{ color: '#9ca3af', fontSize: '0.9rem' }}>
-                          En attente
+                          {"En Attente"}
                         </span>
                       ) : (
                         <span style={{ color: '#d97706', fontSize: '0.9rem' }}>
-                          Non soumis
+                          {"Non soumis"}
                         </span>
                       )}
                     </td>
@@ -262,7 +261,7 @@ export default function MissionsIG() {
                           borderRadius: '12px', 
                           fontSize: '0.85rem' 
                         }}>
-                          Payé
+                          {"Payé"}
                         </span>
                       ) : mission.frais_valides_rh ? (
                         <span style={{ 
@@ -272,7 +271,7 @@ export default function MissionsIG() {
                           borderRadius: '12px', 
                           fontSize: '0.85rem' 
                         }}>
-                          Validation RH
+                          {"En attente confirmation RH"}
                         </span>
                       ) : mission.frais_valides_missionnaire ? (
                         <span style={{ 
@@ -282,7 +281,7 @@ export default function MissionsIG() {
                           borderRadius: '12px', 
                           fontSize: '0.85rem' 
                         }}>
-                          Attente RH
+                          {"En attente RH"}
                         </span>
                       ) : (
                         <span style={{ 
@@ -292,7 +291,7 @@ export default function MissionsIG() {
                           borderRadius: '12px', 
                           fontSize: '0.85rem' 
                         }}>
-                          Non validé
+                          {"Non validé"}
                         </span>
                       )}
                     </td>
@@ -310,7 +309,7 @@ export default function MissionsIG() {
                           fontFamily: 'inherit'
                         }}
                       >
-                        Voir détails →
+                        {"Voir les détails"}
                       </button>
                     </td>
                   </tr>

@@ -59,7 +59,7 @@ export default function MissionDetailModal({ isOpen, missionId, onClose }) {
       zIndex: 2000
     }}>
       <div style={{
-        background: 'white',
+        background: 'var(--card)',
         borderRadius: '8px',
         padding: '24px',
         maxWidth: '900px',
@@ -121,26 +121,26 @@ export default function MissionDetailModal({ isOpen, missionId, onClose }) {
               </h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem' }}>Motif</label>
+                  <label style={{ fontWeight: 'bold', color: 'var(--text)', fontSize: '0.85rem' }}>Motif</label>
                   <div style={{ padding: '6px', background: '#f5f5f5', borderRadius: '4px' }}>
                     {mission.motif || 'Non renseigné'}
                   </div>
                 </div>
                 <div>
-                  <label style={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem' }}>Email contact</label>
+                  <label style={{ fontWeight: 'bold', color: 'var(--text)', fontSize: '0.85rem' }}>Email contact</label>
                   <div style={{ padding: '6px', background: '#f5f5f5', borderRadius: '4px' }}>
                     {mission.email_mission || 'Non renseigné'}
                   </div>
                 </div>
                 <div>
-                  <label style={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem' }}>Statut</label>
+                  <label style={{ fontWeight: 'bold', color: 'var(--text)', fontSize: '0.85rem' }}>Statut</label>
                   <div style={{ padding: '6px', background: '#f5f5f5', borderRadius: '4px' }}>
                     {mission.statut || 'Non renseigné'}
                   </div>
                 </div>
                 {mission.rapport_televerse !== undefined && (
                   <div>
-                    <label style={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem' }}>Rapport téléversé</label>
+                    <label style={{ fontWeight: 'bold', color: 'var(--text)', fontSize: '0.85rem' }}>Rapport téléversé</label>
                     <div style={{ padding: '6px', background: '#f5f5f5', borderRadius: '4px' }}>
                       {mission.rapport_televerse ? '✓ Oui' : '✗ Non'}
                     </div>
@@ -237,19 +237,19 @@ export default function MissionDetailModal({ isOpen, missionId, onClose }) {
                 </h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label style={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem' }}>Missionnaire</label>
+                    <label style={{ fontWeight: 'bold', color: 'var(--text)', fontSize: '0.85rem' }}>Missionnaire</label>
                     <div style={{ padding: '8px', background: '#f5f5f5', borderRadius: '4px', textAlign: 'center' }}>
                       {mission.frais_valides_missionnaire ? '✓ Validé' : '✗ En attente'}
                     </div>
                   </div>
                   <div>
-                    <label style={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem' }}>RH</label>
+                    <label style={{ fontWeight: 'bold', color: 'var(--text)', fontSize: '0.85rem' }}>RH</label>
                     <div style={{ padding: '8px', background: '#f5f5f5', borderRadius: '4px', textAlign: 'center' }}>
                       {mission.frais_valides_rh ? '✓ Validé' : '✗ En attente'}
                     </div>
                   </div>
                   <div>
-                    <label style={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem' }}>Payé</label>
+                    <label style={{ fontWeight: 'bold', color: 'var(--text)', fontSize: '0.85rem' }}>Payé</label>
                     <div style={{ padding: '8px', background: '#f5f5f5', borderRadius: '4px', textAlign: 'center' }}>
                       {mission.frais_payes ? '✓ Payé' : '✗ Non payé'}
                     </div>

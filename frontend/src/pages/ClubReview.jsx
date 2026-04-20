@@ -19,16 +19,16 @@ function ClubCard({ club, members, activities, reviews, employees, onEdit, onDel
   const clubActivities = (activities || []).filter(a => a.club_id === club.id).sort((a, b) => new Date(b.date) - new Date(a.date))
 
   return (
-    <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+    <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
       <div style={{ padding: '16px 18px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 10, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', fontWeight: 800, color: '#475569', flexShrink: 0 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 10, background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', fontWeight: 800, color: '#475569', flexShrink: 0 }}>
             {(club.nom?.[0] || '').toUpperCase()}
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ fontWeight: 800, color: DARK, fontSize: '0.95rem' }}>{club.nom}</span>
-              <span style={{ padding: '2px 8px', background: '#f1f5f9', borderRadius: 20, fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>{club.type}</span>
+              <span style={{ padding: '2px 8px', background: 'var(--bg)', borderRadius: 20, fontSize: '0.65rem', color: '#64748b', fontWeight: 600 }}>{club.type}</span>
               {avgRating && <span style={{ fontSize: '0.72rem', color: '#021630', fontWeight: 700 }}>{avgRating}/5</span>}
             </div>
             <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 4 }}>{club.description}</div>
@@ -38,12 +38,12 @@ function ClubCard({ club, members, activities, reviews, employees, onEdit, onDel
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {isMember
-              ? <button onClick={() => onLeave(club.id)} style={{ padding: '5px 12px', background: '#fef2f2', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: '0.75rem', color: ACCENT, fontWeight: 700 }}>Quitter</button>
-              : <button onClick={() => onJoin(club.id)} style={{ padding: '5px 12px', background: '#f1f5f9', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: '0.75rem', color: '#021630', fontWeight: 700 }}>Rejoindre</button>
+              ? <button onClick={() => onLeave(club.id)} style={{ padding: '5px 12px', background: '#fef2f2', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: '0.75rem', color: ACCENT, fontWeight: 700 }}>{"Quitter le club"}</button>
+              : <button onClick={() => onJoin(club.id)} style={{ padding: '5px 12px', background: 'var(--bg)', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: '0.75rem', color: '#021630', fontWeight: 700 }}>{"Rejoindre"}</button>
             }
-            {isAdmin && <button onClick={() => onEdit(club)} style={{ padding: '5px 8px', background: '#f1f5f9', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: '0.7rem', color: '#475569' }}>Modifier</button>}
-            {isAdmin && <button onClick={() => onDelete(club.id)} style={{ padding: '5px 8px', background: '#fef2f2', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: '0.7rem', color: ACCENT }}>Suppr.</button>}
-            <button onClick={() => setExpanded(!expanded)} style={{ padding: '5px 8px', background: '#f1f5f9', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: '0.7rem', color: '#475569' }}>
+            {isAdmin && <button onClick={() => onEdit(club)} style={{ padding: '5px 8px', background: 'var(--bg)', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: '0.7rem', color: '#475569' }}>{"Modifier"}</button>}
+            {isAdmin && <button onClick={() => onDelete(club.id)} style={{ padding: '5px 8px', background: '#fef2f2', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: '0.7rem', color: ACCENT }}>{"Suppr."}</button>}
+            <button onClick={() => setExpanded(!expanded)} style={{ padding: '5px 8px', background: 'var(--bg)', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: '0.7rem', color: '#475569' }}>
               {expanded ? '▲' : '▼'}
             </button>
           </div>
@@ -55,8 +55,8 @@ function ClubCard({ club, members, activities, reviews, employees, onEdit, onDel
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             {/* Members */}
             <div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: 8 }}>MEMBRES ({memberList.length})</div>
-              {memberList.length === 0 ? <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Aucun membre</div> : (
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: 8 }}>{"Nombre de membres"} ({memberList.length})</div>
+              {memberList.length === 0 ? <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{"Aucun membre"}</div> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {memberList.slice(0, 6).map(emp => (
                     <div key={emp.matricule} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -77,11 +77,11 @@ function ClubCard({ club, members, activities, reviews, employees, onEdit, onDel
             </div>
             {/* Last activities */}
             <div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: 8 }}>DERNIÈRES ACTIVITÉS</div>
-              {clubActivities.length === 0 ? <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Aucune activité</div> : (
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: 8 }}>{"Activités récentes"}</div>
+              {clubActivities.length === 0 ? <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{"Aucune activité"}</div> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {clubActivities.slice(0, 4).map(a => (
-                    <div key={a.id} style={{ padding: '5px 8px', background: '#f8fafc', borderRadius: 6 }}>
+                    <div key={a.id} style={{ padding: '5px 8px', background: 'var(--bg)', borderRadius: 6 }}>
                       <div style={{ fontSize: '0.78rem', fontWeight: 600, color: DARK }}>{a.titre}</div>
                       <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{new Date(a.date).toLocaleDateString('fr-FR')}</div>
                     </div>
@@ -93,12 +93,12 @@ function ClubCard({ club, members, activities, reviews, employees, onEdit, onDel
           {/* Reviews */}
           {clubReviews.length > 0 && (
             <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: 8 }}>AVIS MEMBRES</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: 8 }}>{"Avis des membres"}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {clubReviews.slice(0, 3).map(r => {
                   const reviewer = employees.find(e => String(e.matricule) === String(r.user_id))
                   return (
-                    <div key={r.id} style={{ padding: '6px 10px', background: '#f8fafc', borderRadius: 7, border: '1px solid #e2e8f0' }}>
+                    <div key={r.id} style={{ padding: '6px 10px', background: 'var(--bg)', borderRadius: 7, border: '1px solid var(--border)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.75rem', fontWeight: 600, color: DARK }}>{reviewer ? `${reviewer.prenom} ${reviewer.nom}` : 'Anonyme'}</span>
                         <span style={{ fontSize: '0.78rem', color: '#021630', fontWeight: 700 }}>{r.rating}/5</span>
@@ -181,7 +181,7 @@ export default function ClubReview() {
   }
 
   const deleteClub = async (id) => {
-    if (!window.confirm('Supprimer ce club ?')) return
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce club ?")) return
     await api.delete(`/api/clubs/${id}`).catch(() => null)
     await loadClubData()
   }
@@ -286,8 +286,8 @@ export default function ClubReview() {
               <textarea className="form-control" rows={2} value={clubForm.description} onChange={e => setClubForm({ ...clubForm, description: e.target.value })} placeholder="Objectif et activités du club..." />
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              <button type="submit" className="btn btn-primary">{editClub ? 'Mettre à jour' : 'Créer le club'}</button>
-              <button type="button" className="btn" onClick={() => { setShowClubForm(false); setEditClub(null) }} style={{ background: '#f1f5f9', color: '#475569' }}>Annuler</button>
+              <button type="submit" className="btn btn-primary">{editClub ? "Mettre à jour" : 'Créer le club'}</button>
+              <button type="button" className="btn" onClick={() => { setShowClubForm(false); setEditClub(null) }} style={{ background: 'var(--bg)', color: '#475569' }}>{"Annuler"}</button>
             </div>
           </form>
         </div>
@@ -323,7 +323,7 @@ export default function ClubReview() {
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
               <button type="submit" className="btn btn-primary">Ajouter l'activité</button>
-              <button type="button" className="btn" onClick={() => setShowActivityForm(false)} style={{ background: '#f1f5f9', color: '#475569' }}>Annuler</button>
+              <button type="button" className="btn" onClick={() => setShowActivityForm(false)} style={{ background: 'var(--bg)', color: '#475569' }}>{"Annuler"}</button>
             </div>
           </form>
         </div>
@@ -357,7 +357,7 @@ export default function ClubReview() {
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
               <button type="submit" className="btn btn-primary">Soumettre l'avis</button>
-              <button type="button" className="btn" onClick={() => setShowReviewForm(false)} style={{ background: '#f1f5f9', color: '#475569' }}>Annuler</button>
+              <button type="button" className="btn" onClick={() => setShowReviewForm(false)} style={{ background: 'var(--bg)', color: '#475569' }}>{"Annuler"}</button>
             </div>
           </form>
         </div>
@@ -374,7 +374,7 @@ export default function ClubReview() {
 
       {/* Clubs */}
       {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '48px', color: '#94a3b8', background: 'white', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+        <div style={{ textAlign: 'center', padding: '48px', color: '#94a3b8', background: 'var(--card)', borderRadius: 10, border: '1px solid var(--border)' }}>
           <div style={{ opacity: 0.3, marginBottom: 12 }}><div style={{ fontSize: '2.5rem', color: '#94a3b8' }}>C</div></div>
           <p style={{ margin: 0 }}>Aucun club créé pour l'instant</p>
           {isAdmin && <p style={{ margin: '8px 0 0', fontSize: '0.82rem' }}>Créez un club pour commencer</p>}

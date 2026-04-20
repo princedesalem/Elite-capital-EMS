@@ -287,7 +287,7 @@ export default function Dashboard(){
 
                 <div className="card" style={{ 
                   background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
-                  color: '#333',
+                  color: 'var(--text)',
                   textAlign: 'center',
                   padding: '24px 16px'
                 }}>
@@ -582,7 +582,7 @@ export default function Dashboard(){
               <iframe
                 title="Power BI Dashboard"
                 src={powerBiEmbedUrl}
-                style={{ width: '100%', height: '520px', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                style={{ width: '100%', height: '520px', border: '1px solid var(--border)', borderRadius: '8px' }}
                 allowFullScreen
               />
             </div>

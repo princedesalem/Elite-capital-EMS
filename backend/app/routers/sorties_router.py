@@ -91,7 +91,9 @@ def _build_commentaire(commentaire: Optional[str], heure_retour: Optional[str]) 
 
 @router.get('/')
 def list_sorties(matricule: int = None, db: Session = Depends(get_db)):
-    q = db.query(models.Sortie)
+    q = db.query(models.Sortie, models.Operation).outerjoin(
+        models.Operation, models.Sortie.id_operation == models.Operation.id_operation
+    )
     if matricule:
         q = q.filter(models.Sortie.matricule == matricule)
     rows = q.order_by(models.Sortie.date_creation.desc()).all()
@@ -105,10 +107,10 @@ def list_sorties(matricule: int = None, db: Session = Depends(get_db)):
             'heure_sortie':  str(r.heure_sortie) if r.heure_sortie else None,
             'heure_retour':  _extract_heure_retour(r.commentaire),
             'commentaire':   r.commentaire,
-            'statut':        r.statut,
+            'statut':        op.statut if op else r.statut,
             'date_creation': r.date_creation.isoformat() if r.date_creation else None,
         }
-        for r in rows
+        for r, op in rows
     ]
 
 

@@ -90,7 +90,7 @@ export default function WorkflowPage() {
   async function soumettreDecision(statut) {
     if (!selectedOperation) return
     const commentaire = statut === 'refusé' ? workflowDecisionComment.trim() : (workflowDecisionComment.trim() || null)
-    if (statut === 'refusé' && !commentaire) { alert('Le motif de refus est obligatoire'); return }
+    if (statut === 'refusé' && !commentaire) { alert("Le motif de refus est obligatoire"); return }
     const ok = await validerOperation(selectedOperation, statut, commentaire)
     if (ok) { setWorkflowDecisionComment(''); setSelectedOperation(null) }
   }
@@ -143,21 +143,21 @@ export default function WorkflowPage() {
     <div className="operations-container">
       <div className="operations-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px' }}>
         <div>
-          <h1 style={{ fontSize: '1.3rem', margin: '0 0 2px 0' }}>Workflow</h1>
-          <p style={{ fontSize: '0.82rem', margin: 0 }}>Boite envoyé · Boite reçu · Validation des demandes</p>
+          <h1 style={{ fontSize: '1.3rem', margin: '0 0 2px 0' }}>{"Workflow de validation"}</h1>
+          <p style={{ fontSize: '0.82rem', margin: 0 }}>{"Suivi des demandes et validations"}</p>
         </div>
         <button
           onClick={loadWorkflow}
           disabled={loading}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer', fontSize: '0.82rem', color: '#334155' }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: '1px solid #cbd5e1', background: 'var(--card)', cursor: 'pointer', fontSize: '0.82rem', color: '#334155' }}
         >
-          <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> Actualiser
+          <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> {"Rafraîchir"}
         </button>
       </div>
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      {loading && <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>Chargement...</div>}
+      {loading && <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>{"Chargement..."}</div>}
 
       {!loading && (
         <div className="tab-pane">
@@ -165,20 +165,20 @@ export default function WorkflowPage() {
           {/* Stats */}
           <div className="form-card" style={{ marginBottom: '12px', padding: '10px 12px' }}>
             <div style={{ display: 'grid', gap: '6px', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px' }}>
-                <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>Envoyé</div>
-                <div style={{ fontWeight: 700, color: '#0f172a' }}>{mesDemandes.length}</div>
+              <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px' }}>
+                <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>{"Envoyé"}</div>
+                <div style={{ fontWeight: 700, color: 'var(--text)' }}>{mesDemandes.length}</div>
               </div>
               <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '8px' }}>
-                <div style={{ fontSize: '0.72rem', color: '#9a3412', textTransform: 'uppercase' }}>Reçu à valider</div>
+                <div style={{ fontSize: '0.72rem', color: '#9a3412', textTransform: 'uppercase' }}>{"Reçu — À valider"}</div>
                 <div style={{ fontWeight: 700, color: '#7c2d12' }}>{aValider.length}</div>
               </div>
               <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '8px' }}>
-                <div style={{ fontSize: '0.72rem', color: '#166534', textTransform: 'uppercase' }}>Validé par moi</div>
+                <div style={{ fontSize: '0.72rem', color: '#166534', textTransform: 'uppercase' }}>{"Validé par moi"}</div>
                 <div style={{ fontWeight: 700, color: '#14532d' }}>{mesValidations.length}</div>
               </div>
               <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '8px' }}>
-                <div style={{ fontSize: '0.72rem', color: '#991b1b', textTransform: 'uppercase' }}>Refusé par moi</div>
+                <div style={{ fontSize: '0.72rem', color: '#991b1b', textTransform: 'uppercase' }}>{"Refusé par moi"}</div>
                 <div style={{ fontWeight: 700, color: '#7f1d1d' }}>{mesRefus.length}</div>
               </div>
             </div>
@@ -192,14 +192,14 @@ export default function WorkflowPage() {
                   className="btn btn-secondary"
                   onClick={() => { setSelectedOperation(null); setWorkflowDecisionComment(''); setShowWorkflowInDetail(false) }}
                 >
-                  ← Fermer le détail
+                  {"Fermer le détail"}
                 </button>
                 <button
                   className="btn btn-primary"
                   onClick={() => setShowWorkflowInDetail(v => !v)}
                   style={{ padding: '6px 10px', fontSize: '0.78rem' }}
                 >
-                  {showWorkflowInDetail ? 'Masquer workflow' : 'Afficher workflow'}
+                  {showWorkflowInDetail ? "Masquer le workflow" : "Voir le workflow"}
                 </button>
               </div>
 
@@ -217,9 +217,9 @@ export default function WorkflowPage() {
                 <>
                   {canValidate && (
                     <div className="card" style={{ marginBottom: '8px', padding: '8px 10px', borderTop: '4px solid #112033', textAlign: 'center' }}>
-                      <h3 style={{ marginTop: 0, marginBottom: '6px', color: '#021630', fontSize: '0.9rem' }}>Action du validateur</h3>
+                      <h3 style={{ marginTop: 0, marginBottom: '6px', color: '#021630', fontSize: '0.9rem' }}>{"Action du validateur"}</h3>
                       <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: '#334155', marginBottom: '5px' }}>
-                        Commentaire de validation / motif de refus
+                        {"Commentaire de validation"}
                       </label>
                       <textarea
                         value={workflowDecisionComment}
@@ -229,8 +229,8 @@ export default function WorkflowPage() {
                         style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '6px 8px', resize: 'vertical', marginBottom: '6px', fontFamily: 'inherit', fontSize: '0.78rem', maxHeight: '64px' }}
                       />
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                        <button className="btn btn-success" onClick={() => soumettreDecision('validé')} style={{ padding: '5px 10px', fontSize: '0.76rem', width: 'auto' }}>Valider</button>
-                        <button className="btn btn-danger" onClick={() => soumettreDecision('refusé')} disabled={!workflowDecisionComment.trim()} style={{ opacity: workflowDecisionComment.trim() ? 1 : 0.6, padding: '5px 10px', fontSize: '0.76rem' }}>Refuser</button>
+                        <button className="btn btn-success" onClick={() => soumettreDecision('validé')} style={{ padding: '5px 10px', fontSize: '0.76rem', width: 'auto' }}>{"Valider"}</button>
+                        <button className="btn btn-danger" onClick={() => soumettreDecision('refusé')} disabled={!workflowDecisionComment.trim()} style={{ opacity: workflowDecisionComment.trim() ? 1 : 0.6, padding: '5px 10px', fontSize: '0.76rem' }}>{"Refuser"}</button>
                       </div>
                     </div>
                   )}
@@ -238,41 +238,41 @@ export default function WorkflowPage() {
                   {readonlyFormData && (
                     <div className="form-card readonly-compact-form" style={{ marginBottom: '8px', padding: '12px 14px', borderLeft: '4px solid #112033' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '12px' }}>
-                        <h3 style={{ margin: 0, color: '#021630', fontSize: '1.06rem' }}>Formulaire de demande (lecture seule)</h3>
+                        <h3 style={{ margin: 0, color: '#021630', fontSize: '1.06rem' }}>{"Formulaire en lecture seule"}</h3>
                         <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#112033', background: '#e8edf4', padding: '5px 9px', borderRadius: '999px' }}>#{selectedOperation}</span>
                       </div>
                       <div style={{ display: 'grid', gap: '6px' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
-                          <div className="form-group"><label>Type de demande</label><input className="input" value={readonlyFormData.typeDemande} readOnly /></div>
-                          <div className="form-group"><label>Demandeur</label><input className="input" value={readonlyFormData.demandeur || 'Non renseigné'} readOnly /></div>
+                          <div className="form-group"><label>{"Type de demande"}</label><input className="input" value={readonlyFormData.typeDemande} readOnly /></div>
+                          <div className="form-group"><label>{"Demandeur"}</label><input className="input" value={readonlyFormData.demandeur || 'Non renseigné'} readOnly /></div>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '8px' }}>
-                          <div className="form-group"><label>Date début</label><input className="input" value={readonlyFormData.dateDebut || ''} readOnly /></div>
-                          <div className="form-group"><label>Date fin</label><input className="input" value={readonlyFormData.dateFin || ''} readOnly /></div>
+                          <div className="form-group"><label>{"Date de début"}</label><input className="input" value={readonlyFormData.dateDebut || ''} readOnly /></div>
+                          <div className="form-group"><label>{"Date de fin"}</label><input className="input" value={readonlyFormData.dateFin || ''} readOnly /></div>
                           <div className="form-group"><label>Date de demande</label><input className="input" value={readonlyFormData.dateDemande || ''} readOnly /></div>
-                          <div className="form-group"><label>Durée (jours)</label><input className="input" value={readonlyFormData.duree ? String(readonlyFormData.duree) : ''} readOnly /></div>
+                          <div className="form-group"><label>{"Durée (jours)"}</label><input className="input" value={readonlyFormData.duree ? String(readonlyFormData.duree) : ''} readOnly /></div>
                         </div>
                         {readonlyFormData.type === 'mission' && (
                           <>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
                               <div className="form-group"><label>Objet / Motif mission</label><input className="input" value={readonlyFormData.objet || ''} readOnly /></div>
-                              <div className="form-group"><label>Pays</label><input className="input" value={readonlyFormData.pays || ''} readOnly /></div>
+                              <div className="form-group"><label>{"Pays"}</label><input className="input" value={readonlyFormData.pays || ''} readOnly /></div>
                               <div className="form-group"><label>Ville</label><input className="input" value={readonlyFormData.ville || ''} readOnly /></div>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
-                              <div className="form-group"><label>Heure départ</label><input className="input" value={readonlyFormData.heureDepart || ''} readOnly /></div>
-                              <div className="form-group"><label>Heure retour</label><input className="input" value={readonlyFormData.heureRetour || ''} readOnly /></div>
-                              <div className="form-group"><label>Moyen de transport</label><input className="input" value={readonlyFormData.transport || ''} readOnly /></div>
+                              <div className="form-group"><label>{"Heure de départ"}</label><input className="input" value={readonlyFormData.heureDepart || ''} readOnly /></div>
+                              <div className="form-group"><label>{"Heure de retour"}</label><input className="input" value={readonlyFormData.heureRetour || ''} readOnly /></div>
+                              <div className="form-group"><label>{"Mode de transport"}</label><input className="input" value={readonlyFormData.transport || ''} readOnly /></div>
                             </div>
                           </>
                         )}
                         {readonlyFormData.type === 'permission' && (
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
-                            <div className="form-group"><label>Type permission</label><input className="input" value={readonlyFormData.typePermission || ''} readOnly /></div>
-                            <div className="form-group"><label>Sous-type</label><input className="input" value={readonlyFormData.sousType || ''} readOnly /></div>
+                            <div className="form-group"><label>{"Type de permission"}</label><input className="input" value={readonlyFormData.typePermission || ''} readOnly /></div>
+                            <div className="form-group"><label>{"Sous-type"}</label><input className="input" value={readonlyFormData.sousType || ''} readOnly /></div>
                           </div>
                         )}
-                        <div className="form-group"><label>Motif / Commentaire</label><textarea className="input" value={readonlyFormData.motif || ''} readOnly rows={1} style={{ resize: 'none', maxHeight: '48px' }} /></div>
+                        <div className="form-group"><label>{"Motif / Commentaire"}</label><textarea className="input" value={readonlyFormData.motif || ''} readOnly rows={1} style={{ resize: 'none', maxHeight: '48px' }} /></div>
                       </div>
                     </div>
                   )}
@@ -290,7 +290,7 @@ export default function WorkflowPage() {
           {/* Kanban boards */}
           {!selectedOperation && (
             <>
-              <h3 style={{ marginBottom: '10px' }}>Boite Envoyé</h3>
+              <h3 style={{ marginBottom: '10px' }}>{"Boîte d'envoi"}</h3>
               <div className="kanban-grid">
                 <div className="kanban-col orange-light">
                   <h3>En attente ({workflowCols.enAttente.length})</h3>

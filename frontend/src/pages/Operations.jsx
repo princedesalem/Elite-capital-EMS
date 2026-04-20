@@ -1473,7 +1473,7 @@ export default function Operations() {
                 key={`envoye-${typeFiltre}-${item.id_operation}`}
                 onClick={() => setSelectedOperationForWorkflow(item.id_operation)}
                 style={{
-                  border: '1px solid #e5e7eb',
+                  border: '1px solid var(--border)',
                   borderRadius: '8px',
                   padding: '10px',
                   cursor: 'pointer',
@@ -1488,7 +1488,7 @@ export default function Operations() {
                   <span style={{ fontSize: '0.8rem', color: '#475569' }}>{item.motif || item.titre || 'Sans motif'}</span>
                 </div>
                 <div style={{ textAlign: 'right', display: 'grid', gap: '3px' }}>
-                  <span style={{ fontSize: '0.78rem', color: '#0f172a' }}>{item.statut || 'en attente'}</span>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text)' }}>{item.statut || 'en attente'}</span>
                   <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{formaterDateOperation(item)}</span>
                 </div>
               </div>
@@ -1514,7 +1514,7 @@ export default function Operations() {
                     key={`recu-${typeFiltre}-${item.__recu_statut}-${item.id_operation}`}
                     onClick={() => setSelectedOperationForWorkflow(item.id_operation)}
                     style={{
-                      border: '1px solid #e5e7eb',
+                      border: '1px solid var(--border)',
                       borderRadius: '8px',
                       padding: '10px',
                       cursor: 'pointer',
@@ -1768,7 +1768,7 @@ export default function Operations() {
               <h3 style={{fontSize: '1rem', marginBottom: '8px', display:'flex', alignItems:'center', gap:6}}><ClipboardList size={14}/> Mes opérations initiées ({mesDemandes.length})</h3>
               <div style={{display:'grid', gap:6}}>
                 {mesDemandes.slice(0, 8).map((d) => (
-                  <div key={`op-${d.id_operation}`} style={{display:'flex', justifyContent:'space-between', borderBottom:'1px solid #e5e7eb', paddingBottom:4}}>
+                  <div key={`op-${d.id_operation}`} style={{display:'flex', justifyContent:'space-between', borderBottom: '1px solid var(--border)', paddingBottom:4}}>
                     <span style={{fontSize:'0.84rem'}}>#{d.id_operation} - {d.type_demande}</span>
                     <span style={{fontSize:'0.78rem', color:'#475569'}}>{d.statut}</span>
                   </div>
@@ -1781,7 +1781,7 @@ export default function Operations() {
               <h3 style={{fontSize: '1rem', marginBottom: '8px', display:'flex', alignItems:'center', gap:6}}><BarChart2 size={14}/> Mes frais de mission initiés</h3>
               <div style={{display:'grid', gap:6}}>
                 {mesDemandes.filter((d) => String(d.type_demande || '').toLowerCase().includes('frais')).slice(0, 8).map((d) => (
-                  <div key={`frais-${d.id_operation}`} style={{display:'flex', justifyContent:'space-between', borderBottom:'1px solid #e5e7eb', paddingBottom:4}}>
+                  <div key={`frais-${d.id_operation}`} style={{display:'flex', justifyContent:'space-between', borderBottom: '1px solid var(--border)', paddingBottom:4}}>
                     <span style={{fontSize:'0.84rem'}}>#{d.id_operation}</span>
                     <span style={{fontSize:'0.78rem', color:'#475569'}}>{d.statut}</span>
                   </div>
@@ -2052,7 +2052,7 @@ export default function Operations() {
                             const info = DOCUMENTS_REQUIS[typePermissionNormalise]
                             return (
                               <>
-                                <div style={{background: '#fff', padding: '10px', borderRadius: '6px', marginBottom: '10px'}}>
+                                <div style={{background: 'var(--card)', padding: '10px', borderRadius: '6px', marginBottom: '10px'}}>
                                   <p style={{margin: '0 0 8px 0', fontSize: '0.85rem', fontWeight: 'bold', color: '#0369a1', display:'flex', alignItems:'center', gap:4}}>
                                     <Pin size={12}/> {info.titre}
                                   </p>
@@ -2090,7 +2090,7 @@ export default function Operations() {
                             return (
                               <>
                                 {Object.entries(DOCUMENTS_REQUIS).map(([type, info]) => (
-                                  <div key={type} style={{background: '#fff', padding: '10px', borderRadius: '6px', marginBottom: '8px'}}>
+                                  <div key={type} style={{background: 'var(--card)', padding: '10px', borderRadius: '6px', marginBottom: '8px'}}>
                                     <p style={{margin: '0 0 5px 0', fontSize: '0.8rem', fontWeight: 'bold', color: '#0369a1'}}>
                                       {info.titre}
                                     </p>
@@ -2280,7 +2280,7 @@ export default function Operations() {
                           top: '100%',
                           left: 0,
                           right: 0,
-                          background: 'white',
+                          background: 'var(--card)',
                           border: '1px solid #d1d5db',
                           borderRadius: '6px',
                           boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
@@ -2302,8 +2302,8 @@ export default function Operations() {
                               onMouseEnter={(e) => e.target.style.background = '#f9fafb'}
                               onMouseLeave={(e) => e.target.style.background = 'white'}
                             >
-                              <div style={{fontWeight: '500', color: '#111827'}}>{emp.nom_complet}</div>
-                              <div style={{fontSize: '0.85rem', color: '#6b7280'}}>
+                              <div style={{fontWeight: '500', color: 'var(--text)'}}>{emp.nom_complet}</div>
+                              <div style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>
                                 {emp.fonction} - Matricule: {emp.matricule}
                               </div>
                             </div>
@@ -2367,7 +2367,7 @@ export default function Operations() {
                     
                     {missionMissionnaires.length === 0 && (
                       <p style={{
-                        color: '#6b7280',
+                        color: 'var(--text-secondary)',
                         fontSize: '0.9rem',
                         margin: '10px 0 0 0',
                         fontStyle: 'italic'
@@ -2392,7 +2392,7 @@ export default function Operations() {
                     </div>
 
                     {missionSegments.map((segment, index) => (
-                      <div key={segment.id} style={{background: '#f9fafb', padding: '15px', borderRadius: '8px', marginBottom: '15px', border: '2px solid #e5e7eb', position: 'relative'}}>
+                      <div key={segment.id} style={{background: 'var(--bg)', padding: '15px', borderRadius: '8px', marginBottom: '15px', border: '2px solid #e5e7eb', position: 'relative'}}>
                         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
                           <h5 style={{margin: 0, color: '#374151'}}>Destination {index + 1}</h5>
                           {missionSegments.length > 1 && (
@@ -2560,7 +2560,7 @@ export default function Operations() {
                           const estRH = employe && employe.fonction && employe.fonction.toUpperCase().includes('RH')
                           
                           return (
-                          <tr key={mission.id_operation} style={{borderBottom: '1px solid #e5e7eb'}}>
+                          <tr key={mission.id_operation} style={{borderBottom: '1px solid var(--border)'}}>
                             <td style={{padding: '10px'}}>#{mission.id_operation}</td>
                             <td style={{padding: '10px'}}>{mission.pays}, {mission.ville}</td>
                             <td style={{padding: '10px'}}>
@@ -3073,9 +3073,9 @@ export default function Operations() {
               <>
                 <div className="form-card" style={{ marginBottom: '12px', padding: '10px 12px' }}>
                   <div style={{ display: 'grid', gap: '6px', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px' }}>
+                    <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px' }}>
                       <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>Envoye</div>
-                      <div style={{ fontWeight: 700, color: '#0f172a' }}>{mesDemandes.length}</div>
+                      <div style={{ fontWeight: 700, color: 'var(--text)' }}>{mesDemandes.length}</div>
                     </div>
                     <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '8px' }}>
                       <div style={{ fontSize: '0.72rem', color: '#9a3412', textTransform: 'uppercase' }}>Recu a valider</div>

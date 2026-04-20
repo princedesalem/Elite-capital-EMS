@@ -2,17 +2,21 @@ import React, {useEffect, useState, useMemo, useRef} from 'react'
 import api from '../services/api'
 import {Link} from 'react-router-dom'
 import {useAuth} from '../contexts/AuthContext'
-import {Pencil, ClipboardList, Briefcase, Building2, Clock, Upload, Download, MoreHorizontal, ChevronRight, Database} from 'lucide-react'
+import {Pencil, ClipboardList, Briefcase, Building2, Clock, Upload, Download, MoreHorizontal, ChevronRight, Database, Trash2, AlertTriangle} from 'lucide-react'
 import AvatarCircle from '../components/AvatarCircle'
 
 export default function Employees(){
   const {user} = useAuth()
   const role = String(user?.role || '').toUpperCase()
   const isRhAdmin = ['RH','ADMIN','PCA','AG'].includes(role)
+  const isAdmin = role === 'ADMIN'
   const [list,setList]=useState([])
   const [loading,setLoading]=useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortConfig, setSortConfig] = useState({key: 'nom', direction: 'asc'})
+  const [deleteTarget, setDeleteTarget] = useState(null)   // {matricule, nom, prenom}
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError, setDeleteError] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [selectedPays, setSelectedPays] = useState('')
@@ -329,6 +333,22 @@ export default function Employees(){
     }
   }
 
+  const handleSoftDelete = async () => {
+    if (!deleteTarget) return
+    setDeleteLoading(true)
+    setDeleteError(null)
+    try {
+      await api.delete(`/employees/${deleteTarget.matricule}`)
+      setList(prev => prev.filter(e => e.matricule !== deleteTarget.matricule))
+      setSelectedEmployee(null)
+      setDeleteTarget(null)
+    } catch (err) {
+      setDeleteError(err?.response?.data?.detail || 'Erreur lors de la suppression')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
   return (
     <div className="container">
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -405,7 +425,7 @@ export default function Employees(){
           <p style={{ margin: '0 0 10px 0', color: '#991b1b', fontSize: '0.9rem' }}>{importReport.error}</p>
         )}
         {importReport && !importReport.error && (
-          <div style={{ marginBottom: 10, padding: 10, borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
+          <div style={{ marginBottom: 10, padding: 10, borderRadius: 8, border: '1px solid #cbd5e1', background: 'var(--bg)' }}>
             <strong>Import terminé:</strong> {importReport.imported_rows}/{importReport.total_rows} importé(s), {importReport.failed_rows} échec(s)
             {importReport.table && (
               <div style={{ marginTop: 6, color: '#334155', fontSize: '0.84rem' }}>Table Access: {importReport.table}</div>
@@ -575,7 +595,7 @@ export default function Employees(){
           padding: '20px'
         }} onClick={() => setSelectedEmployee(null)}>
           <div style={{
-            background: 'white',
+            background: 'var(--card)',
             borderRadius: '12px',
             maxWidth: '600px',
             width: '100%',
@@ -640,6 +660,26 @@ export default function Employees(){
                     }}>
                       <Clock size={13}/> Parcours Employé
                     </Link>
+                    {isAdmin && (
+                      <button
+                        onClick={() => setDeleteTarget({ matricule: selectedEmployee.matricule, nom: selectedEmployee.nom, prenom: selectedEmployee.prenom })}
+                        style={{
+                          padding: '8px 14px',
+                          background: 'rgba(220,38,38,0.8)',
+                          color: 'white',
+                          borderRadius: '6px',
+                          border: '1px solid rgba(220,38,38,0.5)',
+                          fontSize: '0.85rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        <Trash2 size={13}/> Supprimer
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div data-testid="employee-modal-avatar" style={{marginRight: '52px', marginTop: '2px'}}>
@@ -710,6 +750,60 @@ export default function Employees(){
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 2000, padding: '20px',
+        }} onClick={() => { setDeleteTarget(null); setDeleteError(null) }}>
+          <div style={{
+            background: 'var(--card)', borderRadius: '14px', maxWidth: '420px', width: '100%',
+            padding: '28px 24px', boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <AlertTriangle size={22} color="#dc2626" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text)' }}>Supprimer l'employé</div>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: 2 }}>Cette action est irréversible dans la liste.</div>
+              </div>
+            </div>
+            <p style={{ fontSize: '0.88rem', color: '#374151', marginBottom: 20, lineHeight: 1.6 }}>
+              Confirmer la suppression de{' '}
+              <strong>{deleteTarget.prenom} {deleteTarget.nom}</strong>{' '}
+              (matricule {deleteTarget.matricule}) ?
+              <br />
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                L'employé sera marqué comme congédié et son compte sera désactivé. Les données sont conservées.
+              </span>
+            </p>
+            {deleteError && (
+              <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, color: '#991b1b', fontSize: '0.84rem', marginBottom: 14 }}>
+                {deleteError}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => { setDeleteTarget(null); setDeleteError(null) }}
+                style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: '#374151', fontSize: '0.86rem', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSoftDelete}
+                disabled={deleteLoading}
+                style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#dc2626', color: 'white', fontSize: '0.86rem', fontWeight: 700, cursor: deleteLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 7, opacity: deleteLoading ? 0.7 : 1 }}
+              >
+                <Trash2 size={15} />
+                {deleteLoading ? 'Suppression...' : 'Confirmer la suppression'}
+              </button>
             </div>
           </div>
         </div>

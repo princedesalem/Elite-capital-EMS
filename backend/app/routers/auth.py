@@ -6,6 +6,7 @@ from ..utils.security import create_access_token, hash_password, verify_token
 from ..utils import email as mailer
 from datetime import timedelta, datetime
 from ..utils.security import generate_mfa_secret, verify_totp, validate_password_policy
+from ..utils.audit import log_action
 from fastapi import Form, BackgroundTasks, Request
 import os
 
@@ -38,15 +39,16 @@ def login_email_validate(token: str, db: Session = Depends(get_db)):
     return {"access_token": access_token}
 
 @router.post('/register')
-def register(payload: schemas.UtilisateurCreate, db: Session = Depends(get_db)):
+def register(request: Request, payload: schemas.UtilisateurCreate, db: Session = Depends(get_db)):
     if not payload.matricule:
         raise HTTPException(status_code=400, detail='Matricule requis')
     u = crud.create_utilisateur(db, payload.matricule, payload.password, email=payload.email)
+    log_action(db, payload.matricule, 'REGISTER', 'auth', payload.matricule, {'matricule': payload.matricule}, ip_address=request.client.host if request.client else None)
     return {"ok": True}
 
 
 @router.post('/login')
-def login(matricule: str = Form(...), password: str = Form(...), mfaCode: str | None = Form(None), db: Session = Depends(get_db)):
+def login(request: Request, matricule: str = Form(...), password: str = Form(...), mfaCode: str | None = Form(None), db: Session = Depends(get_db)):
     """
     Authentification avec :
     - Blocage après 3 tentatives échouées (5 minutes)
@@ -78,7 +80,8 @@ def login(matricule: str = Form(...), password: str = Form(...), mfaCode: str | 
     if not verify_password(password, user.mot_de_passe_hash):
         # Incrémenter les tentatives échouées
         user.tentatives_echec = (user.tentatives_echec or 0) + 1
-        
+        log_action(db, matricule, 'LOGIN_FAILED', 'auth', matricule, {'tentatives': user.tentatives_echec}, ip_address=request.client.host if request.client else None)
+
         # Bloquer après 3 tentatives
         if user.tentatives_echec >= 3:
             user.bloque_jusqua = datetime.utcnow() + timedelta(minutes=5)
@@ -98,6 +101,7 @@ def login(matricule: str = Form(...), password: str = Form(...), mfaCode: str | 
     # Authentification réussie - réinitialiser les tentatives
     user.tentatives_echec = 0
     user.dernier_login = datetime.utcnow()
+    log_action(db, matricule, 'LOGIN_SUCCESS', 'auth', matricule, {'matricule': matricule}, ip_address=request.client.host if request.client else None)
     
     # Vérifier MFA si activée
     if user.mfa_enabled and user.mfa_secret:
@@ -154,7 +158,7 @@ def mfa_verify(matricule: str = Form(...), code: str = Form(...), db: Session = 
 
 
 @router.post('/password/change')
-def change_password(matricule: str = Form(...), old_password: str = Form(...), new_password: str = Form(...), db: Session = Depends(get_db)):
+def change_password(request: Request, matricule: str = Form(...), old_password: str = Form(...), new_password: str = Form(...), db: Session = Depends(get_db)):
     """
     Changer le mot de passe avec validation de politique.
     Enlève le flag mot_de_passe_temporaire après changement.
@@ -182,7 +186,8 @@ def change_password(matricule: str = Form(...), old_password: str = Form(...), n
     u.mot_de_passe_temporaire = False  # Enlever le flag temporaire
     
     db.commit()
-    
+    log_action(db, matricule, 'PASSWORD_CHANGED', 'auth', matricule, {'matricule': matricule}, ip_address=request.client.host if request.client else None)
+
     return {
         "ok": True,
         "message": "Mot de passe changé avec succès"

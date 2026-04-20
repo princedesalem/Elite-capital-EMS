@@ -194,6 +194,17 @@ class Departement(Base):
     id_entite = Column(Integer, ForeignKey('ENTITE.id_entite'), nullable=False)
     id_direction = Column(Integer, ForeignKey('DIRECTION.id_direction'))
     id_responsable = Column(Integer, ForeignKey('EMPLOYE.matricule'))
+    villes = relationship('DepartementImplantation', back_populates='departement', cascade='all, delete-orphan')
+
+
+class DepartementImplantation(Base):
+    """Junction table: explicit city-presence of a department."""
+    __tablename__ = 'DEPARTEMENT_IMPLANTATION'
+    dept_id = Column(Integer, ForeignKey('DEPARTEMENT.dept_id', ondelete='CASCADE'), primary_key=True)
+    id_localisation = Column(Integer, ForeignKey('LOCALISATION.id_localisation', ondelete='CASCADE'), primary_key=True)
+    departement = relationship('Departement', back_populates='villes')
+    localisation = relationship('Localisation')
+
 
 class Embauche(Base):
     __tablename__ = 'Embauche'
@@ -240,6 +251,9 @@ class Evaluation(Base):
     statut = Column(Enum(StatutEvaluationEnum), default=StatutEvaluationEnum.EN_ATTENTE_AUTO_EVAL)
     date_creation = Column(DateTime, default=datetime.utcnow)
     date_finalisation = Column(DateTime)
+
+# Alias used by evaluations_router
+EvaluationEmploye = Evaluation
 
 # operations and related tables
 class Operation(Base):
@@ -398,6 +412,21 @@ class Frais(Base):
     preuves_paiement = Column(JSON)
     frais_nutrition = Column(DECIMAL(12,2))
     total_frais = Column(DECIMAL(12,2))
+
+class FraisMissionnaire(Base):
+    __tablename__ = 'FraisMissionnaire'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_mission = Column(Integer, ForeignKey('Mission.id_mission', name='fk_frais_miss_mission', ondelete='CASCADE'), nullable=False)
+    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule', name='fk_frais_miss_employe', ondelete='CASCADE'), nullable=False)
+    frais_transport = Column(DECIMAL(12,2), default=0)
+    frais_hotel = Column(DECIMAL(12,2), default=0)
+    frais_deplacement = Column(DECIMAL(12,2), default=0)
+    frais_nutrition = Column(DECIMAL(12,2), default=0)
+    total_frais = Column(DECIMAL(12,2), default=0)
+    justificatif = Column(Text, nullable=True)
+    statut = Column(String(20), default='soumis')
+    date_soumission = Column(DateTime, default=datetime.utcnow)
+
 
 class Activation(Base):
     __tablename__ = 'Activation'

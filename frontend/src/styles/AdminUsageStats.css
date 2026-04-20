@@ -121,18 +121,18 @@
   gap: 20px;
 }
 
-.stat-item {
+.admin-usage-container .stat-item {
   padding: 15px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   backdrop-filter: blur(10px);
 }
 
-.summary-card.large .stat-item {
+.admin-usage-container .summary-card.large .stat-item {
   background: rgba(255, 255, 255, 0.15);
 }
 
-.stat-label {
+.admin-usage-container .stat-label {
   font-size: 12px;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.7);
@@ -141,14 +141,14 @@
   letter-spacing: 0.5px;
 }
 
-.stat-value {
+.admin-usage-container .stat-value {
   font-size: 24px;
   font-weight: 700;
   color: white;
   margin-bottom: 4px;
 }
 
-.stat-meta {
+.admin-usage-container .stat-meta {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.6);
 }
@@ -246,6 +246,112 @@ table tbody tr:last-child td {
 .no-data p {
   margin: 0;
   font-size: 16px;
+}
+
+/* ── Histogram ────────────────────────────────────────────── */
+.histogram-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.dim-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dim-tab {
+  display: flex;
+  align-items: center;
+  padding: 6px 14px;
+  border: 2px solid #ddd;
+  background: white;
+  color: #555;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.dim-tab:hover {
+  border-color: #1e40af;
+  color: #1e40af;
+}
+
+.dim-tab.active {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+  border-color: #1e3a8a;
+  color: white;
+}
+
+.histogram-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.hbar-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 70px;
+  align-items: center;
+  gap: 10px;
+}
+
+.hbar-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hbar-track {
+  background: #e8f0fe;
+  border-radius: 6px;
+  height: 28px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hbar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  transition: width 0.4s ease;
+  min-width: 40px;
+}
+
+.hbar-value-inside {
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+}
+
+.hbar-zero {
+  font-size: 11px;
+  color: #bbb;
+  padding-left: 8px;
+  line-height: 28px;
+}
+
+.hbar-sessions {
+  font-size: 12px;
+  color: #888;
+  text-align: right;
+  white-space: nowrap;
 }
 
 /* Responsive Design */

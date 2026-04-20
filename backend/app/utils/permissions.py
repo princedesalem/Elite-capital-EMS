@@ -444,5 +444,16 @@ def envoyer_rappel_preuves_permission(id_operation: int, db: Session):
         )
         db.add(notification)
         db.commit()
-        
-        # TODO: Envoyer email
+
+        # Email de rappel à l'employé
+        from . import email as email_utils
+        emp_perm = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
+        if emp_perm and emp_perm.email:
+            type_perm_info = obtenir_type_permission(id_operation, db)
+            sous_type = type_perm_info.get('sous_type') or 'conventionnelle'
+            email_utils.send_preuves_permission_rappel_email(
+                emp_perm.email,
+                f"{emp_perm.prenom} {emp_perm.nom}",
+                sous_type,
+                jours_restants
+            )

@@ -1,20 +1,21 @@
 import os
 import sys
 from pathlib import Path
-import tempfile
 
-TEST_DB_PATH = Path(tempfile.gettempdir()) / 'extranet_test_suite.db'
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-os.environ['DATABASE_URL'] = f"sqlite:///{TEST_DB_PATH.as_posix()}"
+os.environ['DATABASE_URL'] = 'sqlite://'
 os.environ['SECRET_KEY'] = 'test-secret-key'
 os.environ['TESTING'] = '1'
 
 import pytest
 from fastapi.testclient import TestClient
 from datetime import date
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.exc import SAWarning
 import warnings
 
@@ -22,6 +23,19 @@ warnings.filterwarnings(
     'ignore',
     category=SAWarning,
 )
+
+# Build a single in-memory engine shared across all tests (no disk I/O)
+_test_engine = create_engine(
+    'sqlite://',
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+_TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_test_engine)
+
+# Patch app.db BEFORE importing app.main so every module picks up our engine
+import app.db as _app_db
+_app_db.engine = _test_engine
+_app_db.SessionLocal = _TestSessionLocal
 
 from app.main import app
 from app.db import Base, SessionLocal, engine
@@ -31,10 +45,10 @@ from app.utils.security import create_access_token, hash_password
 
 @pytest.fixture(autouse=True)
 def reset_database():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.drop_all(bind=_test_engine)
+    Base.metadata.create_all(bind=_test_engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    Base.metadata.drop_all(bind=_test_engine)
 
 
 @pytest.fixture()

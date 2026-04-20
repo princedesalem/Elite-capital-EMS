@@ -5,7 +5,8 @@ import { useAuth } from '../contexts/AuthContext'
 import WorkflowModal from '../components/WorkflowModal'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import ModifiedBadge from '../components/ModifiedBadge'
-import { Eye } from 'lucide-react'
+import { operationLabel } from '../utils/operationLabel'
+import { Eye, FileDown } from 'lucide-react'
 
 const th = { padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', fontSize: '0.7rem', color: '#64748b', fontWeight: 700, whiteSpace: 'nowrap' }
 const td = { padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '0.76rem', color: '#111827', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
@@ -86,7 +87,7 @@ const fmtDateTime = (value) => value ? new Date(value).toLocaleString('fr-FR') :
 function Tabs({ active, setActive, counts }) {
   return (
     <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
-      {[['envoye', 'Envoyé', counts.envoye], ['recu', 'Reçu', counts.recu]].map(([key, label, count]) => (
+      {[['envoye', "Envoyé", counts.envoye], ['recu', "Recu", counts.recu]].map(([key, label, count]) => (
         <button key={key} onClick={() => setActive(key)} style={{ flex: 1, padding: '10px 8px', border: 'none', cursor: 'pointer', background: active === key ? '#fff' : '#f9fafb', fontWeight: active === key ? 700 : 500, fontSize: '0.82rem', borderBottom: active === key ? '2px solid #ce2b2b' : '2px solid transparent', color: active === key ? '#ce2b2b' : '#6b7280' }}>
           {label}
           {count > 0 && <span style={{ marginLeft: 5, padding: '1px 6px', borderRadius: 999, fontSize: '0.68rem', background: active === key ? '#ce2b2b' : '#e5e7eb', color: active === key ? '#fff' : '#374151' }}>{count}</span>}
@@ -110,7 +111,7 @@ function FilterBar({ date, setDate, statut, setStatut, source, setSource, emette
         <option value="">Tous états</option>
         {['--', 'AttenteRH', 'Active', 'ClotureDemandee', 'Cloturee'].map(value => <option key={value} value={value}>{value}</option>)}
       </select>
-      {(date || statut || source || emetteur || etat) && <button onClick={() => { setDate(''); setStatut(''); setSource(''); setEmetteur(''); setEtat('') }} style={{ padding: '5px 9px', borderRadius: 5, border: '1px solid #f87171', background: '#fee2e2', color: '#991b1b', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}>Réinitialiser</button>}
+      {(date || statut || source || emetteur || etat) && <button onClick={() => { setDate(''); setStatut(''); setSource(''); setEmetteur(''); setEtat('') }} style={{ padding: '5px 9px', borderRadius: 5, border: '1px solid #f87171', background: '#fee2e2', color: '#991b1b', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}>{"Réinitialiser les filtres"}</button>}
     </div>
   )
 }
@@ -137,6 +138,7 @@ export default function CongesPage() {
   const roleUtilisateur = useMemo(() => String(user?.role || '').toUpperCase(), [user])
   const estRh = useMemo(() => ['RH', 'ADMIN'].includes(roleUtilisateur), [roleUtilisateur])
   const [showNewForm, setShowNewForm] = useState(false)
+  const [downloadingPdf, setDownloadingPdf] = useState(null)
   const [congeForm, setCongeForm] = useState({ date_debut: '', date_fin: '', motif: '' })
   const [congeEditMode, setCongeEditMode] = useState(false)
   const [congeEditId, setCongeEditId] = useState(null)
@@ -252,7 +254,7 @@ export default function CongesPage() {
       }
       resetCongeForm()
       setShowNewForm(false)
-      setMsg({ type: 'success', text: congeEditMode ? 'Demande de congé modifiée avec succès.' : 'Demande de congé soumise avec succès.' })
+      setMsg({ type: 'success', text: congeEditMode ? "Congé modifié avec succès" : "Demande de congé soumise avec succès" })
       await loadData()
       setTimeout(() => setMsg(null), 5000)
     } catch (err) {
@@ -261,7 +263,7 @@ export default function CongesPage() {
   }
 
   const handleAnnuler = async (id) => {
-    if (!confirm('Annuler cette demande ?')) return
+    if (!confirm("Êtes-vous sûr de vouloir annuler cette demande ?")) return
     try {
       await api.delete(`/api/operations/${id}`)
       await loadData()
@@ -311,7 +313,7 @@ export default function CongesPage() {
   }
 
   const handleRetourAnticipe = async (id) => {
-    if (!confirm('Confirmer le retour anticipé ? Les jours restants seront restitués au solde.')) return
+    if (!confirm("Êtes-vous sûr de vouloir déclarer un retour anticipé ?")) return
     setLoadingOp(id)
     try {
       const today = new Date().toISOString().split('T')[0]
@@ -360,6 +362,7 @@ export default function CongesPage() {
     const isLoading = loadingOp === id
     const btnStyle = (base) => ({ ...base, opacity: isLoading ? 0.6 : 1 })
     const eyeBtn = <button key="eye" onClick={(e) => { e.stopPropagation(); setDetailCongeItem(item) }} style={{ ...rowBtn, background: '#6366f1' }} title="Voir détails"><Eye size={12} /></button>
+    const pdfBtn = isValid ? <button key="pdf" onClick={(e) => { e.stopPropagation(); setDownloadingPdf(id); api.get(`/api/pdf/conges/${id}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `conge_${id}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }).finally(() => setDownloadingPdf(null)) }} style={{ ...rowBtn, background: '#0e7490', display: 'inline-flex', alignItems: 'center', opacity: downloadingPdf === id ? 0.6 : 1 }} disabled={downloadingPdf === id} title="Télécharger PDF"><FileDown size={13} /></button> : null
 
     if (isRefus) return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{eyeBtn}</div>
 
@@ -367,15 +370,15 @@ export default function CongesPage() {
       const canApprove = !isValid && item.__workflow_bucket === 'recu'
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'validé') }} style={okBtn} disabled={isLoading}>Approuver</button>}
-          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'refusé') }} style={dangerBtn} disabled={isLoading}>Refuser</button>}
+          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'validé') }} style={okBtn} disabled={isLoading}>{"Approuver"}</button>}
+          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'refusé') }} style={dangerBtn} disabled={isLoading}>{"Refuser"}</button>}
           {estRh && isValid && etat === 'AttenteRH' && (
             <button onClick={(e) => { e.stopPropagation(); handleActiverRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer'}</button>
           )}
           {estRh && isValid && etat === 'Active' && (
-            <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer'}</button>
+            <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : "Clôturer le congé"}</button>
           )}
-          {eyeBtn}
+          {pdfBtn}{eyeBtn}
         </div>
       )
     }
@@ -384,8 +387,8 @@ export default function CongesPage() {
     if (!isValid) {
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <button onClick={(e) => { e.stopPropagation(); handleEditConge(item) }} style={primaryBtn}>Modifier</button>
-          <button onClick={(e) => { e.stopPropagation(); handleAnnuler(id) }} style={dangerBtn}>Annuler</button>
+          <button onClick={(e) => { e.stopPropagation(); handleEditConge(item) }} style={primaryBtn}>{"Modifier"}</button>
+          <button onClick={(e) => { e.stopPropagation(); handleAnnuler(id) }} style={dangerBtn}>{"Annuler"}</button>
           {eyeBtn}
         </div>
       )
@@ -395,7 +398,7 @@ export default function CongesPage() {
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <button onClick={(e) => { e.stopPropagation(); handleActiver(id) }} style={btnStyle(okBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer'}</button>
-          {eyeBtn}
+          {pdfBtn}{eyeBtn}
         </div>
       )
     }
@@ -403,8 +406,8 @@ export default function CongesPage() {
     if (etat === 'AttenteRH') {
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente RH</span>
-          {eyeBtn}
+          <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>{"En attente RH"}</span>
+          {pdfBtn}{eyeBtn}
         </div>
       )
     }
@@ -414,18 +417,18 @@ export default function CongesPage() {
       const canRetourAnticipe = dateFin && new Date() < new Date(dateFin)
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer'}</button>
+          <button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : "Clôturer le congé"}</button>
           {canRetourAnticipe && <button onClick={(e) => { e.stopPropagation(); handleRetourAnticipe(id) }} style={btnStyle({ ...primaryBtn, background: '#3b82f6' })} disabled={isLoading}>{isLoading ? '…' : 'Retour anticipé'}</button>}
-          {eyeBtn}
+          {pdfBtn}{eyeBtn}
         </div>
       )
     }
 
     if (etat === 'ClotureDemandee') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente confirmation RH</span>{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>{"En attente confirmation RH"}</span>{pdfBtn}{eyeBtn}</div>
     }
 
-    return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{eyeBtn}</div>
+    return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{pdfBtn}{eyeBtn}</div>
   }
 
   const renderEtatCell = (item) => {
@@ -459,9 +462,9 @@ export default function CongesPage() {
     if (!rows.length) return <tr><td colSpan={isRecu ? 10 : 9} style={{ ...td, textAlign: 'center', color: '#9ca3af' }}>Aucune demande</td></tr>
     return rows.map(item => (
       <tr key={item.id_operation} onClick={() => setSelectedOperationForWorkflow(item.id_operation)} style={{ cursor: 'pointer' }}>
-        <td style={td} title={item.motif || item.titre || `Conge #${item.id_operation}`}>
+        <td style={td} title={operationLabel(item)}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 600 }}>{item.motif || item.titre || `Conge #${item.id_operation}`}</span>
+            <span style={{ fontWeight: 600 }}>{operationLabel(item)}</span>
             <ModifiedBadge estModifie={item.est_modifie} dateModification={item.date_modification} />
           </div>
         </td>
@@ -485,12 +488,12 @@ export default function CongesPage() {
     ))
   }
 
-  if (loading) return <div style={{ padding: 28 }}>Chargement...</div>
+  if (loading) return <div style={{ padding: 28 }}>{"Chargement..."}</div>
 
   return (
     <div style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#021630' }}>Gestion des Conges</h1>
+        <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#021630' }}>{"Gestion des Congés"}</h1>
         <button onClick={() => { setShowNewForm(prev => !prev); setMsg(null) }} style={{ padding: '9px 14px', background: '#ce2b2b', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Nouvelle demande</button>
       </div>
 
@@ -522,8 +525,8 @@ export default function CongesPage() {
               <textarea value={congeForm.motif} onChange={e => setCongeForm(f => ({ ...f, motif: e.target.value }))} placeholder="Précisez le motif de votre demande..." rows={2} style={{ padding: '9px 12px', borderRadius: 7, border: '1.5px solid #d1d5db', width: '100%', boxSizing: 'border-box', fontSize: '0.9rem', color: '#1e293b', resize: 'vertical', fontFamily: 'inherit' }} />
             </div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4, borderTop: '1px solid #f1f5f9', marginTop: 4 }}>
-              <button type="button" onClick={() => { setShowNewForm(false); resetCongeForm() }} style={{ padding: '9px 18px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 7, fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' }}>{congeEditMode ? 'Fermer' : 'Annuler'}</button>
-              <button type="submit" style={{ padding: '9px 22px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>{congeEditMode ? 'Enregistrer les modifications' : 'Soumettre la demande'}</button>
+              <button type="button" onClick={() => { setShowNewForm(false); resetCongeForm() }} style={{ padding: '9px 18px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 7, fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' }}>{congeEditMode ? "Fermer" : "Annuler"}</button>
+              <button type="submit" style={{ padding: '9px 22px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>{congeEditMode ? "Enregistrer" : 'Soumettre la demande'}</button>
             </div>
           </form>
         </div>
@@ -608,7 +611,7 @@ export default function CongesPage() {
               <strong style={{ fontSize: '1.1rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Eye size={15} style={{ color: '#6366f1' }} /> Détails congé #{detailCongeItem.id_operation}
               </strong>
-              <button onClick={() => setDetailCongeItem(null)} style={{ padding: '7px 14px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Fermer</button>
+              <button onClick={() => setDetailCongeItem(null)} style={{ padding: '7px 14px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>{"Fermer"}</button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px', fontSize: '0.86rem' }}>
               {detailCongeItem.motif && <div style={{ gridColumn: '1 / -1' }}><span style={{ color: '#64748b', fontWeight: 600 }}>Motif: </span>{detailCongeItem.motif}</div>}

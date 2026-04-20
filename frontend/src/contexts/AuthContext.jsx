@@ -57,6 +57,26 @@ export function AuthProvider({children}){
         setUser(data)
         // Réabonner aux notifications push si déjà connecté
         subscribeToPush(data.matricule || data.sub)
+
+        // Créer/restaurer la session quotidienne
+        const storedSessionId = localStorage.getItem('session_id')
+        const storedSessionDate = localStorage.getItem('session_date')
+        const todayStr = new Date().toISOString().slice(0, 10)
+        if (storedSessionId && storedSessionDate === todayStr) {
+          // Session d'aujourd'hui déjà enregistrée — restaurer l'ID
+          setSessionId(parseInt(storedSessionId))
+        } else {
+          // Nouvelle journée ou pas de session → créer une session quotidienne
+          const mat = data.matricule || data.sub
+          if (mat) {
+            api.post('/employees/sessions/login', { matricule: parseInt(mat) })
+              .then(res => {
+                setSessionId(res.data.id_session)
+                localStorage.setItem('session_id', res.data.id_session)
+                localStorage.setItem('session_date', todayStr)
+              }).catch(() => {})
+          }
+        }
       }catch(e){localStorage.removeItem('ec_token'); localStorage.removeItem('access_token')}
     }
   },[])
@@ -85,6 +105,7 @@ export function AuthProvider({children}){
       const { id_session } = sessionRes.data
       setSessionId(id_session)
       localStorage.setItem('session_id', id_session)
+      localStorage.setItem('session_date', new Date().toISOString().slice(0, 10))
     } catch (err) {
       console.error('Erreur enregistrement session:', err)
     }
@@ -105,6 +126,7 @@ export function AuthProvider({children}){
       const { id_session } = sessionRes.data
       setSessionId(id_session)
       localStorage.setItem('session_id', id_session)
+      localStorage.setItem('session_date', new Date().toISOString().slice(0, 10))
     } catch (err) {
       console.error('Erreur enregistrement session:', err)
     }
@@ -126,6 +148,7 @@ export function AuthProvider({children}){
     localStorage.removeItem('ec_token')
     localStorage.removeItem('access_token')
     localStorage.removeItem('session_id')
+    localStorage.removeItem('session_date')
     setUser(null)
     setSessionId(null)
     navigate('/login')

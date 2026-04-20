@@ -1,6 +1,7 @@
 import React from 'react'
 import {BrowserRouter,Routes,Route,Navigate} from 'react-router-dom'
 import {AuthProvider} from './contexts/AuthContext'
+import {ThemeProvider} from './contexts/ThemeContext'
 import Navbar from './components/Navbar'
 import RHLayout from './components/RHLayout'
 import Login from './components/Login'
@@ -43,6 +44,7 @@ import TalentManagement from './pages/TalentManagement'
 import ClubReview from './pages/ClubReview'
 import SandboxPage from './pages/SandboxPage'
 import AbsencesPage from './pages/AbsencesPage'
+import AuditLogPage from './pages/AuditLogPage'
 import ProfilePage from './pages/ProfilePage'
 import RemplacantsPage from './pages/RemplacantsPage'
 import './index.css'
@@ -50,7 +52,8 @@ import './index.css'
 export default function App(){
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
         <Navbar />
         <Routes>
           <Route path="/" element={<Navigate to="/rh/home" replace />} />
@@ -84,8 +87,8 @@ export default function App(){
             <Route path="organisation" element={<Organisation />} />
             <Route path="administration" element={<Administration />} />
             <Route path="utilisateurs" element={<ProtectedRoute allowedRoles={["ADMIN","PCA","AG"]}><Utilisateurs /></ProtectedRoute>} />
-            <Route path="usage-stats" element={<UsageStats />} />
-            <Route path="admin/usage-stats" element={<ProtectedRoute allowedRoles={["RH","DG","PCA","ADMIN"]}><AdminUsageStats /></ProtectedRoute>} />
+            <Route path="usage-stats" element={<ProtectedRoute allowedRoles={["ADMIN"]}><UsageStats /></ProtectedRoute>} />
+            <Route path="admin/usage-stats" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminUsageStats /></ProtectedRoute>} />
             <Route path="mfa" element={<MFASetup />} />
             <Route path="password" element={<ChangePassword />} />
             <Route path="calendrier-conge" element={<CongeCalendar />} />
@@ -102,11 +105,13 @@ export default function App(){
             <Route path="talent" element={<TalentManagement />} />
             <Route path="club-review" element={<ClubReview />} />
             <Route path="sandbox" element={<SandboxPage />} />
+            <Route path="audit-logs" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AuditLogPage /></ProtectedRoute>} />
             <Route path="module/:slug" element={<ModulePlaceholder />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>
 
           <Route path="/home" element={<Navigate to="/rh/home" replace />} />
+          <Route path="/pdf/*" element={<Navigate to="/rh/conges" replace />} />
           <Route path="/dashboard" element={<Navigate to="/rh/dashboard" replace />} />
           <Route path="/employees" element={<Navigate to="/rh/employees" replace />} />
           <Route path="/employees/new" element={<Navigate to="/rh/employees/new" replace />} />
@@ -128,6 +133,7 @@ export default function App(){
 
         </Routes>
       </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   )
 }

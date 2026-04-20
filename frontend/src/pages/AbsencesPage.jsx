@@ -4,19 +4,18 @@ import PermissionsPage from './PermissionsPage'
 import SortiesPage from './SortiesPage'
 import RemplacantsPage from './RemplacantsPage'
 import { CalendarDays, Clock, LogOut, Users } from 'lucide-react'
-
-const TABS = [
-  { id: 'conges',       label: 'Congés',              Icon: CalendarDays },
-  { id: 'permissions',  label: 'Permissions',          Icon: Clock },
-  { id: 'sorties',      label: 'Demandes de Sorties',  Icon: LogOut },
-  { id: 'remplacants',  label: 'Remplaçants',          Icon: Users },
-]
-
 export default function AbsencesPage() {
   const [activeTab, setActiveTab] = useState('conges')
 
+  const TABS = [
+    { id: 'conges',       label: "Congés",        Icon: CalendarDays },
+    { id: 'permissions',  label: "Permissions",   Icon: Clock },
+    { id: 'sorties',      label: "Demandes de Sorties",         Icon: LogOut },
+    { id: 'remplacants',  label: "Remplaçants",  Icon: Users },
+  ]
+
   return (
-    <div style={{ background: '#f4f5f7', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{
         background: 'linear-gradient(90deg, #021630 0%, #ce2b2b 100%)',
@@ -27,17 +26,17 @@ export default function AbsencesPage() {
         boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
       }}>
         <h1 style={{ margin: 0, marginBottom: 4, fontSize: '1.2rem', fontWeight: 700 }}>
-          Absences
+          {"Gestion des Absences"}
         </h1>
         <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.9 }}>
-          Gestion des congés, permissions et demandes de sorties
+          {"Congés, permissions, sorties et remplacements"}
         </p>
       </div>
 
       {/* Tab switcher */}
       <div style={{
         display: 'flex', gap: 4,
-        background: '#f1f5f9', borderRadius: 10, padding: 4,
+        background: 'var(--bg)', borderRadius: 10, padding: 4,
         marginBottom: 16, width: 'fit-content',
       }}>
         {TABS.map(({ id, label, Icon }) => (

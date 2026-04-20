@@ -99,7 +99,7 @@ export default function AutocompleteInput({
           left: 0,
           right: 0,
           zIndex: 1000,
-          background: '#fff',
+          background: 'var(--card)',
           border: '1px solid #d1d5db',
           borderTop: 'none',
           borderRadius: '0 0 5px 5px',

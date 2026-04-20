@@ -1,13 +1,14 @@
 """
 Router pour le système de workflow et validation hiérarchique
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict
 from datetime import datetime
 from ..db import get_db
 from .. import models
 from ..utils import workflow as wf_utils
+from ..utils.audit import log_action
 
 router = APIRouter(prefix='/api/workflow', tags=['workflow'])
 
@@ -69,7 +70,7 @@ def _notifier_missionnaires_mission_validee(id_operation: int, operation: models
                     type_notification='INFO',
                     titre="Mission validée",
                     message=(
-                        f"La mission #{id_operation} de "
+                        f"La mission de "
                         f"{employe.prenom} {employe.nom} a été validée."
                     ),
                     id_operation=id_operation,
@@ -314,6 +315,7 @@ def valider_operation(
     id_operation: int,
     matricule_validateur: int,
     statut: str,  # 'validé' ou 'refusé'
+    request: Request = None,
     commentaire: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
@@ -333,7 +335,10 @@ def valider_operation(
     
     if not success:
         raise HTTPException(status_code=400, detail=message)
-    
+
+    log_action(db, matricule_validateur, 'OPERATION_VALIDATED' if statut == 'validé' else 'OPERATION_REFUSED',
+              'operation', id_operation, {'statut': statut, 'commentaire': commentaire}, ip_address=request.client.host if request and request.client else None)
+
     # Si c'est une mission définitivement validée → notifier missionnaires et hiérarchie
     if statut == 'validé':
         op = db.query(models.Operation).filter(models.Operation.id_operation == id_operation).first()

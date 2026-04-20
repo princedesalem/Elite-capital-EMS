@@ -24,6 +24,8 @@ def list_all_operations(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
             'id_operation': op.id_operation,
             'matricule': op.matricule,
             'commentaire': op.commentaire,
+            'type_demande': op.type_demande,
+            'statut': op.statut,
             'date_depart': op.date_depart.isoformat() if op.date_depart else None,
             'date_retour': op.date_retour.isoformat() if op.date_retour else None,
             'duree': op.duree,

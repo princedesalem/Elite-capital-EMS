@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
@@ -163,3 +163,42 @@ def vote_poll(id_post: int, payload: Dict[str, Any] = Body(...), db: Session = D
     db.commit()
     db.refresh(post)
     return _serialize(post)
+
+
+@router.patch('/posts/{id_post}')
+def update_post(id_post: int, payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)):
+    post = db.query(models.TeamSpacePost).filter(models.TeamSpacePost.id_post == id_post).first()
+    if not post:
+        raise HTTPException(status_code=404, detail='Publication introuvable')
+    if post.date_creation and (datetime.utcnow() - post.date_creation) > timedelta(hours=1):
+        raise HTTPException(status_code=403, detail='La modification est impossible après 1 heure')
+
+    if post.post_type == 'shoutout':
+        if 'message' in payload and str(payload['message']).strip():
+            post.message = str(payload['message']).strip()
+        if 'destinataire' in payload and str(payload['destinataire']).strip():
+            post.destinataire = str(payload['destinataire']).strip()
+    elif post.post_type == 'kudos':
+        if 'destinataire' in payload and str(payload['destinataire']).strip():
+            post.destinataire = str(payload['destinataire']).strip()
+        if 'raison' in payload:
+            post.raison = str(payload['raison']).strip() or None
+        if 'valeur' in payload and str(payload['valeur']).strip():
+            post.valeur = str(payload['valeur']).strip()
+    elif post.post_type == 'poll':
+        if 'question' in payload and str(payload['question']).strip():
+            post.question = str(payload['question']).strip()
+
+    db.commit()
+    db.refresh(post)
+    return _serialize(post)
+
+
+@router.delete('/posts/{id_post}')
+def delete_post(id_post: int, db: Session = Depends(get_db)):
+    post = db.query(models.TeamSpacePost).filter(models.TeamSpacePost.id_post == id_post).first()
+    if not post:
+        raise HTTPException(status_code=404, detail='Publication introuvable')
+    db.delete(post)
+    db.commit()
+    return {'ok': True}

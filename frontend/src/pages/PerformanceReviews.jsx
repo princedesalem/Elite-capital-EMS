@@ -42,14 +42,14 @@ function ReviewCard({ review, employees, onDelete }) {
     : 0
 
   return (
-    <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
+    <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
       <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700, color: DARK, fontSize: '0.9rem' }}>
             {reviewee ? `${reviewee.prenom} ${reviewee.nom}` : `#${review.reviewee_id}`}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
-            Évalué par {reviewer ? `${reviewer.prenom} ${reviewer.nom}` : `#${review.reviewer_id}`} • {new Date(review.created_at).toLocaleDateString('fr-FR')}
+            {"Évalué par"} {reviewer ? `${reviewer.prenom} ${reviewer.nom}` : `#${review.reviewer_id}`} • {new Date(review.created_at).toLocaleDateString('fr-FR')}
           </div>
         </div>
         <div style={{ textAlign: 'center' }}>
@@ -57,7 +57,7 @@ function ReviewCard({ review, employees, onDelete }) {
           <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>/ 5.0</div>
         </div>
         <StarRating value={Math.round(avgScore)} size={14} />
-        <button onClick={() => setExpanded(!expanded)} style={{ background: '#f1f5f9', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', color: '#64748b' }}>
+        <button onClick={() => setExpanded(!expanded)} style={{ background: 'var(--bg)', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', color: '#64748b' }}>
           <ChevronDown size={14} style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
         </button>
         <button onClick={() => onDelete(review.id)} style={{ background: '#fef2f2', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', color: ACCENT }}>
@@ -73,19 +73,19 @@ function ReviewCard({ review, employees, onDelete }) {
             </div>
           ))}
           {review.commentaire && (
-            <div style={{ marginTop: 12, padding: '10px', background: '#f8fafc', borderRadius: 7, fontSize: '0.82rem', color: '#475569', fontStyle: 'italic' }}>
+            <div style={{ marginTop: 12, padding: '10px', background: 'var(--bg)', borderRadius: 7, fontSize: '0.82rem', color: '#475569', fontStyle: 'italic' }}>
               " {review.commentaire} "
             </div>
           )}
           {review.points_forts && (
             <div style={{ marginTop: 8 }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#021630' }}>Points forts:</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#021630' }}>{"Points forts"}:</span>
               <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#334155' }}>{review.points_forts}</p>
             </div>
           )}
           {review.points_amelioration && (
             <div style={{ marginTop: 8 }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b' }}>À améliorer:</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b' }}>{"Axes d'amélioration"}:</span>
               <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#334155' }}>{review.points_amelioration}</p>
             </div>
           )}
@@ -139,7 +139,7 @@ export default function PerformanceReviews() {
   }
 
   const deleteReview = async (id) => {
-    if (!window.confirm('Supprimer cette évaluation ?')) return
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette évaluation ?")) return
     await api.delete(`/api/performance-reviews/${id}`).catch(() => null)
     await loadReviews()
   }
@@ -168,12 +168,12 @@ export default function PerformanceReviews() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Star size={22} /> Évaluations 360°
+              <Star size={22} /> {"Performances 360"}
             </h1>
-            <p style={{ margin: '4px 0 0', fontSize: '0.85rem', opacity: 0.8 }}>Évaluations croisées et suivi de la performance globale</p>
+            <p style={{ margin: '4px 0 0', fontSize: '0.85rem', opacity: 0.8 }}>{"Suivi et évaluation des performances"}</p>
           </div>
           <button className="btn btn-primary" onClick={() => setShowForm(!showForm)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Plus size={15} /> Nouvelle évaluation
+            <Plus size={15} /> {"Nouvelle évaluation"}
           </button>
         </div>
       </div>
@@ -182,22 +182,22 @@ export default function PerformanceReviews() {
       {showForm && (
         <div className="form-card" style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-            <h3 style={{ margin: 0, color: DARK, fontWeight: 700 }}>Évaluation 360°</h3>
+            <h3 style={{ margin: 0, color: DARK, fontWeight: 700 }}>{"Évaluation 360°"}</h3>
             <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={18} /></button>
           </div>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label>Employé évalué <span style={{ color: ACCENT }}>*</span></label>
+              <label>{"Employé évalué"} <span style={{ color: ACCENT }}>*</span></label>
               <select className="form-control" value={revieweeId} onChange={e => setRevieweeId(e.target.value)} required>
                 <option value="">— Sélectionner un employé —</option>
                 {visibleEmployees.map(e => <option key={e.matricule} value={e.matricule}>{e.prenom} {e.nom} ({e.matricule})</option>)}
               </select>
             </div>
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', marginBottom: 10, fontWeight: 700, color: DARK, fontSize: '0.88rem' }}>Notes par compétence</label>
+              <label style={{ display: 'block', marginBottom: 10, fontWeight: 700, color: DARK, fontSize: '0.88rem' }}>{"Scores de compétences"}</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {COMPETENCES.map((comp, i) => (
-                  <div key={comp} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f8fafc', borderRadius: 7 }}>
+                  <div key={comp} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg)', borderRadius: 7 }}>
                     <span style={{ fontSize: '0.85rem', color: '#334155', fontWeight: 600 }}>{comp}</span>
                     <StarRating value={scores[i]} onChange={v => { const s = [...scores]; s[i] = v; setScores(s) }} size={20} />
                   </div>
@@ -205,11 +205,11 @@ export default function PerformanceReviews() {
               </div>
             </div>
             <div className="form-group">
-              <label>Points forts</label>
+              <label>{"Points forts"}</label>
               <textarea className="form-control" rows={2} value={pointsForts} onChange={e => setPointsForts(e.target.value)} placeholder="Ce que l'employé fait particulièrement bien..." />
             </div>
             <div className="form-group">
-              <label>Axes d'amélioration</label>
+              <label>{"Axes d'amélioration"}</label>
               <textarea className="form-control" rows={2} value={pointsAmelioration} onChange={e => setPointsAmelioration(e.target.value)} placeholder="Ce qui peut être amélioré..." />
             </div>
             <div className="form-group">
@@ -218,7 +218,7 @@ export default function PerformanceReviews() {
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button type="submit" className="btn btn-primary">Soumettre l'évaluation</button>
-              <button type="button" className="btn" onClick={() => setShowForm(false)} style={{ background: '#f1f5f9', color: '#475569' }}>Annuler</button>
+              <button type="button" className="btn" onClick={() => setShowForm(false)} style={{ background: 'var(--bg)', color: '#475569' }}>{"Annuler"}</button>
             </div>
           </form>
         </div>
@@ -226,11 +226,11 @@ export default function PerformanceReviews() {
 
       {/* Performance overview */}
       {filtered.length > 0 && (
-        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '18px 20px', marginBottom: 20 }}>
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '18px 20px', marginBottom: 20 }}>
           <h3 style={{ margin: '0 0 14px', color: DARK, fontSize: '0.95rem', fontWeight: 700 }}>Scores moyens par compétence</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
             {avgByCompetence.map(({ comp, avg }) => (
-              <div key={comp} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#f8fafc', borderRadius: 7 }}>
+              <div key={comp} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: 'var(--bg)', borderRadius: 7 }}>
                 <span style={{ fontSize: '0.78rem', color: '#334155', fontWeight: 600 }}>{comp}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <StarRating value={Math.round(avg)} size={12} />
@@ -244,7 +244,7 @@ export default function PerformanceReviews() {
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select style={{ padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: '0.82rem', background: 'white' }} value={filterReviewee} onChange={e => setFilterReviewee(e.target.value)}>
+        <select style={{ padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 7, fontSize: '0.82rem', background: 'var(--card)' }} value={filterReviewee} onChange={e => setFilterReviewee(e.target.value)}>
           <option value="tous">Tous les employés</option>
           {revieweeOptions.map(e => <option key={e.matricule} value={e.matricule}>{e.prenom} {e.nom}</option>)}
         </select>
@@ -253,9 +253,9 @@ export default function PerformanceReviews() {
 
       {/* Reviews list */}
       {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '48px 24px', color: '#94a3b8', background: 'white', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+        <div style={{ textAlign: 'center', padding: '48px 24px', color: '#94a3b8', background: 'var(--card)', borderRadius: 10, border: '1px solid var(--border)' }}>
           <Star size={36} style={{ opacity: 0.3, marginBottom: 12 }} />
-          <p style={{ margin: 0 }}>Aucune évaluation pour l'instant</p>
+          <p style={{ margin: 0 }}>{"Aucune évaluation"}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

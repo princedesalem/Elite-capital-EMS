@@ -6,9 +6,11 @@ import WorkflowModal from '../components/WorkflowModal'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import AutocompleteInput from '../components/AutocompleteInput'
 import ModifiedBadge from '../components/ModifiedBadge'
+import { operationLabel } from '../utils/operationLabel'
 import '../styles/Operations.css'
+
 import {
-  ClipboardList, AlertTriangle, FileText, Plus, Trash2, Pencil, Users, CheckCircle, Search, Upload, FileUp, Eye, Banknote, Clock, Download
+  ClipboardList, AlertTriangle, FileText, Plus, Trash2, Pencil, Users, CheckCircle, Search, Upload, FileUp, Eye, Banknote, Clock, Download, FileDown
 } from 'lucide-react'
 
 const th = { padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', fontSize: '0.7rem', color: '#64748b', fontWeight: 700, whiteSpace: 'nowrap' }
@@ -77,8 +79,8 @@ function Tabs({ active, setActive, counts }) {
   return (
     <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
       {[
-        ['envoye', 'Envoyé', counts.envoye],
-        ['recu', 'Reçu', counts.recu],
+        ['envoye', "Envoyé", counts.envoye],
+        ['recu', "Recu", counts.recu],
       ].map(([key, label, count]) => (
         <button
           key={key}
@@ -117,7 +119,7 @@ function FilterBar({ date, setDate, statut, setStatut, source, setSource, emette
         <option value="">Tous États</option>
         {['--', 'AttenteRH', 'Active', 'ClotureDemandee', 'Cloturee'].map(value => <option key={value} value={value}>{value}</option>)}
       </select>
-      {(date || statut || source || emetteur || etat) && <button onClick={() => { setDate(''); setStatut(''); setSource(''); setEmetteur(''); setEtat('') }} style={{ padding: '5px 9px', borderRadius: 5, border: '1px solid #f87171', background: '#fee2e2', color: '#991b1b', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}>Réinitialiser</button>}
+      {(date || statut || source || emetteur || etat) && <button onClick={() => { setDate(''); setStatut(''); setSource(''); setEmetteur(''); setEtat('') }} style={{ padding: '5px 9px', borderRadius: 5, border: '1px solid #f87171', background: '#fee2e2', color: '#991b1b', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}>{"Réinitialiser"}</button>}
     </div>
   )
 }
@@ -157,7 +159,7 @@ function RapportModal({ idOperation, matricule, missionStatuts, estMissionnaire,
       await charger()
       onUploaded()
     } catch (err) {
-      setError(errMsg(err, 'Erreur lors du téléversement'))
+      setError(errMsg(err, "Erreur lors du téléversement"))
     } finally {
       setUploading(false)
     }
@@ -169,14 +171,14 @@ function RapportModal({ idOperation, matricule, missionStatuts, estMissionnaire,
   }
 
   const supprimerRapport = async () => {
-    if (!window.confirm('Supprimer le rapport téléversé ?')) return
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce rapport ?")) return
     setError('')
     try {
       await api.delete(`/api/missions/${idOperation}/supprimer-rapport`, { params: { matricule } })
       await charger()
       onUploaded()
     } catch (err) {
-      setError(errMsg(err, 'Erreur lors de la suppression'))
+      setError(errMsg(err, "Erreur lors de la suppression"))
     }
   }
 
@@ -189,7 +191,7 @@ function RapportModal({ idOperation, matricule, missionStatuts, estMissionnaire,
               <FileText size={16} style={{ color: '#475569' }} />
             </div>
             <div>
-              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>Rapport de mission</div>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>{"Rapport de mission"}</div>
               <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Mission #{idOperation}</div>
             </div>
           </div>
@@ -198,7 +200,7 @@ function RapportModal({ idOperation, matricule, missionStatuts, estMissionnaire,
 
         <div style={{ padding: '16px 22px', flex: 1 }}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: '0.85rem' }}>Chargement…</div>
+            <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: '0.85rem' }}>{"Chargement..."}</div>
           ) : rapport?.rapport_televerse && rapport.fichier ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#f8fafc', borderRadius: 9, border: '1px solid #f1f5f9' }}>
               <FileText size={15} style={{ color: '#64748b', flexShrink: 0 }} />
@@ -213,7 +215,7 @@ function RapportModal({ idOperation, matricule, missionStatuts, estMissionnaire,
           ) : (
             <div style={{ textAlign: 'center', padding: '32px 0', color: '#cbd5e1', fontSize: '0.85rem' }}>
               <FileUp size={28} style={{ opacity: 0.3, display: 'block', margin: '0 auto 8px' }} />
-              Aucun rapport téléversé
+              {"Aucun rapport"}
             </div>
           )}
         </div>
@@ -221,15 +223,15 @@ function RapportModal({ idOperation, matricule, missionStatuts, estMissionnaire,
         {estMissionnaire && <div style={{ padding: '14px 22px 20px', borderTop: '1px solid #f1f5f9' }}>
           {!estActive && !rapport?.rapport_televerse && (
             <div style={{ background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: '0.82rem', color: '#92400e' }}>
-              Le rapport ne peut être téléversé que pour une mission <strong>active</strong>.
+              {"Le rapport n'est disponible que pour les missions actives"}
             </div>
           )}
           <form onSubmit={uploader} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>{rapport?.rapport_televerse ? 'Remplacer le rapport' : 'Téléverser le rapport'}</label>
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>{rapport?.rapport_televerse ? "Remplacer le rapport" : "Téléverser rapport"}</label>
             <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.odt" style={{ fontSize: '0.82rem', padding: '8px', border: '1px dashed #cbd5e1', borderRadius: 8, cursor: 'pointer', color: '#475569', background: '#f8fafc' }} />
             {error && <p style={{ color: '#ef4444', fontSize: '0.78rem', margin: 0 }}>{error}</p>}
             <button type="submit" disabled={uploading} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', background: uploading ? '#94a3b8' : '#0f172a', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, cursor: uploading ? 'not-allowed' : 'pointer', fontSize: '0.82rem', alignSelf: 'flex-start' }}>
-              <Upload size={14} />{uploading ? 'Téléversement…' : 'Téléverser'}
+              <Upload size={14} />{uploading ? "Téléversement..." : "Téléverser"}
             </button>
           </form>
         </div>}
@@ -257,6 +259,7 @@ export default function MissionsPage() {
   const [filterEtat, setFilterEtat] = useState('')
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [downloadingPdf, setDownloadingPdf] = useState(null)
 
   const senderName = useMemo(() => [user?.prenom, user?.nom].filter(Boolean).join(' ').trim() || user?.nom || 'Utilisateur', [user])
   const matricule = useMemo(() => Number(user?.matricule || user?.sub || 0), [user])
@@ -750,6 +753,7 @@ alert('Erreur clôture RH: ' + errMsg(err, err.message))
     const isLoading = loadingOp === id
     const btnStyle = (base) => ({ ...base, opacity: isLoading ? 0.6 : 1 })
     const eyeBtn = <button key="eye" onClick={(e) => openMissionDetail(e, id)} style={{ ...rowBtn, background: '#6366f1' }} title="Voir détails"><Eye size={12} /></button>
+    const pdfBtn = isValid ? <button key="pdf" onClick={(e) => { e.stopPropagation(); setDownloadingPdf(id); api.get(`/api/pdf/mission/${id}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `mission_${id}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }).finally(() => setDownloadingPdf(null)) }} style={{ ...rowBtn, background: '#0e7490', display: 'inline-flex', alignItems: 'center', opacity: downloadingPdf === id ? 0.6 : 1 }} disabled={downloadingPdf === id} title="Télécharger PDF"><FileDown size={13} /></button> : null
 
     if (isRefus) return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{eyeBtn}</div>
 
@@ -758,14 +762,14 @@ alert('Erreur clôture RH: ' + errMsg(err, err.message))
       const isMissionnaire = item.__workflow_bucket === 'missionnaire'
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'validé') }} style={okBtn} disabled={isLoading}>Approuver</button>}
-          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'refusé') }} style={dangerBtn} disabled={isLoading}>Refuser</button>}
+          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'validé') }} style={okBtn} disabled={isLoading}>{"Approuver"}</button>}
+          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'refusé') }} style={dangerBtn} disabled={isLoading}>{"Refuser"}</button>}
           {isMissionnaire && isValid && etat === '--' && <button onClick={(e) => { e.stopPropagation(); handleActiver(id) }} style={btnStyle(okBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer'}</button>}
           {isMissionnaire && isValid && etat === 'AttenteRH' && <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente RH</span>}
           {isMissionnaire && isValid && etat === 'Active' && <button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer'}</button>}
           {estRh && isValid && etat === 'AttenteRH' && <button onClick={(e) => { e.stopPropagation(); handleActiverRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer (RH)'}</button>}
           {estRh && isValid && etat === 'Active' && <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer (RH)'}</button>}
-          {eyeBtn}
+          {pdfBtn}{eyeBtn}
         </div>
       )
     }
@@ -773,32 +777,32 @@ alert('Erreur clôture RH: ' + errMsg(err, err.message))
     if (!isValid) {
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <button onClick={(e) => { e.stopPropagation(); handleEditMission(item) }} style={primaryBtn}>Modifier</button>
-          <button onClick={(e) => { e.stopPropagation(); handleAnnuler(id) }} style={dangerBtn}>Annuler</button>
+          <button onClick={(e) => { e.stopPropagation(); handleEditMission(item) }} style={primaryBtn}>{"Modifier"}</button>
+          <button onClick={(e) => { e.stopPropagation(); handleAnnuler(id) }} style={dangerBtn}>{"Annuler"}</button>
           {eyeBtn}
         </div>
       )
     }
 
     if (etat === '--') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleActiver(id) }} style={btnStyle(okBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer'}</button>{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleActiver(id) }} style={btnStyle(okBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer'}</button>{pdfBtn}{eyeBtn}</div>
     }
 
     if (etat === 'AttenteRH') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente RH</span>{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente RH</span>{pdfBtn}{eyeBtn}</div>
     }
 
     if (etat === 'Active') {
       const dateFin = item.date_fin || item.date_retour
       const canRetourAnticipe = dateFin && new Date() < new Date(dateFin)
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer'}</button>{canRetourAnticipe && <button onClick={(e) => { e.stopPropagation(); handleRetourAnticipe(id) }} style={btnStyle({ ...primaryBtn, background: '#3b82f6' })} disabled={isLoading}>{isLoading ? '…' : 'Retour anticipé'}</button>}{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer'}</button>{canRetourAnticipe && <button onClick={(e) => { e.stopPropagation(); handleRetourAnticipe(id) }} style={btnStyle({ ...primaryBtn, background: '#3b82f6' })} disabled={isLoading}>{isLoading ? '…' : 'Retour anticipé'}</button>}{pdfBtn}{eyeBtn}</div>
     }
 
     if (etat === 'ClotureDemandee') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente confirmation RH</span>{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente confirmation RH</span>{pdfBtn}{eyeBtn}</div>
     }
 
-    return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{eyeBtn}</div>
+    return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{pdfBtn}{eyeBtn}</div>
   }
 
   const renderRows = (rows, isRecu) => {
@@ -808,9 +812,9 @@ alert('Erreur clôture RH: ' + errMsg(err, err.message))
 
     return rows.map(item => (
       <tr key={item.id_operation} onClick={() => setSelectedOperationForWorkflow(item.id_operation)} style={{ cursor: 'pointer' }}>
-        <td style={td} title={item.titre || item.objet || item.motif || `Mission #${item.id_operation}`}>
+        <td style={td} title={operationLabel(item)}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 600 }}>{item.titre || item.objet || item.motif || `Mission #${item.id_operation}`}</span>
+            <span style={{ fontWeight: 600 }}>{operationLabel(item)}</span>
             <ModifiedBadge estModifie={item.est_modifie} dateModification={item.date_modification} />
           </div>
         </td>
@@ -890,15 +894,15 @@ alert('Erreur clôture RH: ' + errMsg(err, err.message))
     ))
   }
 
-  if (loading) return <div style={{ padding: 28 }}>Chargement...</div>
+  if (loading) return <div style={{ padding: 28 }}>{"Chargement..."}</div>
 
   return (
     <div style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#021630' }}>Gestion des Missions</h1>
+        <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#021630' }}>{"Gestion des Missions"}</h1>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <>
-            <button onClick={() => setActiveUploadModal('rapport')} style={{ padding: '9px 14px', background: '#fff', color: '#334155', border: '1.5px solid #d1d5db', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}><FileUp size={15} /> Téléverser rapport</button>
+            <button onClick={() => setActiveUploadModal('rapport')} style={{ padding: '9px 14px', background: '#fff', color: '#334155', border: '1.5px solid #d1d5db', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}><FileUp size={15} /> {"Téléverser rapport"}</button>
             <button onClick={() => { setActiveUploadModal('preuves'); setPreuveUploadMissionId(''); setPreuveUpload({ id_frais: '', type_preuve: 'facture', file: null }) }} style={{ padding: '9px 14px', background: '#fff', color: '#334155', border: '1.5px solid #d1d5db', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}><Upload size={15} /> Téléverser preuves frais</button>
           </>
           <button onClick={() => { setShowForm(true); setFormError(''); setFormSuccess(''); resetMissionForm() }} style={{ padding: '9px 14px', background: '#ce2b2b', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Nouvelle demande</button>
@@ -909,7 +913,7 @@ alert('Erreur clôture RH: ' + errMsg(err, err.message))
         <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb', marginBottom: 12, padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{missionEditMode ? 'Modifier la mission' : 'Nouvelle demande de mission'}</strong>
-            <button onClick={() => { setShowForm(false); resetMissionForm() }} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Annuler</button>
+            <button onClick={() => { setShowForm(false); resetMissionForm() }} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>{"Annuler"}</button>
           </div>
           {formError && <div style={{ background: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formError}</div>}
           {formSuccess && <div style={{ background: '#d1fae5', color: '#065f46', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formSuccess}</div>}
@@ -1032,7 +1036,7 @@ alert('Erreur clôture RH: ' + errMsg(err, err.message))
             </div>
             <div style={{display: 'flex', gap: '10px'}}>
               <button className="btn btn-success" type="submit">{missionEditMode ? 'Enregistrer les modifications' : `Soumettre (${missionSegments.length} destination${missionSegments.length > 1 ? 's' : ''})`}</button>
-              {missionEditMode && <button className="btn" type="button" onClick={() => { resetMissionForm(); setFormSuccess(''); setFormError('') }} style={{background: '#6c757d', color: 'white'}}>Annuler modification</button>}
+              {missionEditMode && <button className="btn" type="button" onClick={() => { resetMissionForm(); setFormSuccess(''); setFormError('') }} style={{background: '#6c757d', color: 'white'}}>{"Annuler"}</button>}
             </div>
           </form>
         </div>
@@ -1044,7 +1048,7 @@ alert('Erreur clôture RH: ' + errMsg(err, err.message))
               <div style={{ background: '#fff', borderRadius: 12, padding: 28, width: '90%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                   <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>Téléversement rapport mission</strong>
-                  <button onClick={() => setActiveUploadModal(null)} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Fermer</button>
+                  <button onClick={() => setActiveUploadModal(null)} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>{"Fermer"}</button>
                 </div>
                 {formError && <div style={{ background: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formError}</div>}
                 {formSuccess && <div style={{ background: '#d1fae5', color: '#065f46', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formSuccess}</div>}
@@ -1070,7 +1074,7 @@ alert('Erreur clôture RH: ' + errMsg(err, err.message))
               <div style={{ background: '#fff', borderRadius: 12, padding: 28, width: '90%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                   <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>Téléversement preuves frais</strong>
-                  <button onClick={() => setActiveUploadModal(null)} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Fermer</button>
+                  <button onClick={() => setActiveUploadModal(null)} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>{"Fermer"}</button>
                 </div>
                 {formError && <div style={{ background: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formError}</div>}
                 {formSuccess && <div style={{ background: '#d1fae5', color: '#065f46', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formSuccess}</div>}
@@ -1114,18 +1118,18 @@ alert('Erreur clôture RH: ' + errMsg(err, err.message))
             <tr>
               <th style={{ ...th, width: '12%' }}>Titre de demande</th>
               <th style={{ ...th, width: '6%' }}>Source</th>
-              <th style={{ ...th, width: '7%' }}>Statut</th>
-              <th style={{ ...th, width: '6%' }}>Date Création</th>
+              <th style={{ ...th, width: '7%' }}>{"Statut"}</th>
+              <th style={{ ...th, width: '7%' }}>Date Création</th>
               {activeTab !== 'envoye' && <th style={{ ...th, width: '7%' }}>Envoyé Par</th>}
               <th style={{ ...th, width: '6%' }}>Date Départ</th>
               <th style={{ ...th, width: '6%' }}>Date Retour</th>
               <th style={{ ...th, width: '4%' }}>Durée</th>
               <th style={{ ...th, width: '8%' }}>Missionnaire(s)</th>
               <th style={{ ...th, width: '7%' }}>Destination(s)</th>
-              <th style={{ ...th, width: '4%' }}>Rapport</th>
-              <th style={{ ...th, width: '6%' }}>Paiement frais</th>
+              <th style={{ ...th, width: '4%' }}>{"Rapport"}</th>
+              <th style={{ ...th, width: '6%' }}>{"Paiement des frais"}</th>
               <th style={{ ...th, width: '5%' }}>État</th>
-              <th style={{ ...th, width: '16%' }}>Actions</th>
+              <th style={{ ...th, width: '16%' }}>{"Actions"}</th>
             </tr>
           </thead>
           <tbody>{activeTab === 'envoye' ? renderRows(envoye, false) : renderRows(recu, true)}</tbody>
@@ -1194,7 +1198,7 @@ alert('Erreur clôture RH: ' + errMsg(err, err.message))
               <strong style={{ fontSize: '1.15rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Eye size={16} style={{ color: '#6366f1' }} /> Détails mission #{detailMissionId}
               </strong>
-              <button onClick={() => { setDetailMissionId(null); setDetailData(null) }} style={{ padding: '7px 14px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Fermer</button>
+              <button onClick={() => { setDetailMissionId(null); setDetailData(null) }} style={{ padding: '7px 14px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>{"Fermer"}</button>
             </div>
 
             {!detailData && <div style={{ textAlign: 'center', color: '#6b7280', padding: '32px 0' }}>Chargement…</div>}

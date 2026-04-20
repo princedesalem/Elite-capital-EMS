@@ -126,7 +126,7 @@ describe('SortiesPage single-day flow', () => {
 
     render(<MemoryRouter><SortiesPage /></MemoryRouter>)
 
-    await screen.findByText('Sortie test')
+    await screen.findByText('Sortie Test')
     expect(screen.queryByText(/date retour/i)).not.toBeInTheDocument()
     expect(screen.getByText('2 h 30 min')).toBeInTheDocument()
   })

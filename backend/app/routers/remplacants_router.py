@@ -7,7 +7,7 @@ from typing import List, Optional
 from datetime import date
 from ..db import get_db
 from .. import models
-from ..utils import remplacants as rempl_utils, notifications, security
+from ..utils import remplacants as rempl_utils, notifications, security, email as email_utils
 
 router = APIRouter(prefix='/api/remplacants', tags=['remplacants'])
 
@@ -230,7 +230,23 @@ def accepter_remplacant(
         id_operation=id_operation,
         db=db
     )
-    
+
+    # Email au remplaçant confirmé
+    remplacant_emp = db.query(models.Employe).filter(
+        models.Employe.matricule == matricule_remplacant
+    ).first()
+    if remplacant_emp and remplacant_emp.email:
+        email_utils.send_email(
+            remplacant_emp.email,
+            "[EMS] Remplacement confirmé",
+            (
+                f"Bonjour {remplacant_emp.prenom} {remplacant_emp.nom},\n\n"
+                f"Vous avez été choisi(e) pour remplacer {employe.prenom} {employe.nom} "
+                f"durant son {(operation.type_demande or 'absence').lower()} (du {operation.date_debut} au {operation.date_fin or operation.date_retour or '?'}).\n\n"
+                f"Cordialement,\nÉquipe EMS"
+            )
+        )
+
     return {"message": message}
 
 
@@ -274,10 +290,27 @@ def demander_remplacant(
         matricule=matricule_remplacant,
         type_notification='AUTRE',
         titre=f"Demande de remplacement – {(operation.type_demande or 'Absence') if operation else 'Absence'}",
-        message=f"Vous êtes sollicité(e) pour remplacer {nom_absent} durant son {type_absence} (opération #{id_operation}). Veuillez confirmer votre accord dans l'application.",
+        message=f"Vous êtes sollicité(e) pour remplacer {nom_absent} durant son {type_absence} (du {operation.date_debut} au {operation.date_fin or '?'}). Veuillez confirmer votre accord dans l'application.",
         id_operation=id_operation,
         db=db
     )
+
+    # Email au remplaçant sollicité
+    remplacant_emp = db.query(models.Employe).filter(
+        models.Employe.matricule == matricule_remplacant
+    ).first()
+    if remplacant_emp and remplacant_emp.email:
+        email_utils.send_email(
+            remplacant_emp.email,
+            f"[EMS] Demande de remplacement – {(operation.type_demande or 'Absence') if operation else 'Absence'}",
+            (
+                f"Bonjour {remplacant_emp.prenom} {remplacant_emp.nom},\n\n"
+                f"Vous êtes sollicité(e) pour remplacer {nom_absent} durant son {type_absence} "
+                f"(du {operation.date_debut} au {operation.date_fin or '?'}).\n\n"
+                f"Connectez-vous à l'application EMS pour confirmer votre disponibilité.\n\n"
+                f"Cordialement,\nÉquipe EMS"
+            )
+        )
 
     return {"message": "Demande envoyée", "id_operation": id_operation}
 

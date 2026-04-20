@@ -1,4 +1,29 @@
 import React, { useMemo, useState } from 'react'
+import { useTheme } from '../contexts/ThemeContext'
+
+export const LS_TZ_KEY = 'ems_timezone'
+
+const TIMEZONES = [
+  { value: 'auto',                  label: 'Automatique (appareil)' },
+  { value: 'Africa/Douala',         label: 'Afrique/Douala (UTC+1)' },
+  { value: 'Africa/Lagos',          label: 'Afrique/Lagos (UTC+1)' },
+  { value: 'Africa/Libreville',     label: 'Afrique/Libreville (UTC+1)' },
+  { value: 'Africa/Brazzaville',    label: 'Afrique/Brazzaville (UTC+1)' },
+  { value: 'Africa/Kinshasa',       label: 'Afrique/Kinshasa (UTC+1)' },
+  { value: 'Africa/Lusaka',         label: 'Afrique/Lusaka (UTC+2)' },
+  { value: 'Africa/Nairobi',        label: 'Afrique/Nairobi (UTC+3)' },
+  { value: 'Africa/Johannesburg',   label: 'Afrique/Johannesburg (UTC+2)' },
+  { value: 'Africa/Abidjan',        label: 'Afrique/Abidjan (UTC+0)' },
+  { value: 'Africa/Dakar',          label: 'Afrique/Dakar (UTC+0)' },
+  { value: 'Europe/Paris',          label: 'Europe/Paris (UTC+1/+2)' },
+  { value: 'Europe/London',         label: 'Europe/Londres (UTC+0/+1)' },
+  { value: 'UTC',                   label: 'UTC (UTC+0)' },
+  { value: 'America/New_York',      label: 'Amérique/New York (UTC-5/-4)' },
+  { value: 'America/Chicago',       label: 'Amérique/Chicago (UTC-6/-5)' },
+  { value: 'America/Los_Angeles',   label: 'Amérique/Los Angeles (UTC-8/-7)' },
+  { value: 'Asia/Dubai',            label: 'Asie/Dubaï (UTC+4)' },
+  { value: 'Asia/Shanghai',         label: 'Asie/Shanghai (UTC+8)' },
+]
 
 const AVAILABLE_BACKEND_LINKED = new Set([
   'Demandes de congé en attente de validation',
@@ -6,6 +31,7 @@ const AVAILABLE_BACKEND_LINKED = new Set([
   'Commentaires de mission à traiter',
   'Alertes de relance automatiques',
   'Afficher les données de diagnostic',
+  'Fuseau horaire',
 ])
 
 const MENU = [
@@ -35,8 +61,7 @@ const DATA = {
         { type: 'select', label: 'Langue de l’interface', options: ['Français (France)', 'English'], value: 'Français (France)' },
         { type: 'select', label: 'Format de date', options: ['31/01/2026', '2026-01-31'], value: '31/01/2026' },
         { type: 'select', label: 'Format de l’heure', options: ['01:01 - 23:59', '01:01 AM - 11:59 PM'], value: '01:01 - 23:59' },
-        { type: 'static', label: 'Fuseau horaire actuel', value: 'Africa/Lagos' },
-        { type: 'toggle', label: 'Suivre les paramètres du système d’exploitation', defaultOn: true },
+        { type: 'timezone', label: 'Fuseau horaire' },
       ],
     },
   ],
@@ -150,7 +175,7 @@ export default function Parametrage() {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 14, minHeight: 'calc(100vh - 110px)' }}>
-      <aside style={{ background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)', border: '1px solid #e2e8f0', borderRadius: 12, padding: 12, boxShadow: '0 4px 14px rgba(2,22,48,0.06)' }}>
+      <aside style={{ background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, boxShadow: '0 4px 14px rgba(2,22,48,0.06)' }}>
         <div style={{ marginBottom: 10, fontSize: '0.94rem', fontWeight: 700, color: '#021630' }}>Paramètres</div>
         <div style={{ display: 'grid', gap: 4 }}>
           {MENU.map((item) => (
@@ -175,7 +200,7 @@ export default function Parametrage() {
         </div>
       </aside>
 
-      <section style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 14, boxShadow: '0 6px 18px rgba(15,23,42,0.06)' }}>
+      <section style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, boxShadow: '0 6px 18px rgba(15,23,42,0.06)' }}>
         <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '1.06rem', color: '#021630' }}>{active}</h2>
@@ -189,7 +214,7 @@ export default function Parametrage() {
           />
         </div>
 
-        <div style={{ marginBottom: 10, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px', fontSize: '0.76rem', color: '#334155' }}>
+        <div style={{ marginBottom: 10, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', fontSize: '0.76rem', color: '#334155' }}>
           Légende: <strong style={{ color: '#166534' }}>Disponible EMS</strong> = fonctionnalité déjà active côté backend. <strong style={{ color: '#9a3412' }}>Bientôt disponible</strong> = préférence utilisateur non encore persistée côté backend.
         </div>
 
@@ -197,8 +222,8 @@ export default function Parametrage() {
 
         <div style={{ display: 'grid', gap: 10 }}>
           {filteredSections.map((section) => (
-            <div key={section.title} style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ background: '#f8fafc', borderBottom: '1px solid #e5e7eb', padding: '8px 10px', fontWeight: 700, color: '#0f172a', fontSize: '0.82rem' }}>
+            <div key={section.title} style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)', padding: '8px 10px', fontWeight: 700, color: 'var(--text)', fontSize: '0.82rem' }}>
                 {section.title}
               </div>
               <div style={{ padding: '8px 10px', display: 'grid', gap: 4 }}>
@@ -216,11 +241,12 @@ export default function Parametrage() {
 
 function SettingRow({ row }) {
   const isAvailable = AVAILABLE_BACKEND_LINKED.has(row.label)
+  const { theme, setTheme } = useTheme()
 
   return (
     <div style={{ borderBottom: '1px solid #f1f5f9', padding: '8px 0' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: '0.81rem', fontWeight: 600, color: '#111827' }}>{row.label}</div>
+        <div style={{ fontSize: '0.81rem', fontWeight: 600, color: 'var(--text)' }}>{row.label}</div>
         <span style={{
           fontSize: '0.7rem',
           fontWeight: 700,
@@ -233,29 +259,39 @@ function SettingRow({ row }) {
           {isAvailable ? 'Disponible EMS' : 'Bientôt disponible'}
         </span>
       </div>
-      {row.sub && <div style={{ marginTop: 2, fontSize: '0.73rem', color: '#6b7280' }}>{row.sub}</div>}
+      {row.sub && <div style={{ marginTop: 2, fontSize: '0.73rem', color: 'var(--text-secondary)' }}>{row.sub}</div>}
 
       {row.type === 'toggle' && <ToggleSwitch defaultOn={!!row.defaultOn} />}
 
       {row.type === 'select' && (
-        <select defaultValue={row.value} style={{ marginTop: 6, padding: '6px 9px', borderRadius: 7, border: '1px solid #cbd5e1', fontSize: '0.8rem', background: '#fff' }}>
+        <select defaultValue={row.value} style={{ marginTop: 6, padding: '6px 9px', borderRadius: 7, border: '1px solid #cbd5e1', fontSize: '0.8rem', background: 'var(--card)' }}>
           {(row.options || []).map((opt) => (
             <option key={opt} value={opt}>{opt}</option>
           ))}
         </select>
       )}
 
-      {row.type === 'radio' && <RadioInline options={row.options || []} defaultValue={row.defaultValue} />}
+      {row.type === 'radio' && row.label === 'Thème' ? (
+        <RadioInline
+          options={row.options || []}
+          value={theme === 'sombre' ? 'Sombre' : 'Clair'}
+          onChange={(opt) => setTheme(opt === 'Sombre' ? 'sombre' : 'clair')}
+        />
+      ) : row.type === 'radio' ? (
+        <RadioInline options={row.options || []} defaultValue={row.defaultValue} />
+      ) : null}
 
       {row.type === 'action' && (
-        <button style={{ marginTop: 6, padding: '6px 10px', borderRadius: 7, border: '1px solid #d1d5db', background: '#f8fafc', fontSize: '0.78rem', fontWeight: 600, color: '#1e293b', cursor: 'pointer' }}>
+        <button style={{ marginTop: 6, padding: '6px 10px', borderRadius: 7, border: '1px solid #d1d5db', background: 'var(--bg)', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
           {row.label}
         </button>
       )}
 
       {row.type === 'static' && (
-        <div style={{ marginTop: 4, fontSize: '0.8rem', color: '#0f172a', fontWeight: 600 }}>{row.value}</div>
+        <div style={{ marginTop: 4, fontSize: '0.8rem', color: 'var(--text)', fontWeight: 600 }}>{row.value}</div>
       )}
+
+      {row.type === 'timezone' && <TimezoneSelect />}
 
       {row.type === 'chips' && (
         <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -266,6 +302,31 @@ function SettingRow({ row }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function TimezoneSelect() {
+  const [tz, setTz] = useState(() => localStorage.getItem(LS_TZ_KEY) || 'auto')
+  const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  function handleChange(e) {
+    const val = e.target.value
+    setTz(val)
+    if (val === 'auto') localStorage.removeItem(LS_TZ_KEY)
+    else localStorage.setItem(LS_TZ_KEY, val)
+  }
+  return (
+    <div style={{ marginTop: 6 }}>
+      <select
+        value={tz}
+        onChange={handleChange}
+        style={{ padding: '6px 9px', borderRadius: 7, border: '1px solid #cbd5e1', fontSize: '0.8rem', background: 'var(--card)', minWidth: 280 }}
+      >
+        {TIMEZONES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+      </select>
+      <div style={{ marginTop: 4, fontSize: '0.72rem', color: '#64748b' }}>
+        Fuseau de l’appareil : <strong>{deviceTz}</strong>
+      </div>
     </div>
   )
 }
@@ -302,18 +363,24 @@ function ToggleSwitch({ defaultOn }) {
   )
 }
 
-function RadioInline({ options, defaultValue }) {
-  const [value, setValue] = useState(defaultValue || options[0])
+function RadioInline({ options, defaultValue, value: controlledValue, onChange }) {
+  const [internalValue, setInternalValue] = useState(defaultValue || options[0])
+  const isControlled = controlledValue !== undefined
+  const selected = isControlled ? controlledValue : internalValue
+  const handleClick = (opt) => {
+    if (!isControlled) setInternalValue(opt)
+    if (onChange) onChange(opt)
+  }
   return (
     <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
       {options.map((opt) => (
         <button
           key={opt}
-          onClick={() => setValue(opt)}
+          onClick={() => handleClick(opt)}
           style={{
-            border: `1px solid ${value === opt ? '#021630' : '#d1d5db'}`,
-            background: value === opt ? '#eff6ff' : '#ffffff',
-            color: value === opt ? '#0f172a' : '#475569',
+            border: `1px solid ${selected === opt ? '#021630' : '#d1d5db'}`,
+            background: selected === opt ? '#eff6ff' : '#ffffff',
+            color: selected === opt ? '#0f172a' : '#475569',
             borderRadius: 999,
             padding: '5px 10px',
             fontSize: '0.75rem',

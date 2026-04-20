@@ -8,6 +8,7 @@ from datetime import date, datetime
 from ..db import get_db
 from .. import models, schemas
 from ..utils import business_logic, activation_cloture, workflow, notifications, access_control
+from ..utils.audit import log_action
 
 router = APIRouter(prefix='/api/conges', tags=['conges'])
 
@@ -267,6 +268,7 @@ def activer_conge_demandeur(
 def activer_conge_rh(
     id_operation: int,
     matricule_rh: int,
+    request: Request = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -278,7 +280,9 @@ def activer_conge_rh(
     
     if not success:
         raise HTTPException(status_code=400, detail=message)
-    
+
+    log_action(db, matricule_rh, 'CONGE_ACTIVATED', 'operation', id_operation, {'matricule_rh': matricule_rh, 'id_operation': id_operation}, ip_address=request.client.host if request and request.client else None)
+
     return {"message": message}
 
 

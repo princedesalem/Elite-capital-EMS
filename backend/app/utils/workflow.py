@@ -460,7 +460,7 @@ def valider_operation(
                 type_notification=TypeNotificationEnum.VALIDATION,
                 titre="Demande approuvée",
                 message=(
-                    f"Votre demande #{id_operation} a été validée par tous les validateurs "
+                    f"Votre {(operation.type_demande or 'demande').lower()} a été validée par tous les validateurs "
                     f"et est maintenant approuvée. Vous pouvez maintenant l'activer."
                 ),
                 id_operation=id_operation
@@ -487,13 +487,31 @@ def valider_operation(
             type_notification=TypeNotificationEnum.VALIDATION,
             titre="Nouvelle demande à valider",
             message=(
-                f"Une demande #{id_operation} ({type_demande}) de {demandeur_label} "
+                f"Une {type_demande.lower()} de {demandeur_label} "
                 f"est en attente de votre validation en tant que {prochain_role_apres}."
             ),
             id_operation=id_operation
         )
         db.add(notification_prochain)
         db.commit()
+
+        # Email au prochain validateur
+        prochain_emp = db.query(Employe).filter(Employe.matricule == prochain_matricule_apres).first()
+        if prochain_emp and prochain_emp.email:
+            import os
+            from .email import send_email
+            app_url = os.getenv('APP_URL', 'http://localhost:5173')
+            send_email(
+                prochain_emp.email,
+                f"[EMS] Nouvelle demande à valider – {type_demande} de {demandeur_label}",
+                (
+                    f"Bonjour {prochain_emp.prenom} {prochain_emp.nom},\n\n"
+                    f"Une demande de {type_demande} de {demandeur_label} "
+                    f"est en attente de votre validation en tant que {prochain_role_apres}.\n\n"
+                    f"Connectez-vous à EMS pour la traiter : {app_url}\n\n"
+                    f"Cordialement,\nÉquipe EMS"
+                )
+            )
     
     return True, f"Validation enregistrée. En attente de {prochain_role_apres}"
 
@@ -593,7 +611,7 @@ def auto_valider_si_sequence_vide(
         type_notification=TypeNotificationEnum.VALIDATION,
         titre="Demande approuvée automatiquement",
         message=(
-            f"Votre demande #{id_operation} a été approuvée automatiquement. "
+            f"Votre {(operation.type_demande or 'demande').lower()} a été approuvée automatiquement. "
             f"Vous pouvez procéder à l'activation."
         ),
         id_operation=id_operation

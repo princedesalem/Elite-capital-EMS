@@ -47,7 +47,7 @@ export default function TasksPage() {
       const response = await api.get(`/api/tasks/${user.matricule}`, { params: { role: roleValue } })
       setTasks(Array.isArray(response.data) ? response.data : [])
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Impossible de charger les tâches')
+      setError(err?.response?.data?.detail || "Erreur lors du chargement des tâches")
     }
   }
 
@@ -78,18 +78,18 @@ export default function TasksPage() {
       await loadTasks()
       resetForm()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Erreur lors de l’enregistrement de la tâche')
+      setError(err?.response?.data?.detail || "Erreur lors de la sauvegarde de la tâche")
     }
   }
 
   const deleteTask = async (id) => {
-    if (!window.confirm('Supprimer cette tâche ?')) return
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette tâche ?")) return
     setError('')
     try {
       await api.delete(`/api/tasks/${id}`, { params: { matricule_actor: user?.matricule, role_actor: roleValue } })
       await loadTasks()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Erreur lors de la suppression de la tâche')
+      setError(err?.response?.data?.detail || "Erreur lors de la suppression de la tâche")
     }
   }
 
@@ -151,12 +151,12 @@ export default function TasksPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <CheckSquare size={22} /> Gestion des Tâches
+              <CheckSquare size={22} /> {"Tâches"}
             </h1>
-            <p style={{ margin: '4px 0 0', fontSize: '0.85rem', opacity: 0.8 }}>Gérez et suivez vos tâches et celles de votre équipe</p>
+            <p style={{ margin: '4px 0 0', fontSize: '0.85rem', opacity: 0.8 }}>{"Gérer les tâches et affectations"}</p>
           </div>
           <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(true) }} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Plus size={15} /> Nouvelle Tâche
+            <Plus size={15} /> {"Nouvelle tâche"}
           </button>
         </div>
       </div>
@@ -166,9 +166,9 @@ export default function TasksPage() {
       {/* Stats bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'À faire', count: counts.a_faire, color: '#64748b', bg: '#f8fafc' },
-          { label: 'En cours', count: counts.en_cours, color: '#021630', bg: '#f8fafc' },
-          { label: 'Terminées', count: counts.termine, color: '#021630', bg: '#f8fafc' },
+          { label: "À faire", count: counts.a_faire, color: '#64748b', bg: '#f8fafc' },
+          { label: "En cours", count: counts.en_cours, color: '#021630', bg: '#f8fafc' },
+          { label: "Terminé", count: counts.termine, color: '#021630', bg: '#f8fafc' },
         ].map(s => (
           <div key={s.label} style={{ background: s.bg, border: `1px solid ${s.color}22`, borderRadius: 10, padding: '14px 18px' }}>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: s.color }}>{s.count}</div>
@@ -182,40 +182,40 @@ export default function TasksPage() {
         <div className="form-card" style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <h3 style={{ margin: 0, color: '#021630', fontSize: '1rem', fontWeight: 700 }}>
-              {editingId ? 'Modifier la tâche' : 'Nouvelle tâche'}
+              {editingId ? "Modifier la tâche" : "Nouvelle tâche"}
             </h3>
             <button onClick={resetForm} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={18} /></button>
           </div>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label>Titre <span style={{ color: '#ce2b2b' }}>*</span></label>
+              <label>{"Titre"} <span style={{ color: '#ce2b2b' }}>*</span></label>
               <input className="form-control" value={form.titre} onChange={e => setForm({ ...form, titre: e.target.value })} placeholder="Titre de la tâche" required />
             </div>
             <div className="form-group">
-              <label>Description</label>
+              <label>{"Description"}</label>
               <textarea className="form-control" rows={2} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Détails optionnels..." />
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label>Priorité</label>
+                <label>{"Priorité"}</label>
                 <select className="form-control" value={form.priorite} onChange={e => setForm({ ...form, priorite: e.target.value })}>
                   {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label>Statut</label>
+                <label>{"Statut"}</label>
                 <select className="form-control" value={form.statut} onChange={e => setForm({ ...form, statut: e.target.value })}>
                   {STATUTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label>Date d'échéance</label>
+                <label>{"Date d'échéance"}</label>
                 <input className="form-control" type="date" value={form.date_echeance} onChange={e => setForm({ ...form, date_echeance: e.target.value })} />
               </div>
             </div>
             {isAdmin && (
               <div className="form-group">
-                <label>Assigner à</label>
+                <label>{"Assigné à"}</label>
                 <select className="form-control" value={form.assigne_a} onChange={e => setForm({ ...form, assigne_a: e.target.value })}>
                   <option value="">— Moi-même —</option>
                   {employees.map(emp => (
@@ -225,8 +225,8 @@ export default function TasksPage() {
               </div>
             )}
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-              <button type="submit" className="btn btn-primary">{editingId ? 'Enregistrer' : 'Créer la tâche'}</button>
-              <button type="button" className="btn" onClick={resetForm} style={{ background: '#f1f5f9', color: '#475569' }}>Annuler</button>
+              <button type="submit" className="btn btn-primary">{editingId ? "Enregistrer" : "Créer"}</button>
+              <button type="button" className="btn" onClick={resetForm} style={{ background: '#f1f5f9', color: '#475569' }}>{"Annuler"}</button>
             </div>
           </form>
         </div>
@@ -235,16 +235,16 @@ export default function TasksPage() {
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <input
-          style={{ padding: '7px 12px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: '0.85rem', minWidth: 200 }}
+          style={{ padding: '7px 12px', border: '1px solid var(--border)', borderRadius: 7, fontSize: '0.85rem', minWidth: 200 }}
           placeholder="Rechercher une tâche..."
           value={searchQ}
           onChange={e => setSearchQ(e.target.value)}
         />
-        <select style={{ padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: '0.82rem', background: 'white' }} value={filterStatut} onChange={e => setFilterStatut(e.target.value)}>
+        <select style={{ padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 7, fontSize: '0.82rem', background: 'var(--card)' }} value={filterStatut} onChange={e => setFilterStatut(e.target.value)}>
           <option value="tous">Tous les statuts</option>
           {STATUTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
-        <select style={{ padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: '0.82rem', background: 'white' }} value={filterPrio} onChange={e => setFilterPrio(e.target.value)}>
+        <select style={{ padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 7, fontSize: '0.82rem', background: 'var(--card)' }} value={filterPrio} onChange={e => setFilterPrio(e.target.value)}>
           <option value="tous">Toutes priorités</option>
           {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
         </select>
@@ -255,7 +255,7 @@ export default function TasksPage() {
       {filteredTasks.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 24px', color: '#94a3b8' }}>
           <CheckSquare size={36} style={{ opacity: 0.3, marginBottom: 12 }} />
-          <p style={{ margin: 0, fontSize: '0.95rem' }}>Aucune tâche trouvée</p>
+          <p style={{ margin: 0, fontSize: '0.95rem' }}>{"Aucune tâche"}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -265,7 +265,7 @@ export default function TasksPage() {
             const overdue = isOverdue(task)
             return (
               <div key={task.id} style={{
-                background: 'white',
+                background: 'var(--card)',
                 border: `1px solid ${overdue ? '#fecaca' : '#e2e8f0'}`,
                 borderLeft: `4px solid ${overdue ? '#ce2b2b' : prio.color}`,
                 borderRadius: 10,
@@ -289,7 +289,7 @@ export default function TasksPage() {
                 {/* Content */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                    <span style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.95rem', textDecoration: task.statut === 'termine' ? 'line-through' : 'none', opacity: task.statut === 'termine' ? 0.6 : 1 }}>{task.titre}</span>
+                    <span style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.95rem', textDecoration: task.statut === 'termine' ? 'line-through' : 'none', opacity: task.statut === 'termine' ? 0.6 : 1 }}>{task.titre}</span>
                     <span style={{ fontSize: '0.72rem', fontWeight: 700, color: prio.color, background: prio.bg, padding: '2px 8px', borderRadius: 20 }}>{prio.label}</span>
                     {overdue && <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#ce2b2b', background: '#fef2f2', padding: '2px 8px', borderRadius: 20 }}>En retard</span>}
                   </div>

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { GitBranch, Search, X, ChevronDown, ChevronUp, Pencil, XCircle, MapPin, Briefcase, AlignLeft, Save, Building2 } from 'lucide-react'
@@ -66,7 +66,7 @@ const CSS = `
 .n1-opt:last-child { border-bottom:none; }
 `
 
-// ─── Build N1 hierarchy ───────────────────────────────────────────────────────
+// --- Build N1 hierarchy -------------------------------------------------------
 function buildN1Tree(emps) {
   const map = {}
   emps.forEach(e => { map[String(e.matricule)] = { ...e, _key: String(e.matricule), children: [] } })
@@ -79,7 +79,7 @@ function buildN1Tree(emps) {
   return roots
 }
 
-// ─── Build group tree (group → members) ──────────────────────────────────────
+// --- Build group tree (group ? members) --------------------------------------
 function buildGroupTree(emps, getGroup) {
   const groups = {}
   emps.forEach(e => {
@@ -100,7 +100,7 @@ function buildGroupTree(emps, getGroup) {
     }))
 }
 
-// ─── Search helpers ───────────────────────────────────────────────────────────
+// --- Search helpers -----------------------------------------------------------
 function hits(employees, q) {
   if (!q) return new Set()
   const ql = q.toLowerCase()
@@ -121,7 +121,7 @@ function nodeHasHit(node, hitSet) {
   return (node.children || []).some(c => nodeHasHit(c, hitSet))
 }
 
-// ─── Box ──────────────────────────────────────────────────────────────────────
+// --- Box ----------------------------------------------------------------------
 function Box({ node, depth, collapsed, hasChildren, onToggle, hitSet, onEdit, editMode }) {
   const label = node._isGroup
     ? node.nom
@@ -157,7 +157,7 @@ function Box({ node, depth, collapsed, hasChildren, onToggle, hitSet, onEdit, ed
       )}
       {hasChildren && (
         <div className="oc-foot">
-          <span>{node.children.length}▪</span>
+          <span>{node.children.length}?</span>
           <span>{collapsed ? <ChevronDown size={11} /> : <ChevronUp size={11} />}</span>
         </div>
       )}
@@ -165,7 +165,7 @@ function Box({ node, depth, collapsed, hasChildren, onToggle, hitSet, onEdit, ed
   )
 }
 
-// ─── TreeNode ─────────────────────────────────────────────────────────────────
+// --- TreeNode -----------------------------------------------------------------
 function TreeNode({ node, depth = 0, hitSet, expandOverride, onEdit, editMode }) {
   const startCollapsed = depth >= 2
   const [collapsed, setCollapsed] = useState(startCollapsed)
@@ -202,7 +202,7 @@ function TreeNode({ node, depth = 0, hitSet, expandOverride, onEdit, editMode })
   )
 }
 
-// ─── Edit Modal ───────────────────────────────────────────────────────────────
+// --- Edit Modal ---------------------------------------------------------------
 function EditModal({ emp, allEmployees, onClose, onSave }) {
   const [form, setForm] = useState({
     fonction: emp.fonction || '',
@@ -276,7 +276,7 @@ function EditModal({ emp, allEmployees, onClose, onSave }) {
       onClick={onClose}
     >
       <div
-        style={{ background:'white', borderRadius:12, padding:'22px 26px', width:420, maxWidth:'95vw', boxShadow:'0 8px 32px rgba(0,0,0,0.22)', maxHeight:'90vh', overflowY:'auto' }}
+        style={{ background: 'var(--card)', borderRadius:12, padding:'22px 26px', width:420, maxWidth:'95vw', boxShadow:'0 8px 32px rgba(0,0,0,0.22)', maxHeight:'90vh', overflowY:'auto' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -309,7 +309,7 @@ function EditModal({ emp, allEmployees, onClose, onSave }) {
                 style={{
                   padding:'8px 10px', border:`1.5px solid ${showDrop ? DARK : '#d1d5db'}`, borderRadius:7,
                   cursor:'pointer', fontSize:'0.82rem', color: selectedN1 ? DARK : '#94a3b8',
-                  display:'flex', justifyContent:'space-between', alignItems:'center', background:'white'
+                  display:'flex', justifyContent:'space-between', alignItems:'center', background: 'var(--card)'
                 }}
               >
                 <span>{currentN1Label}</span>
@@ -317,13 +317,13 @@ function EditModal({ emp, allEmployees, onClose, onSave }) {
               </div>
               {showDrop && (
                 <div className="n1-drop">
-                  <div style={{ padding:'6px 8px', borderBottom:'1px solid #f1f5f9', position:'sticky', top:0, background:'white' }}>
+                  <div style={{ padding:'6px 8px', borderBottom:'1px solid #f1f5f9', position:'sticky', top:0, background: 'var(--card)' }}>
                     <input
                       autoFocus
                       value={n1Search}
                       onChange={e => setN1Search(e.target.value)}
                       placeholder="Rechercher par nom ou matricule..."
-                      style={{ width:'100%', padding:'5px 8px', border:'1px solid #e2e8f0', borderRadius:5, fontSize:'0.8rem', boxSizing:'border-box', outline:'none' }}
+                      style={{ width:'100%', padding:'5px 8px', border: '1px solid var(--border)', borderRadius:5, fontSize:'0.8rem', boxSizing:'border-box', outline:'none' }}
                       onClick={e => e.stopPropagation()}
                     />
                   </div>
@@ -350,7 +350,7 @@ function EditModal({ emp, allEmployees, onClose, onSave }) {
                     </div>
                   ))}
                   {filteredN1.length === 0 && n1Search && (
-                    <div style={{ padding:'10px', color:'#94a3b8', fontSize:'0.8rem', textAlign:'center' }}>Aucun résultat</div>
+                    <div style={{ padding:'10px', color:'#94a3b8', fontSize:'0.8rem', textAlign:'center' }}>{"Aucun résultat"}</div>
                   )}
                 </div>
               )}
@@ -359,7 +359,7 @@ function EditModal({ emp, allEmployees, onClose, onSave }) {
 
           {/* Subordinates info */}
           {subs.length > 0 && (
-            <div style={{ background:'#f8f9fb', borderRadius:7, padding:'10px 12px', border:'1px solid #e2e8f0' }}>
+            <div style={{ background:'#f8f9fb', borderRadius:7, padding:'10px 12px', border: '1px solid var(--border)' }}>
               <div style={{ fontSize:'0.78rem', fontWeight:700, color:DARK, marginBottom:6 }}>
                 Subordonnés directs ({subs.length})
               </div>
@@ -410,14 +410,14 @@ function EditModal({ emp, allEmployees, onClose, onSave }) {
         <div style={{ display:'flex', gap:8, marginTop:20, justifyContent:'flex-end' }}>
           <button
             onClick={onClose}
-            style={{ padding:'8px 16px', background:'#f1f5f9', border:'none', borderRadius:7, cursor:'pointer', fontWeight:600, fontSize:'0.82rem', color:'#64748b' }}
-          >Annuler</button>
+            style={{ padding:'8px 16px', background: 'var(--bg)', border:'none', borderRadius:7, cursor:'pointer', fontWeight:600, fontSize:'0.82rem', color:'#64748b' }}
+          >{"Annuler"}</button>
           <button
             onClick={handleSave}
             disabled={saving}
             style={{ padding:'8px 16px', background:DARK, color:'white', border:'none', borderRadius:7, cursor:'pointer', fontWeight:700, fontSize:'0.82rem', display:'flex', alignItems:'center', gap:5, opacity: saving ? 0.7 : 1 }}
           >
-            <Save size={13} /> {saving ? 'Sauvegarde...' : 'Enregistrer'}
+            <Save size={13} /> {saving ? '...' : "Enregistrer"}
           </button>
         </div>
       </div>
@@ -425,7 +425,7 @@ function EditModal({ emp, allEmployees, onClose, onSave }) {
   )
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// --- Main ---------------------------------------------------------------------
 export default function OrgChart() {
   const { user } = useAuth()
   const isAdmin = ['RH', 'DG', 'PCA', 'ADMIN'].includes(user?.role || '')
@@ -520,7 +520,7 @@ export default function OrgChart() {
 
   if (loading) return (
     <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>
-      Chargement de l'organigramme…
+      {"Chargement..."}
     </div>
   )
 
@@ -576,7 +576,7 @@ export default function OrgChart() {
 
       {/* View + Search controls */}
       <div style={{ display:'flex', gap:7, marginBottom:10, flexWrap:'wrap', alignItems:'center' }}>
-        <div style={{ display:'flex', background:'#f1f5f9', borderRadius:8, padding:3, gap:2, flexWrap:'wrap' }}>
+        <div style={{ display:'flex', background: 'var(--bg)', borderRadius:8, padding:3, gap:2, flexWrap:'wrap' }}>
           {VIEWS.map(v => (
             <button
               key={v.key}
@@ -599,7 +599,7 @@ export default function OrgChart() {
             value={searchQ}
             onChange={e => setSearchQ(e.target.value)}
             placeholder="Rechercher…"
-            style={{ width:'100%', padding:'6px 28px', border:'1px solid #e2e8f0', borderRadius:7, fontSize:'0.8rem', boxSizing:'border-box', outline:'none' }}
+            style={{ width:'100%', padding:'6px 28px', border: '1px solid var(--border)', borderRadius:7, fontSize:'0.8rem', boxSizing:'border-box', outline:'none' }}
           />
           {searchQ && (
             <button onClick={() => setSearchQ('')} style={{ position:'absolute', right:7, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', padding:1, color:'#94a3b8', display:'flex' }}>
@@ -610,11 +610,11 @@ export default function OrgChart() {
 
         {view !== 'nom' && (
           <>
-            <button onClick={() => doExpand('all')} style={{ padding:'5px 10px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:6, cursor:'pointer', fontSize:'0.75rem', color:'#475569', fontWeight:600 }}>
-              ↕ Tout développer
+            <button onClick={() => doExpand('all')} style={{ padding:'5px 10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius:6, cursor:'pointer', fontSize:'0.75rem', color:'#475569', fontWeight:600 }}>
+              ? Tout développer
             </button>
-            <button onClick={() => doExpand('reset')} style={{ padding:'5px 10px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:6, cursor:'pointer', fontSize:'0.75rem', color:'#475569', fontWeight:600 }}>
-              ↺ Réinitialiser
+            <button onClick={() => doExpand('reset')} style={{ padding:'5px 10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius:6, cursor:'pointer', fontSize:'0.75rem', color:'#475569', fontWeight:600 }}>
+              ↺ {"Réinitialiser"}
             </button>
           </>
         )}
@@ -622,10 +622,10 @@ export default function OrgChart() {
 
       {/* Tree views */}
       {view !== 'nom' && (
-        <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:10, overflow:'hidden' }}>
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius:10, overflow:'hidden' }}>
           {visibleRoots.length === 0 ? (
             <div style={{ textAlign:'center', padding:32, color:'#94a3b8', fontSize:'0.85rem' }}>
-              {searchQ ? `Aucun résultat pour « ${searchQ} »` : 'Aucune donnée'}
+              {searchQ ? `Aucun résultat pour « ${searchQ} »` : "Aucune donnée"}
             </div>
           ) : (
             <div className="oc-scroll">
@@ -646,9 +646,9 @@ export default function OrgChart() {
 
       {/* Par nom */}
       {view === 'nom' && (
-        <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:10, padding:'14px 16px' }}>
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius:10, padding:'14px 16px' }}>
           {nomList.length === 0 ? (
-            <div style={{ textAlign:'center', padding:24, color:'#94a3b8' }}>Aucun résultat</div>
+            <div style={{ textAlign:'center', padding:24, color:'#94a3b8' }}>{"Aucun résultat"}</div>
           ) : (
             <>
               <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginBottom:10, fontWeight:600 }}>
@@ -661,7 +661,7 @@ export default function OrgChart() {
                     <div
                       key={e.matricule}
                       style={{
-                        background:'white', borderRadius:6, padding:'8px 10px', position:'relative',
+                        background: 'var(--card)', borderRadius:6, padding:'8px 10px', position:'relative',
                         border: `1.5px solid ${isHit ? ACCENT : '#dde2ea'}`,
                         boxShadow: isHit ? `0 0 0 2px rgba(206,43,43,.18)` : '0 1px 3px rgba(0,0,0,0.06)',
                       }}
@@ -689,7 +689,7 @@ export default function OrgChart() {
                             {e.ville}
                           </span>
                         )}
-                        <span style={{ background:'#f1f5f9', color:'#475569', borderRadius:20, padding:'1px 7px', fontSize:'0.6rem', fontWeight:600 }}>
+                        <span style={{ background: 'var(--bg)', color:'#475569', borderRadius:20, padding:'1px 7px', fontSize:'0.6rem', fontWeight:600 }}>
                           #{e.matricule}
                         </span>
                       </div>

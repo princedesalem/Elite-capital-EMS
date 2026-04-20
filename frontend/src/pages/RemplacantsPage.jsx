@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Users, RefreshCw, CheckCircle, Briefcase, Umbrella, FileText, Clock, User, Calendar, ChevronDown, ChevronUp, Send } from 'lucide-react'
@@ -12,7 +12,7 @@ const TABS = [
   { id: 'sorties',     label: 'Sorties',     icon: Clock,     match: (t) => /sortie/i.test(t) },
 ]
 
-const th = { padding: '9px 12px', textAlign: 'left', fontWeight: 600, fontSize: '0.82rem', color: '#475569', background: '#f8fafc', whiteSpace: 'nowrap', borderBottom: '1px solid #e2e8f0' }
+const th = { padding: '9px 12px', textAlign: 'left', fontWeight: 600, fontSize: '0.82rem', color: '#475569', background: 'var(--bg)', whiteSpace: 'nowrap', borderBottom: '1px solid var(--border)' }
 const td = { padding: '9px 12px', color: '#374151', verticalAlign: 'middle', fontSize: '0.85rem', borderBottom: '1px solid #f1f5f9' }
 
 function StatusBadge({ statut }) {
@@ -82,7 +82,7 @@ function MesDemandesSection({ matricule, matchFn }) {
   }
 
   return (
-    <section style={{ background: '#fff', border: '1px solid #fbbf24', borderRadius: 10, overflow: 'hidden' }}>
+    <section style={{ background: 'var(--card)', border: '1px solid #fbbf24', borderRadius: 10, overflow: 'hidden' }}>
       <div style={{ padding: '12px 18px', background: '#fffbeb', borderBottom: '1px solid #fbbf24' }}>
         <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: '#92400e' }}>
           Demandes de remplacement — action requise
@@ -282,7 +282,7 @@ function GererSection({ token, matchFn, user }) {
         const props = propositions[op.id_operation] || []
         const opMsg = msg[op.id_operation]
         return (
-          <div key={op.id_operation} style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', transition: 'box-shadow 0.15s' }}>
+          <div key={op.id_operation} style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: 'var(--card)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', transition: 'box-shadow 0.15s' }}>
             <button
               onClick={() => handleExpand(op.id_operation)}
               style={{ width: '100%', padding: '13px 16px', cursor: 'pointer', background: isOpen ? '#f8faff' : '#fff', border: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left', borderBottom: isOpen ? '1px solid #e2e8f0' : 'none', gap: 12 }}
@@ -291,7 +291,7 @@ function GererSection({ token, matchFn, user }) {
                 <span style={{ flexShrink: 0, minWidth: 42, padding: '3px 8px', borderRadius: 6, background: '#0f172a', color: '#fff', fontWeight: 700, fontSize: '0.72rem', letterSpacing: '0.04em', textAlign: 'center' }}>
                   #{op.id_operation}
                 </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 700, fontSize: '0.88rem', color: '#0f172a', flexShrink: 0 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 700, fontSize: '0.88rem', color: 'var(--text)', flexShrink: 0 }}>
                   <User size={13} style={{ color: '#64748b' }} />
                   {op.nom_employe}
                 </span>
@@ -330,7 +330,7 @@ function GererSection({ token, matchFn, user }) {
                     onClick={() => loadProps(op.id_operation)}
                     disabled={loadingProp[op.id_operation]}
                     title="Actualiser"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 11px', borderRadius: 7, border: '1px solid #e2e8f0', cursor: 'pointer', background: '#fff', color: '#475569', fontSize: '0.8rem', fontWeight: 500 }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 11px', borderRadius: 7, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--card)', color: '#475569', fontSize: '0.8rem', fontWeight: 500 }}
                   >
                     <RefreshCw size={13} />
                     Actualiser
@@ -377,8 +377,8 @@ function GererSection({ token, matchFn, user }) {
                                 </button>
                               ) : isRH ? (
                                 p.demande_envoyee ? (
-                                  <span style={{ padding: '4px 10px', borderRadius: 5, background: '#f1f5f9', color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600 }}>
-                                    Demandé ✓
+                                  <span style={{ padding: '4px 10px', borderRadius: 5, background: 'var(--bg)', color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600 }}>
+                                    Demandé ?
                                   </span>
                                 ) : (
                                   <button
@@ -422,7 +422,7 @@ export default function RemplacantsPage() {
           <Users size={20} color="#fff" />
         </div>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>Remplaçants</h1>
+          <h1 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>Remplaçants</h1>
           <p style={{ margin: 0, fontSize: '0.83rem', color: '#64748b' }}>Remplaçants proposés à partir des subordonnés directs</p>
         </div>
       </div>
@@ -455,8 +455,8 @@ export default function RemplacantsPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <MesDemandesSection matricule={user?.matricule} matchFn={currentTab.match} />
 
-        <section style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
-          <div style={{ padding: '12px 18px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+        <section style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ padding: '12px 18px', background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
             <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>Mes remplacements — {currentTab.label}</h3>
             <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>Opérations pour lesquelles vous avez été désigné remplaçant</p>
           </div>
@@ -466,8 +466,8 @@ export default function RemplacantsPage() {
         </section>
 
         {isManager && (
-          <section style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ padding: '12px 18px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+          <section style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ padding: '12px 18px', background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
               <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>Gérer les remplacements — {currentTab.label}</h3>
               <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>Générez et validez les remplaçants pour les opérations en cours</p>
             </div>

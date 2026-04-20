@@ -3,7 +3,6 @@ import api from '../services/api'
 import { Settings, Building2, GitBranch, LayoutGrid, Briefcase, Plus, Pencil, Trash2, X, Users } from 'lucide-react'
 import OrgChart from './OrgChart'
 import { useAuth } from '../contexts/AuthContext'
-
 export default function Administration() {
   const { user } = useAuth()
   const role = String(user?.role || '').toUpperCase()
@@ -45,6 +44,8 @@ export default function Administration() {
   const [deptForm, setDeptForm] = useState({ nom: '', id_entite: '', id_direction: '' })
   const [editingDeptId, setEditingDeptId] = useState(null)
   const [savingDept, setSavingDept] = useState(false)
+  const [deptVillesIds, setDeptVillesIds] = useState([])
+  const [availableVilles, setAvailableVilles] = useState([])
 
   const toggleOpen = (setter, id) => {
     setter((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -306,7 +307,7 @@ export default function Administration() {
   const submitFonction = async () => {
     const libelle = fonctionForm.libelle.trim()
     if (!libelle) {
-      setError('Le libelle de la fonction est obligatoire')
+      setError("Le libellé de la fonction est obligatoire")
       return
     }
     setSavingFonction(true)
@@ -325,7 +326,7 @@ export default function Administration() {
       resetFonctionForm()
       await loadFonctions()
     } catch (e) {
-      setError(e?.response?.data?.detail || 'Erreur lors de la sauvegarde de la fonction')
+      setError(e?.response?.data?.detail || "Erreur lors de la sauvegarde de la fonction")
     } finally {
       setSavingFonction(false)
     }
@@ -345,7 +346,7 @@ export default function Administration() {
       if (editingFonctionId === f.id_fonction) resetFonctionForm()
       await loadFonctions()
     } catch (e) {
-      setError(e?.response?.data?.detail || 'Erreur lors de la suppression de la fonction')
+      setError(e?.response?.data?.detail || "Erreur lors de la suppression de la fonction")
     }
   }
 
@@ -380,7 +381,7 @@ export default function Administration() {
   // ── Directions CRUD handlers ──
   const submitDirection = async () => {
     const { nom, id_entite } = directionForm
-    if (!nom.trim() || !id_entite) { setError('Nom et entité sont obligatoires'); return }
+    if (!nom.trim() || !id_entite) { setError("Le nom et l'entité sont obligatoires"); return }
     setSavingDirection(true); setError('')
     try {
       if (editingDirectionId) {
@@ -402,23 +403,46 @@ export default function Administration() {
   }
 
   // ── Départements CRUD handlers ──
+  const handleDeptEntiteChange = async (id_entite) => {
+    setDeptForm(prev => ({ ...prev, id_entite, id_direction: '' }))
+    setDeptVillesIds([])
+    if (!id_entite) { setAvailableVilles([]); return }
+    try {
+      const res = await api.get(`/employees/villes?id_entite=${id_entite}`)
+      setAvailableVilles(res.data || [])
+    } catch {
+      setAvailableVilles([])
+    }
+  }
+
+  const toggleDeptVille = (id_localisation) => {
+    setDeptVillesIds(prev =>
+      prev.includes(id_localisation)
+        ? prev.filter(id => id !== id_localisation)
+        : [...prev, id_localisation]
+    )
+  }
+
   const submitDept = async () => {
     const { nom, id_entite, id_direction } = deptForm
-    if (!nom.trim() || !id_entite) { setError('Nom et entité sont obligatoires'); return }
+    if (!nom.trim() || !id_entite) { setError("Le nom et l'entité sont obligatoires"); return }
     setSavingDept(true); setError('')
     try {
       const body = { nom: nom.trim(), id_entite: Number(id_entite), id_direction: id_direction ? Number(id_direction) : null }
+      if (!editingDeptId) {
+        body.villes_ids = deptVillesIds
+      }
       if (editingDeptId) {
         await api.put(`/employees/departements/${editingDeptId}`, body)
       } else {
         await api.post('/employees/departements', body)
       }
-      setDeptForm({ nom: '', id_entite: '', id_direction: '' }); setEditingDeptId(null); await loadData()
+      setDeptForm({ nom: '', id_entite: '', id_direction: '' }); setDeptVillesIds([]); setAvailableVilles([]); setEditingDeptId(null); await loadData()
     } catch (e) { setError(e?.response?.data?.detail || "Erreur sauvegarde département") }
     finally { setSavingDept(false) }
   }
-  const startEditDept = (d) => { setEditingDeptId(d.dept_id); setDeptForm({ nom: d.nom, id_entite: String(d.id_entite || ''), id_direction: String(d.id_direction || '') }) }
-  const resetDeptForm = () => { setDeptForm({ nom: '', id_entite: '', id_direction: '' }); setEditingDeptId(null) }
+  const startEditDept = (d) => { setEditingDeptId(d.dept_id); setDeptForm({ nom: d.nom, id_entite: String(d.id_entite || ''), id_direction: String(d.id_direction || '') }); setDeptVillesIds([]); setAvailableVilles([]) }
+  const resetDeptForm = () => { setDeptForm({ nom: '', id_entite: '', id_direction: '' }); setDeptVillesIds([]); setAvailableVilles([]); setEditingDeptId(null) }
   const deleteDept = async (d) => {
     if (!window.confirm(`Supprimer le département "${d.nom}" ?`)) return
     setError('')
@@ -441,10 +465,10 @@ export default function Administration() {
         }}
       >
         <h1 style={{ margin: 0, marginBottom: 4, fontSize: '1.2rem', fontWeight: '700', display:'flex', alignItems:'center', gap:8 }}>
-          <Settings size={28}/> Administration
+          <Settings size={28}/> {"Administration"}
         </h1>
         <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.95 }}>
-          Gestion des Entités, Directions, Départements et Fonctions
+          {"Paramètres et configuration du système"}
         </p>
       </div>
 
@@ -452,40 +476,40 @@ export default function Administration() {
       {success && <div style={{ background: '#dcfce7', color: '#166534', padding: '12px', borderRadius: '6px', marginBottom: '20px' }}>{success}</div>}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10, borderBottom: '1px solid #e5e7eb', paddingBottom: 8, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, borderBottom: '1px solid var(--border)', paddingBottom: 8, flexWrap: 'wrap' }}>
         <button
           onClick={() => setActiveTab('entites')}
           style={{ background: activeTab === 'entites' ? '#ce2b2b' : 'white', color: activeTab === 'entites' ? 'white' : '#021630', padding: '7px 12px', borderRadius: '6px 6px 0px 0px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '0.82rem', display:'inline-flex', alignItems:'center', gap:6 }}
         >
-          <Building2 size={15}/> Entités ({entitesData.length})
+          <Building2 size={15}/> {"Entités"} ({entitesData.length})
         </button>
         <button
           onClick={() => setActiveTab('directions')}
           style={{ background: activeTab === 'directions' ? '#ce2b2b' : 'white', color: activeTab === 'directions' ? 'white' : '#021630', padding: '7px 12px', borderRadius: '6px 6px 0px 0px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '0.82rem', display:'inline-flex', alignItems:'center', gap:6 }}
         >
-          <GitBranch size={15}/> Directions ({directionsData.length})
+          <GitBranch size={15}/> {"Directions"} ({directionsData.length})
         </button>
         <button
           onClick={() => setActiveTab('departements')}
           style={{ background: activeTab === 'departements' ? '#ce2b2b' : 'white', color: activeTab === 'departements' ? 'white' : '#021630', padding: '7px 12px', borderRadius: '6px 6px 0px 0px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '0.82rem', display:'inline-flex', alignItems:'center', gap:6 }}
         >
-          <LayoutGrid size={15}/> Départements ({departementsData.length})
+          <LayoutGrid size={15}/> {"Départements"} ({departementsData.length})
         </button>
         <button
           onClick={() => setActiveTab('fonctions')}
           style={{ background: activeTab === 'fonctions' ? '#ce2b2b' : 'white', color: activeTab === 'fonctions' ? 'white' : '#021630', padding: '7px 12px', borderRadius: '6px 6px 0px 0px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '0.82rem', display:'inline-flex', alignItems:'center', gap:6 }}
         >
-          <Briefcase size={15}/> Fonctions ({fonctionsData.length})
+          <Briefcase size={15}/> {"Fonctions"} ({fonctionsData.length})
         </button>
         <button
           onClick={() => setActiveTab('organigramme')}
           style={{ background: activeTab === 'organigramme' ? '#ce2b2b' : 'white', color: activeTab === 'organigramme' ? 'white' : '#021630', padding: '7px 12px', borderRadius: '6px 6px 0px 0px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '0.82rem', display:'inline-flex', alignItems:'center', gap:6 }}
         >
-          <Users size={15}/> Organigramme
+          <Users size={15}/> {"Organigramme"}
         </button>
       </div>
 
-      {loading && <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>Chargement...</div>}
+      {loading && <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>{"Chargement..."}</div>}
 
       {/* Entités Tab */}
       {activeTab === 'entites' && !loading && (
@@ -493,7 +517,7 @@ export default function Administration() {
           {canEditAdmin && (
             <div className="card" style={{ marginBottom: 12, padding: 14 }}>
               <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#021630', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Building2 size={15}/> {editingEntiteId ? 'Modifier l\'entité' : 'Ajouter une entité'}
+                <Building2 size={15}/> {editingEntiteId ? "Modifier l'entité" : "Ajouter une entité"}
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <input
@@ -503,11 +527,11 @@ export default function Administration() {
                   style={{ flex: 1, minWidth: 220, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: '0.85rem' }}
                 />
                 <button onClick={submitEntite} disabled={savingEntite} style={{ background: '#021630', color: 'white', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}>
-                  <Plus size={13}/> {editingEntiteId ? 'Mettre à jour' : 'Ajouter'}
+                  <Plus size={13}/> {editingEntiteId ? "Mettre à jour" : "Ajouter"}
                 </button>
                 {editingEntiteId && (
                   <button onClick={resetEntiteForm} style={{ background: '#e5e7eb', color: '#374151', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}>
-                    <X size={13}/> Annuler
+                    <X size={13}/> {"Annuler"}
                   </button>
                 )}
               </div>
@@ -530,10 +554,10 @@ export default function Administration() {
                     {canEditAdmin && (
                       <>
                         <button onClick={() => startEditEntite(entite)} style={{ background: '#021630', color: 'white', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.77rem' }}>
-                          <Pencil size={12}/> Modifier
+                          <Pencil size={12}/> {"Modifier"}
                         </button>
                         <button onClick={() => deleteEntite(entite)} style={{ background: '#ce2b2b', color: 'white', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.77rem' }}>
-                          <Trash2 size={12}/> Supprimer
+                          <Trash2 size={12}/> {"Supprimer"}
                         </button>
                       </>
                     )}
@@ -577,7 +601,7 @@ export default function Administration() {
           {canEditAdmin && (
             <div className="card" style={{ marginBottom: 12, padding: 14 }}>
               <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#021630', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <GitBranch size={15}/> {editingDirectionId ? 'Modifier la direction' : 'Ajouter une direction'}
+                <GitBranch size={15}/> {editingDirectionId ? "Modifier la direction" : "Ajouter une direction"}
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <input
@@ -595,11 +619,11 @@ export default function Administration() {
                   {entitesData.map(e => <option key={e.id_entite} value={e.id_entite}>{e.nom}</option>)}
                 </select>
                 <button onClick={submitDirection} disabled={savingDirection} style={{ background: '#021630', color: 'white', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}>
-                  <Plus size={13}/> {editingDirectionId ? 'Mettre à jour' : 'Ajouter'}
+                  <Plus size={13}/> {editingDirectionId ? "Mettre à jour" : "Ajouter"}
                 </button>
                 {editingDirectionId && (
                   <button onClick={resetDirectionForm} style={{ background: '#e5e7eb', color: '#374151', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}>
-                    <X size={13}/> Annuler
+                    <X size={13}/> {"Annuler"}
                   </button>
                 )}
               </div>
@@ -639,10 +663,10 @@ export default function Administration() {
                     {canEditAdmin && (
                       <>
                         <button onClick={() => startEditDirection(direction)} style={{ background: '#021630', color: 'white', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.77rem' }}>
-                          <Pencil size={12}/> Modifier
+                          <Pencil size={12}/> {"Modifier"}
                         </button>
                         <button onClick={() => deleteDirection(direction)} style={{ background: '#ce2b2b', color: 'white', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.77rem' }}>
-                          <Trash2 size={12}/> Supprimer
+                          <Trash2 size={12}/> {"Supprimer"}
                         </button>
                       </>
                     )}
@@ -673,7 +697,7 @@ export default function Administration() {
           {canEditAdmin && (
             <div className="card" style={{ marginBottom: 12, padding: 14 }}>
               <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#021630', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <LayoutGrid size={15}/> {editingDeptId ? 'Modifier le département' : 'Ajouter un département'}
+                <LayoutGrid size={15}/> {editingDeptId ? "Modifier le département" : "Ajouter un département"}
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <input
@@ -682,7 +706,7 @@ export default function Administration() {
                   placeholder="Nom du département"
                   style={{ flex: 2, minWidth: 180, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: '0.85rem' }}
                 />
-                <select value={deptForm.id_entite} onChange={e => setDeptForm(prev => ({ ...prev, id_entite: e.target.value, id_direction: '' }))} style={{ flex: 1, minWidth: 140, padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: '0.85rem' }}>
+                <select value={deptForm.id_entite} onChange={e => handleDeptEntiteChange(e.target.value)} style={{ flex: 1, minWidth: 140, padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: '0.85rem' }}>
                   <option value="">— Entité —</option>
                   {entitesData.map(e => <option key={e.id_entite} value={e.id_entite}>{e.nom}</option>)}
                 </select>
@@ -690,12 +714,31 @@ export default function Administration() {
                   <option value="">— Direction (optionnel) —</option>
                   {directionsData.filter(d => !deptForm.id_entite || String(d.id_entite) === String(deptForm.id_entite)).map(d => <option key={d.id_direction} value={d.id_direction}>{d.nom}</option>)}
                 </select>
+                {!editingDeptId && availableVilles.length > 0 && (
+                  <div style={{ width: '100%', marginTop: 6 }}>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 6, fontWeight: 600 }}>
+                      Villes de présence (optionnel) :
+                    </p>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {availableVilles.map(v => (
+                        <label key={v.id_localisation} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.82rem', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={deptVillesIds.includes(v.id_localisation)}
+                            onChange={() => toggleDeptVille(v.id_localisation)}
+                          />
+                          {v.ville}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <button onClick={submitDept} disabled={savingDept} style={{ background: '#021630', color: 'white', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}>
-                  <Plus size={13}/> {editingDeptId ? 'Mettre à jour' : 'Ajouter'}
+                  <Plus size={13}/> {editingDeptId ? "Mettre à jour" : "Ajouter"}
                 </button>
                 {editingDeptId && (
                   <button onClick={resetDeptForm} style={{ background: '#e5e7eb', color: '#374151', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}>
-                    <X size={13}/> Annuler
+                    <X size={13}/> {"Annuler"}
                   </button>
                 )}
               </div>
@@ -737,10 +780,10 @@ export default function Administration() {
                   {canEditAdmin && (
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                       <button onClick={() => startEditDept(dept)} style={{ background: '#021630', color: 'white', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.77rem' }}>
-                        <Pencil size={12}/> Modifier
+                        <Pencil size={12}/> {"Modifier"}
                       </button>
                       <button onClick={() => deleteDept(dept)} style={{ background: '#ce2b2b', color: 'white', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.77rem' }}>
-                        <Trash2 size={12}/> Supprimer
+                        <Trash2 size={12}/> {"Supprimer"}
                       </button>
                     </div>
                   )}
@@ -788,14 +831,14 @@ export default function Administration() {
                     disabled={savingFonction}
                     style={{ background: '#ce2b2b', color: 'white', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   >
-                    <Plus size={14}/> {editingFonctionId ? 'Mettre à jour' : 'Ajouter'}
+                    <Plus size={14}/> {editingFonctionId ? "Mettre à jour" : "Ajouter"}
                   </button>
                   {editingFonctionId && (
                     <button
                       onClick={resetFonctionForm}
-                      style={{ background: '#e5e7eb', color: '#111827', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      style={{ background: '#e5e7eb', color: 'var(--text)', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                     >
-                      <X size={14}/> Annuler
+                      <X size={14}/> {"Annuler"}
                     </button>
                   )}
                 </div>
@@ -805,13 +848,13 @@ export default function Administration() {
 
           <div style={{ display: 'grid', gap: 10 }}>
             {fonctionsData.length === 0 ? (
-              <div className="card" style={{ color: '#6b7280' }}>Aucune fonction de référence</div>
+              <div className="card" style={{ color: 'var(--text-secondary)' }}>Aucune fonction de référence</div>
             ) : (
               fonctionsData.map((f) => (
                 <div key={f.id_fonction} className="card" style={{ padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, borderLeft: '6px solid #021630' }}>
                   <div>
-                    <div style={{ fontWeight: 600, color: '#0f172a' }}>{f.libelle}</div>
-                    <div style={{ fontSize: '0.82rem', color: '#6b7280', marginTop: 2 }}>ID: {f.id_fonction}</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text)' }}>{f.libelle}</div>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: 2 }}>ID: {f.id_fonction}</div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                       {f.direction_nom && (
                         <span style={{ padding: '1px 7px', borderRadius: 99, background: '#eff6ff', color: '#2563eb', fontSize: '0.75rem', fontWeight: 600 }}>Dir. {f.direction_nom}</span>
@@ -827,13 +870,13 @@ export default function Administration() {
                         onClick={() => startEditFonction(f)}
                         style={{ background: '#021630', color: 'white', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                       >
-                        <Pencil size={13}/> Modifier
+                        <Pencil size={13}/> {"Modifier"}
                       </button>
                       <button
                         onClick={() => deleteFonction(f)}
                         style={{ background: '#ce2b2b', color: 'white', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                       >
-                        <Trash2 size={13}/> Supprimer
+                        <Trash2 size={13}/> {"Supprimer"}
                       </button>
                     </div>
                   )}

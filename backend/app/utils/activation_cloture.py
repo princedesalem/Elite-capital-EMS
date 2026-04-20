@@ -169,7 +169,7 @@ def activer_operation_auto_apres_validation(
             id_operation,
             "Activation en attente de confirmation",
             (
-                f"La demande #{id_operation} ({operation.type_demande or 'opération'}) de {nom_employe} "
+                f"La {(operation.type_demande or 'demande').lower()} de {nom_employe} "
                 f"a été approuvée par tous les validateurs. Votre confirmation d'activation est requise."
             ),
             db

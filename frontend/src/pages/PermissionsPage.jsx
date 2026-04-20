@@ -5,9 +5,11 @@ import { useAuth } from '../contexts/AuthContext'
 import WorkflowModal from '../components/WorkflowModal'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import ModifiedBadge from '../components/ModifiedBadge'
+import { operationLabel } from '../utils/operationLabel'
 import '../styles/Operations.css'
+
 import {
-  ClipboardList, AlertTriangle, Calendar, FileText, Pin, Clock, Search, CheckCircle, Upload, Eye, Download, Trash2, X
+  ClipboardList, AlertTriangle, Calendar, FileText, Pin, Clock, Search, CheckCircle, Upload, Eye, Download, Trash2, X, FileDown
 } from 'lucide-react'
 
 const PERMISSIONS_CONVENTIONNELLES = {
@@ -221,7 +223,7 @@ const cleanNonConventionalMotif = (value) => String(value || '').replace(/^Permi
 function Tabs({ active, setActive, counts }) {
   return (
     <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
-      {[['envoye', 'Envoyé', counts.envoye], ['recu', 'Reçu', counts.recu]].map(([key, label, count]) => (
+      {[['envoye', "Envoyé", counts.envoye], ['recu', "Recu", counts.recu]].map(([key, label, count]) => (
         <button key={key} onClick={() => setActive(key)} style={{ flex: 1, padding: '10px 8px', border: 'none', cursor: 'pointer', background: active === key ? '#fff' : '#f9fafb', fontWeight: active === key ? 700 : 500, fontSize: '0.82rem', borderBottom: active === key ? '2px solid #ce2b2b' : '2px solid transparent', color: active === key ? '#ce2b2b' : '#6b7280' }}>
           {label}
           {count > 0 && <span style={{ marginLeft: 5, padding: '1px 6px', borderRadius: 999, fontSize: '0.68rem', background: active === key ? '#ce2b2b' : '#e5e7eb', color: active === key ? '#fff' : '#374151' }}>{count}</span>}
@@ -245,7 +247,7 @@ function FilterBar({ date, setDate, statut, setStatut, source, setSource, emette
         <option value="">Tous états</option>
         {['--', 'AttenteRH', 'Active', 'ClotureDemandee', 'Cloturee'].map(value => <option key={value} value={value}>{value}</option>)}
       </select>
-      {(date || statut || source || emetteur || etat) && <button onClick={() => { setDate(''); setStatut(''); setSource(''); setEmetteur(''); setEtat('') }} style={{ padding: '5px 9px', borderRadius: 5, border: '1px solid #f87171', background: '#fee2e2', color: '#991b1b', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}>Réinitialiser</button>}
+      {(date || statut || source || emetteur || etat) && <button onClick={() => { setDate(''); setStatut(''); setSource(''); setEmetteur(''); setEtat('') }} style={{ padding: '5px 9px', borderRadius: 5, border: '1px solid #f87171', background: '#fee2e2', color: '#991b1b', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 600 }}>{"Réinitialiser les filtres"}</button>}
     </div>
   )
 }
@@ -395,6 +397,7 @@ export default function PermissionsPage() {
   const [loading, setLoading] = useState(true)
   const senderName = useMemo(() => [user?.prenom, user?.nom].filter(Boolean).join(' ').trim() || user?.nom || 'Utilisateur', [user])
   const [showForm, setShowForm] = useState(false)
+  const [downloadingPdf, setDownloadingPdf] = useState(null)
   const matricule = useMemo(() => Number(user?.matricule || user?.sub || 0), [user])
   const roleUtilisateur = useMemo(() => String(user?.role || '').toUpperCase(), [user])
   const estRh = useMemo(() => ['RH', 'ADMIN'].includes(roleUtilisateur), [roleUtilisateur])
@@ -637,7 +640,7 @@ export default function PermissionsPage() {
   }, [workflowAValider, workflowValide, workflowRefuse, filterDate, filterStatut, filterSource, filterEmetteur, filterEtat, rowEtat, activeTab, senderName])
 
   const handleAnnuler = async (id) => {
-    if (!confirm('Annuler cette demande ?')) return
+    if (!confirm("Êtes-vous sûr de vouloir annuler cette demande ?")) return
     try {
       await api.delete(`/api/operations/${id}`)
       await loadData()
@@ -687,7 +690,7 @@ export default function PermissionsPage() {
   }
 
   const handleRetourAnticipe = async (id) => {
-    if (!confirm('Confirmer le retour anticipé ? Les jours restants seront restitués au solde.')) return
+    if (!confirm("Êtes-vous sûr de vouloir déclarer un retour anticipé ?")) return
     setLoadingOp(id)
     try {
       const today = new Date().toISOString().split('T')[0]
@@ -777,6 +780,7 @@ export default function PermissionsPage() {
     const isLoading = loadingOp === id
     const btnStyle = (base) => ({ ...base, opacity: isLoading ? 0.6 : 1 })
     const eyeBtn = <button key="eye" onClick={(e) => { e.stopPropagation(); setDetailPermissionItem({ ...item, ...(permissionsById.get(item.id_operation) || {}) }) }} style={{ ...rowBtn, background: '#6366f1' }} title="Voir détails"><Eye size={12} /></button>
+    const pdfBtn = isValid ? <button key="pdf" onClick={(e) => { e.stopPropagation(); setDownloadingPdf(id); api.get(`/api/pdf/permission/${id}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `permission_${id}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }).finally(() => setDownloadingPdf(null)) }} style={{ ...rowBtn, background: '#0e7490', display: 'inline-flex', alignItems: 'center', opacity: downloadingPdf === id ? 0.6 : 1 }} disabled={downloadingPdf === id} title="Télécharger PDF"><FileDown size={13} /></button> : null
 
     if (isRefus) return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{eyeBtn}</div>
 
@@ -784,11 +788,11 @@ export default function PermissionsPage() {
       const canApprove = !isValid && item.__workflow_bucket === 'recu'
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'validé') }} style={okBtn} disabled={isLoading}>Approuver</button>}
-          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'refusé') }} style={dangerBtn} disabled={isLoading}>Refuser</button>}
+          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'validé') }} style={okBtn} disabled={isLoading}>{"Approuver"}</button>}
+          {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'refusé') }} style={dangerBtn} disabled={isLoading}>{"Refuser"}</button>}
           {estRh && isValid && etat === 'AttenteRH' && <button onClick={(e) => { e.stopPropagation(); handleActiverRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer'}</button>}
-          {estRh && isValid && etat === 'Active' && <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer'}</button>}
-          {eyeBtn}
+          {estRh && isValid && etat === 'Active' && <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : "Clôturer le congé"}</button>}
+          {pdfBtn}{eyeBtn}
         </div>
       )
     }
@@ -796,41 +800,41 @@ export default function PermissionsPage() {
     if (!isValid) {
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <button onClick={(e) => { e.stopPropagation(); handleEditPermission(item) }} style={primaryBtn}>Modifier</button>
-          <button onClick={(e) => { e.stopPropagation(); handleAnnuler(id) }} style={dangerBtn}>Annuler</button>
+          <button onClick={(e) => { e.stopPropagation(); handleEditPermission(item) }} style={primaryBtn}>{"Modifier"}</button>
+          <button onClick={(e) => { e.stopPropagation(); handleAnnuler(id) }} style={dangerBtn}>{"Annuler"}</button>
           {eyeBtn}
         </div>
       )
     }
 
     if (etat === '--') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleActiver(id) }} style={btnStyle(okBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer'}</button>{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleActiver(id) }} style={btnStyle(okBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer'}</button>{pdfBtn}{eyeBtn}</div>
     }
 
     if (etat === 'AttenteRH') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente RH</span>{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>{"En attente RH"}</span>{pdfBtn}{eyeBtn}</div>
     }
 
     if (etat === 'Active') {
       const dateFin = item.date_fin || item.date_retour
       const canRetourAnticipe = dateFin && new Date() < new Date(dateFin)
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer'}</button>{canRetourAnticipe && <button onClick={(e) => { e.stopPropagation(); handleRetourAnticipe(id) }} style={btnStyle({ ...primaryBtn, background: '#3b82f6' })} disabled={isLoading}>{isLoading ? '…' : 'Retour anticipé'}</button>}{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : "Clôturer le congé"}</button>{canRetourAnticipe && <button onClick={(e) => { e.stopPropagation(); handleRetourAnticipe(id) }} style={btnStyle({ ...primaryBtn, background: '#3b82f6' })} disabled={isLoading}>{isLoading ? '…' : 'Retour anticipé'}</button>}{pdfBtn}{eyeBtn}</div>
     }
 
     if (etat === 'ClotureDemandee') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente confirmation RH</span>{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>{"En attente confirmation RH"}</span>{pdfBtn}{eyeBtn}</div>
     }
 
-    return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{eyeBtn}</div>
+    return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{pdfBtn}{eyeBtn}</div>
   }
 
   const renderRows = (rows, isRecu) => {
     if (!rows.length) return <tr><td colSpan={isRecu ? 11 : 10} style={{ ...td, textAlign: 'center', color: '#9ca3af' }}>Aucune demande</td></tr>
     return rows.map(item => (
       <tr key={item.id_operation} onClick={() => setSelectedOperationForWorkflow(item.id_operation)} style={{ cursor: 'pointer' }}>
-        <td style={td} title={item.motif || item.titre || item.type_permission || `Permission #${item.id_operation}`}>
+        <td style={td} title={operationLabel(item)}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 600 }}>{item.motif || item.titre || item.type_permission || `Permission #${item.id_operation}`}</span>
+            <span style={{ fontWeight: 600 }}>{operationLabel(item)}</span>
             <ModifiedBadge estModifie={item.est_modifie} dateModification={item.date_modification} />
           </div>
         </td>
@@ -896,12 +900,12 @@ export default function PermissionsPage() {
     ))
   }
 
-  if (loading) return <div style={{ padding: 28 }}>Chargement...</div>
+  if (loading) return <div style={{ padding: 28 }}>{"Chargement..."}</div>
 
   return (
     <div style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#021630' }}>Gestion des Permissions</h1>
+        <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#021630' }}>{"Gestion des Permissions"}</h1>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => { setShowUploadSection(true); setShowForm(false) }} style={{ padding: '9px 14px', background: '#fff', color: '#334155', border: '1.5px solid #d1d5db', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}><Upload size={15} /> Téléverser preuves</button>
           <button onClick={() => { setShowForm(true); resetConventionnelleForm(); resetNonConventionnelleForm(); setPermissionType('conventionnelle'); setFormError(''); setFormSuccess(''); setShowUploadSection(false) }} style={{ padding: '9px 14px', background: '#ce2b2b', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Nouvelle demande</button>
@@ -912,7 +916,7 @@ export default function PermissionsPage() {
         <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb', marginBottom: 12, padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{permissionEditMode || permNonConvEditMode ? 'Modifier la demande de permission' : 'Nouvelle demande de permission'}</strong>
-            <button onClick={() => { setShowForm(false); resetConventionnelleForm(); resetNonConventionnelleForm(); setPermissionType('conventionnelle') }} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Annuler</button>
+            <button onClick={() => { setShowForm(false); resetConventionnelleForm(); resetNonConventionnelleForm(); setPermissionType('conventionnelle') }} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>{"Annuler"}</button>
           </div>
           {formError && <div className="alert alert-danger" style={{ background: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formError}</div>}
           {formSuccess && <div className="alert alert-success" style={{ background: '#d1fae5', color: '#065f46', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formSuccess}</div>}
@@ -1035,7 +1039,7 @@ export default function PermissionsPage() {
           <div style={{ background: '#fff', borderRadius: 12, padding: 28, width: '90%', maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>Téléversement de preuves de permission</strong>
-            <button onClick={() => setShowUploadSection(false)} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Fermer</button>
+            <button onClick={() => setShowUploadSection(false)} style={{ padding: '7px 12px', background: '#eef2f7', color: '#334155', border: '1px solid #dbe2ea', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>{"Fermer"}</button>
           </div>
           {formError && <div style={{ background: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formError}</div>}
           {formSuccess && <div style={{ background: '#d1fae5', color: '#065f46', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formSuccess}</div>}
