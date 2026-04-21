@@ -3,6 +3,7 @@ import api from '../services/api'
 import { Settings, Building2, GitBranch, LayoutGrid, Briefcase, Plus, Pencil, Trash2, X, Users } from 'lucide-react'
 import OrgChart from './OrgChart'
 import { useAuth } from '../contexts/AuthContext'
+import { confirmDialog } from '../components/ui/bridge'
 export default function Administration() {
   const { user } = useAuth()
   const role = String(user?.role || '').toUpperCase()
@@ -339,7 +340,8 @@ export default function Administration() {
   }
 
   const deleteFonction = async (f) => {
-    if (!window.confirm(`Supprimer la fonction \"${f.libelle}\" ?`)) return
+    const ok = await confirmDialog({ title: 'Supprimer la fonction', message: `Supprimer la fonction «${f.libelle}» ?`, variant: 'danger', confirmLabel: 'Supprimer' })
+    if (!ok) return
     setError('')
     try {
       await api.delete(`/employees/admin/fonctions-reference/${f.id_fonction}`)
@@ -372,7 +374,8 @@ export default function Administration() {
   const startEditEntite = (e) => { setEditingEntiteId(e.id_entite); setEntiteInput(e.nom) }
   const resetEntiteForm = () => { setEntiteInput(''); setEditingEntiteId(null) }
   const deleteEntite = async (e) => {
-    if (!window.confirm(`Supprimer l'entité "${e.nom}" ? Cela supprimera aussi ses directions et départements.`)) return
+    const ok = await confirmDialog({ title: 'Supprimer l’entité', message: `Supprimer l'entité «${e.nom}» ? Cela supprimera aussi ses directions et départements.`, variant: 'danger', confirmLabel: 'Supprimer' })
+    if (!ok) return
     setError('')
     try { await api.delete(`/employees/entites/${e.id_entite}`); await loadData() }
     catch (err) { setError(err?.response?.data?.detail || "Erreur suppression entité") }
@@ -396,7 +399,8 @@ export default function Administration() {
   const startEditDirection = (d) => { setEditingDirectionId(d.id_direction); setDirectionForm({ nom: d.nom, id_entite: String(d.id_entite || '') }) }
   const resetDirectionForm = () => { setDirectionForm({ nom: '', id_entite: '' }); setEditingDirectionId(null) }
   const deleteDirection = async (d) => {
-    if (!window.confirm(`Supprimer la direction "${d.nom}" ? Ses départements seront aussi supprimés.`)) return
+    const ok = await confirmDialog({ title: 'Supprimer la direction', message: `Supprimer la direction «${d.nom}» ? Ses départements seront aussi supprimés.`, variant: 'danger', confirmLabel: 'Supprimer' })
+    if (!ok) return
     setError('')
     try { await api.delete(`/employees/directions/${d.id_direction}`); await loadData() }
     catch (err) { setError(err?.response?.data?.detail || "Erreur suppression direction") }
@@ -444,7 +448,8 @@ export default function Administration() {
   const startEditDept = (d) => { setEditingDeptId(d.dept_id); setDeptForm({ nom: d.nom, id_entite: String(d.id_entite || ''), id_direction: String(d.id_direction || '') }); setDeptVillesIds([]); setAvailableVilles([]) }
   const resetDeptForm = () => { setDeptForm({ nom: '', id_entite: '', id_direction: '' }); setDeptVillesIds([]); setAvailableVilles([]); setEditingDeptId(null) }
   const deleteDept = async (d) => {
-    if (!window.confirm(`Supprimer le département "${d.nom}" ?`)) return
+    const ok = await confirmDialog({ title: 'Supprimer le département', message: `Supprimer le département «${d.nom}» ?`, variant: 'danger', confirmLabel: 'Supprimer' })
+    if (!ok) return
     setError('')
     try { await api.delete(`/employees/departements/${d.dept_id}`); await loadData() }
     catch (err) { setError(err?.response?.data?.detail || "Erreur suppression département") }

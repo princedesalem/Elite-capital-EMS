@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { Users, Plus, X, TrendingUp, Briefcase, AlertCircle, ChevronDown } from 'lucide-react'
 import '../styles/Operations.css'
+import { confirmDialog } from '../components/ui/bridge'
 
 const ACCENT = '#ce2b2b'
 const DARK = '#021630'
@@ -90,7 +91,8 @@ export default function WorkforcePlanning() {
   }
 
   const deletePosition = async (id) => {
-    if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce poste ?")) return
+    const ok = await confirmDialog({ title: 'Supprimer le poste', message: 'Êtes-vous sûr de vouloir supprimer ce poste ?', variant: 'danger', confirmLabel: 'Supprimer' })
+    if (!ok) return
     await api.delete(`/api/workforce/positions/${id}`).catch(() => null)
     await loadPositions()
   }

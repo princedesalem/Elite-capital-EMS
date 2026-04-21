@@ -8,6 +8,7 @@ from datetime import date, timedelta, datetime
 from ..db import get_db
 from .. import models
 from ..utils import permissions as perm_utils, workflow, notifications, activation_cloture, business_logic, access_control
+from ..utils.audit import log_action
 import os
 
 router = APIRouter(prefix='/api/permissions', tags=['permissions'])
@@ -161,6 +162,10 @@ def creer_permission_conventionnelle(
         raise HTTPException(status_code=400, detail=message)
     
     db.commit()
+    log_action(db, createur, 'CREATE_PERMISSION', 'operation', operation.id_operation,
+               {'type_permission': type_permission_norm, 'sous_type': sous_type,
+                'duree_jours': duree, 'matricule_cible': matricule,
+                'date_debut': str(date_debut), 'date_fin': str(date_fin), 'motif': motif})
 
     # Auto-valider immédiatement si PCA/AG (séquence vide)
     workflow.auto_valider_si_sequence_vide(operation.id_operation, matricule, db)
@@ -256,6 +261,9 @@ def creer_permission_non_conventionnelle(
         raise HTTPException(status_code=400, detail=message)
     
     db.commit()
+    log_action(db, createur, 'CREATE_PERMISSION_NON_CONV', 'operation', operation.id_operation,
+               {'duree_jours': duree_calculee, 'matricule_cible': matricule,
+                'date_debut': str(date_debut), 'date_fin': str(date_fin), 'motif': motif})
 
     # Auto-valider immédiatement si PCA/AG (séquence vide)
     workflow.auto_valider_si_sequence_vide(operation.id_operation, matricule, db)
@@ -568,6 +576,8 @@ def modifier_permission(
 
     db.commit()
     db.refresh(operation)
+    log_action(db, operation.matricule, 'UPDATE_PERMISSION', 'operation', id_operation,
+               {'date_debut': str(date_debut), 'date_fin': str(date_fin), 'duree_jours': duree, 'motif': motif})
 
     return {
         'message': 'Demande de permission modifiée avec succès',

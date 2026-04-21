@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { Code, RefreshCw, Play, Trash2, Plus, X } from 'lucide-react'
+import { toast, confirmDialog } from '../components/ui/bridge'
 
 const ACCENT = '#ce2b2b'
 const DARK = '#021630'
@@ -84,11 +85,12 @@ export default function SandboxPage() {
     const updated = { ...flags, [key]: !flags[key] }; setFlags(updated); saveFlags(updated)
   }
 
-  const resetAllLS = () => {
-    if (!window.confirm("Êtes-vous sûr de vouloir vider le cache ?")) return
+  const resetAllLS = async () => {
+    const ok = await confirmDialog({ title: 'Vider le cache', message: 'Êtes-vous sûr de vouloir vider le cache local ?', variant: 'warning', confirmLabel: 'Vider le cache' })
+    if (!ok) return
     const toKeep = ['auth_token', 'ems_user']
     Object.keys(localStorage).forEach(k => { if (!toKeep.some(s => k.startsWith(s))) localStorage.removeItem(k) })
-    alert("Cache vidé avec succès")
+    toast.success('Cache vidé avec succès')
     window.location.reload()
   }
 
@@ -158,13 +160,20 @@ export default function SandboxPage() {
           <h3 style={{ margin: '0 0 14px', color: DARK, fontSize: '0.95rem', fontWeight: 700 }}>{"Flags de fonctionnalités"}</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {FLAG_FEATURES.map(f => (
-              <div key={f.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: 'var(--bg)', borderRadius: 8 }}>
+              <div key={f.key} title="Fonctionnalité en cours de développement" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: 'var(--bg)', borderRadius: 8, opacity: 0.7 }}>
                 <div>
-                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: DARK }}>{f.label}</div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: DARK, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {f.label}
+                    <span style={{ padding: '2px 8px', background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: 999, fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.02em' }}>Bientôt</span>
+                  </div>
                   <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{f.description}</div>
                 </div>
-                <button onClick={() => toggleFlag(f.key)} style={{ width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer', background: flags[f.key] ? ACCENT : '#cbd5e1', transition: 'background 0.2s', position: 'relative', flexShrink: 0 }}>
-                  <span style={{ position: 'absolute', top: 3, left: flags[f.key] ? 19 : 3, width: 16, height: 16, borderRadius: '50%', background: 'var(--card)', transition: 'left 0.2s', display: 'block', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                <button
+                  disabled
+                  title="Bientôt disponible"
+                  aria-disabled="true"
+                  style={{ width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'not-allowed', background: '#e2e8f0', transition: 'background 0.2s', position: 'relative', flexShrink: 0 }}>
+                  <span style={{ position: 'absolute', top: 3, left: 3, width: 16, height: 16, borderRadius: '50%', background: 'var(--card)', display: 'block', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
                 </button>
               </div>
             ))}

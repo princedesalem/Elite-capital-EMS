@@ -8,6 +8,8 @@ import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import ModifiedBadge from '../components/ModifiedBadge'
 import { operationLabel } from '../utils/operationLabel'
 import { Eye, FileDown, Users2 } from 'lucide-react'
+import { toast, confirmDialog } from '../components/ui/bridge'
+import { Pagination, usePagination, TableSkeleton } from '../components/ui'
 
 const th = { padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', fontSize: '0.7rem', color: '#64748b', fontWeight: 700, whiteSpace: 'nowrap' }
 const td = { padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '0.76rem', color: '#111827', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
@@ -266,26 +268,41 @@ export default function CongesPage() {
   }
 
   const handleAnnuler = async (id) => {
-    if (!confirm("Êtes-vous sûr de vouloir annuler cette demande ?")) return
+    const ok = await confirmDialog({
+      title: 'Annuler la demande',
+      message: 'Êtes-vous sûr de vouloir annuler cette demande ?',
+      variant: 'danger',
+      confirmLabel: 'Annuler la demande',
+      cancelLabel: 'Retour',
+    })
+    if (!ok) return
     try {
       await api.delete(`/api/operations/${id}`)
       await loadData()
+      toast.success('Demande annulée')
     } catch (err) {
-      alert('Erreur: ' + err.message)
+      toast.error(err.message)
     }
   }
 
   const handleWorkflow = async (id, statut) => {
     let commentaire = null
     if (statut === 'refusé') {
-      commentaire = window.prompt('Motif du refus (obligatoire):')
-      if (!commentaire?.trim()) return
+      commentaire = await confirmDialog({
+        title: 'Motif du refus',
+        message: 'Indiquez le motif du refus. Ce commentaire sera visible par le demandeur.',
+        variant: 'danger',
+        confirmLabel: 'Refuser',
+        requireInput: { label: 'Motif du refus', placeholder: 'Ex. solde insuffisant…', multiline: true, required: true },
+      })
+      if (!commentaire) return
     }
     try {
       await api.post(`/api/workflow/valider/${id}`, null, { params: { matricule_validateur: user.matricule, statut, ...(commentaire ? { commentaire } : {}) } })
       await loadData()
+      toast.success(statut === 'refusé' ? 'Demande refusée' : 'Demande validée')
     } catch (err) {
-      alert('Erreur: ' + (err?.response?.data?.detail || err.message))
+      toast.error(err?.response?.data?.detail || err.message)
     }
   }
 
@@ -293,10 +310,10 @@ export default function CongesPage() {
     setLoadingOp(id)
     try {
       const response = await api.post(`/api/conges/activation/${id}/demandeur`, null, { params: { matricule_demandeur: user.matricule } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur activation: ' + (err?.response?.data?.detail || err.message))
+      toast.error('Activation : ' + (err?.response?.data?.detail || err.message))
     } finally {
       setLoadingOp(null)
     }
@@ -306,25 +323,31 @@ export default function CongesPage() {
     setLoadingOp(id)
     try {
       const response = await api.post(`/api/conges/cloture/${id}/demandeur`, null, { params: { matricule_demandeur: user.matricule } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur cloture: ' + (err?.response?.data?.detail || err.message))
+      toast.error('Clôture : ' + (err?.response?.data?.detail || err.message))
     } finally {
       setLoadingOp(null)
     }
   }
 
   const handleRetourAnticipe = async (id) => {
-    if (!confirm("Êtes-vous sûr de vouloir déclarer un retour anticipé ?")) return
+    const ok = await confirmDialog({
+      title: 'Retour anticipé',
+      message: 'Déclarer un retour anticipé ? Les jours restants seront restitués au solde.',
+      variant: 'warning',
+      confirmLabel: 'Confirmer le retour',
+    })
+    if (!ok) return
     setLoadingOp(id)
     try {
       const today = new Date().toISOString().split('T')[0]
       const response = await api.post(`/api/conges/cloture/${id}/demandeur`, null, { params: { matricule_demandeur: user.matricule, retour_anticipe: true, date_retour_anticipe: today } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur retour anticipé: ' + (err?.response?.data?.detail || err.message))
+      toast.error('Retour anticipé : ' + (err?.response?.data?.detail || err.message))
     } finally {
       setLoadingOp(null)
     }
@@ -334,10 +357,10 @@ export default function CongesPage() {
     setLoadingOp(id)
     try {
       const response = await api.post(`/api/conges/activation/${id}/rh`, null, { params: { matricule_rh: user.matricule } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur activation RH: ' + (err?.response?.data?.detail || err.message))
+      toast.error('Activation RH : ' + (err?.response?.data?.detail || err.message))
     } finally {
       setLoadingOp(null)
     }
@@ -347,10 +370,10 @@ export default function CongesPage() {
     setLoadingOp(id)
     try {
       const response = await api.post(`/api/conges/cloture/${id}/rh`, null, { params: { matricule_rh: user.matricule } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur clôture RH: ' + (err?.response?.data?.detail || err.message))
+      toast.error('Clôture RH : ' + (err?.response?.data?.detail || err.message))
     } finally {
       setLoadingOp(null)
     }
@@ -492,7 +515,14 @@ export default function CongesPage() {
     ))
   }
 
-  if (loading) return <div style={{ padding: 28 }}>{"Chargement..."}</div>
+  const activeSource = activeTab === 'envoye' ? envoye : recu
+  const pagination = usePagination(activeSource, { pageSize: 20 })
+
+  if (loading) return (
+    <div style={{ padding: 20 }}>
+      <TableSkeleton rows={6} columns={9} />
+    </div>
+  )
 
   return (
     <div style={{ padding: 20 }}>
@@ -558,8 +588,9 @@ export default function CongesPage() {
               <th style={{ ...th, width: '21%' }}>Actions</th>
             </tr>
           </thead>
-          <tbody>{activeTab === 'envoye' ? renderRows(envoye, false) : renderRows(recu, true)}</tbody>
+          <tbody>{renderRows(pagination.pageItems, activeTab === 'recu')}</tbody>
         </table>
+        <Pagination {...pagination} />
         {activeTab === 'recu' && estRh && workflowPcaAg.length > 0 && (
           <div style={{ marginTop: 24 }}>
             <div style={{ padding: '10px 14px', background: 'rgba(2,22,46,0.06)', borderLeft: '3px solid var(--bleu)', borderTop: '1px solid rgba(2,22,46,0.15)', borderBottom: '1px solid rgba(2,22,46,0.15)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--bleu)', letterSpacing: '0.02em' }}>

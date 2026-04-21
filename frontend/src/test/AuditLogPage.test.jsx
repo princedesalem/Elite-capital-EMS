@@ -179,4 +179,49 @@ describe('AuditLogPage', () => {
       expect(lastCall).toContain('sort_col=actor')
     })
   })
+
+  // ── Regression: "Détails" column / modal was empty ──
+
+  it('opens the detail modal when a row is clicked and shows a JSON detail', async () => {
+    await renderPage()
+    await waitForData()
+
+    // Click the row whose detail is populated (EMPLOYEE_CREATED with {"nom":"Dupont"}).
+    // Text appears in both <option> and <td>, so pick the <tr> ancestor.
+    const row = screen.getAllByText('EMPLOYEE_CREATED')
+      .map(el => el.closest('tr'))
+      .find(tr => tr !== null)
+    expect(row).toBeTruthy()
+    fireEvent.click(row)
+
+    // Modal header
+    await waitFor(() => {
+      expect(screen.getByText(/Détail de l'entrée #/i)).toBeInTheDocument()
+    })
+
+    // Detail pre-formatted JSON
+    const pre = document.querySelector('pre')
+    expect(pre).not.toBeNull()
+    expect(pre.textContent).toMatch(/"nom"/)
+    expect(pre.textContent).toMatch(/Dupont/)
+  })
+
+  it('renders a dash (—) in the detail modal when the detail is null', async () => {
+    await renderPage()
+    await waitForData()
+
+    // LOGIN_SUCCESS has detail=null in the mock; filter to the table row.
+    const row = screen.getAllByText('LOGIN_SUCCESS')
+      .map(el => el.closest('tr'))
+      .find(tr => tr !== null)
+    expect(row).toBeTruthy()
+    fireEvent.click(row)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Détail de l'entrée #/i)).toBeInTheDocument()
+    })
+
+    // No <pre> for JSON, a dash is rendered instead
+    expect(document.querySelector('pre')).toBeNull()
+  })
 })

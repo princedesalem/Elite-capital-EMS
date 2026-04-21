@@ -8,6 +8,8 @@ import CommentairesMission from '../components/CommentairesMission'
 import WorkflowModal from '../components/WorkflowModal'
 import AutocompleteInput from '../components/AutocompleteInput'
 import '../styles/Operations.css'
+import { toast, confirmDialog } from '../components/ui/bridge'
+import { Pagination, usePagination } from '../components/ui'
 import {
   Target, Home, FileText, BarChart2, Users, ClipboardList, AlertTriangle,
   Pin, Calendar, Plus, Trash2, Plane, CheckCircle, XCircle, Pencil,
@@ -812,11 +814,13 @@ export default function Operations() {
       })
       
       if (checkResponse.data.conflit) {
-        if (window.confirm(checkResponse.data.message + '. Voulez-vous continuer quand même ?')) {
-          // L'utilisateur confirme malgré le conflit
-        } else {
-          return
-        }
+        const ok = await confirmDialog({
+          title: 'Chevauchement détecté',
+          message: checkResponse.data.message + '. Voulez-vous continuer quand même ?',
+          variant: 'warning',
+          confirmLabel: 'Continuer',
+        })
+        if (!ok) return
       }
       
       if (missionEditMode && missionEditId) {
@@ -1093,7 +1097,7 @@ export default function Operations() {
 
   function supprimerSegmentMission(id) {
     if (missionSegments.length <= 1) {
-      alert('Au moins une destination est requise')
+      toast.warning('Au moins une destination est requise')
       return
     }
     setMissionSegments(missionSegments.filter(s => s.id !== id))
@@ -1159,9 +1163,14 @@ export default function Operations() {
 
   async function annulerOperation(id_operation, e) {
     e.stopPropagation()
-    if (!window.confirm(`Êtes-vous sûr de vouloir annuler l'opération #${id_operation} ?`)) {
-      return
-    }
+    const ok = await confirmDialog({
+      title: 'Annuler l’opération',
+      message: `Êtes-vous sûr de vouloir annuler l'opération #${id_operation} ?`,
+      variant: 'danger',
+      confirmLabel: 'Annuler l’opération',
+      cancelLabel: 'Retour',
+    })
+    if (!ok) return
     try {
       await api.delete(`/api/operations/${id_operation}`)
       setSuccess(`Opération #${id_operation} annulée avec succès`)
@@ -1349,9 +1358,9 @@ export default function Operations() {
       return true
     } catch (error) {
       if (error.response && error.response.data && error.response.data.detail) {
-        alert(error.response.data.detail)
+        toast.error(error.response.data.detail)
       } else {
-        alert("Erreur lors de la validation")
+        toast.error('Erreur lors de la validation')
       }
       return false
     }
@@ -1384,7 +1393,13 @@ export default function Operations() {
   }
 
   async function marquerFraisPaye(idMission) {
-    if (!window.confirm('Vous confirmez que les frais de mission ont été payés ?')) return
+    const ok = await confirmDialog({
+      title: 'Confirmer le paiement',
+      message: 'Vous confirmez que les frais de mission ont été payés ?',
+      variant: 'primary',
+      confirmLabel: 'Confirmer le paiement',
+    })
+    if (!ok) return
     try {
       setError('')
       setSuccess('')
@@ -1467,87 +1482,28 @@ export default function Operations() {
       <>
         <div className="form-card" style={{ marginTop: '14px' }}>
           <h3>Envoyé - {typeLabel}</h3>
-          <div style={{ display: 'grid', gap: '8px' }}>
-            {envoye.map((item) => (
-              <div
-                key={`envoye-${typeFiltre}-${item.id_operation}`}
-                onClick={() => setSelectedOperationForWorkflow(item.id_operation)}
-                style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  padding: '10px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '10px'
-                }}
-              >
-                <div style={{ display: 'grid', gap: '4px' }}>
-                  <strong style={{ fontSize: '0.9rem' }}>#{item.id_operation} - {item.type_demande || typeLabel}</strong>
-                  <span style={{ fontSize: '0.8rem', color: '#475569' }}>{item.motif || item.titre || 'Sans motif'}</span>
-                </div>
-                <div style={{ textAlign: 'right', display: 'grid', gap: '3px' }}>
-                  <span style={{ fontSize: '0.78rem', color: 'var(--text)' }}>{item.statut || 'en attente'}</span>
-                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{formaterDateOperation(item)}</span>
-                </div>
-              </div>
-            ))}
-            {envoye.length === 0 && (
-              <div style={{ fontSize: '0.82rem', color: '#64748b' }}>Aucune demande envoyée pour cette section.</div>
-            )}
-          </div>
+          <PaginatedEnvoyeList
+            items={envoye}
+            typeFiltre={typeFiltre}
+            typeLabel={typeLabel}
+            setSelectedOperationForWorkflow={setSelectedOperationForWorkflow}
+            formaterDateOperation={formaterDateOperation}
+          />
         </div>
 
         {estValidateur && (
           <div className="form-card" style={{ marginTop: '12px' }}>
             <h3>Reçu - {typeLabel}</h3>
-            <div style={{ display: 'grid', gap: '8px' }}>
-              {recu.map((item) => {
-                const statutItem = String(item?.statut || '').toLowerCase()
-                const estRefuse = statutItem.includes('refus')
-                const estValide = statutItem.includes('valid')
-                const estOperationValidee = estValide && !estRefuse
-                const peutActiver = (roleUtilisateur === 'RH' || roleUtilisateur === 'ADMIN') && estOperationValidee
-                return (
-                  <div
-                    key={`recu-${typeFiltre}-${item.__recu_statut}-${item.id_operation}`}
-                    onClick={() => setSelectedOperationForWorkflow(item.id_operation)}
-                    style={{
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      padding: '10px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: '10px'
-                    }}
-                  >
-                    <div style={{ display: 'grid', gap: '4px' }}>
-                      <strong style={{ fontSize: '0.9rem' }}>#{item.id_operation} - {item.type_demande || typeLabel}</strong>
-                      <span style={{ fontSize: '0.8rem', color: '#475569' }}>{item.motif || item.titre || 'Sans motif'}</span>
-                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{libelleRecu(item)}</span>
-                    </div>
-                    <div style={{ textAlign: 'right', display: 'grid', gap: '6px', justifyItems: 'end' }}>
-                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{formaterDateOperation(item)}</span>
-                      {peutActiver && (
-                        <button
-                          className="btn btn-success"
-                          onClick={(e) => activerOperationRh(item.id_operation, e)}
-                          style={{ fontSize: '0.75rem', padding: '4px 8px' }}
-                        >
-                          Activer
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-              {recu.length === 0 && (
-                <div style={{ fontSize: '0.82rem', color: '#64748b' }}>Aucune demande reçue pour cette section.</div>
-              )}
-            </div>
+            <PaginatedRecuList
+              items={recu}
+              typeFiltre={typeFiltre}
+              typeLabel={typeLabel}
+              roleUtilisateur={roleUtilisateur}
+              setSelectedOperationForWorkflow={setSelectedOperationForWorkflow}
+              formaterDateOperation={formaterDateOperation}
+              libelleRecu={libelleRecu}
+              activerOperationRh={activerOperationRh}
+            />
           </div>
         )}
       </>
@@ -1691,7 +1647,7 @@ export default function Operations() {
     if (!selectedOperation) return
     const commentaire = statut === 'refusé' ? workflowDecisionComment.trim() : (workflowDecisionComment.trim() || null)
     if (statut === 'refusé' && !commentaire) {
-      alert('Le motif de refus est obligatoire')
+      toast.warning('Le motif de refus est obligatoire')
       return
     }
 
@@ -3338,3 +3294,99 @@ export default function Operations() {
     </div>
   )
 }
+
+function PaginatedEnvoyeList({ items, typeFiltre, typeLabel, setSelectedOperationForWorkflow, formaterDateOperation }) {
+  const pagination = usePagination(items, { pageSize: 10 })
+  return (
+    <>
+      <div style={{ display: 'grid', gap: '8px' }}>
+        {pagination.pageItems.map((item) => (
+          <div
+            key={`envoye-${typeFiltre}-${item.id_operation}`}
+            onClick={() => setSelectedOperationForWorkflow(item.id_operation)}
+            style={{
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '10px',
+              cursor: 'pointer',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '10px'
+            }}
+          >
+            <div style={{ display: 'grid', gap: '4px' }}>
+              <strong style={{ fontSize: '0.9rem' }}>#{item.id_operation} - {item.type_demande || typeLabel}</strong>
+              <span style={{ fontSize: '0.8rem', color: '#475569' }}>{item.motif || item.titre || 'Sans motif'}</span>
+            </div>
+            <div style={{ textAlign: 'right', display: 'grid', gap: '3px' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text)' }}>{item.statut || 'en attente'}</span>
+              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{formaterDateOperation(item)}</span>
+            </div>
+          </div>
+        ))}
+        {items.length === 0 && (
+          <div style={{ fontSize: '0.82rem', color: '#64748b' }}>Aucune demande envoyée pour cette section.</div>
+        )}
+      </div>
+      {items.length > 0 && <Pagination {...pagination} />}
+    </>
+  )
+}
+
+function PaginatedRecuList({ items, typeFiltre, typeLabel, roleUtilisateur, setSelectedOperationForWorkflow, formaterDateOperation, libelleRecu, activerOperationRh }) {
+  const pagination = usePagination(items, { pageSize: 10 })
+  return (
+    <>
+      <div style={{ display: 'grid', gap: '8px' }}>
+        {pagination.pageItems.map((item) => {
+          const statutItem = String(item?.statut || '').toLowerCase()
+          const estRefuse = statutItem.includes('refus')
+          const estValide = statutItem.includes('valid')
+          const estOperationValidee = estValide && !estRefuse
+          const peutActiver = (roleUtilisateur === 'RH' || roleUtilisateur === 'ADMIN') && estOperationValidee
+          return (
+            <div
+              key={`recu-${typeFiltre}-${item.__recu_statut}-${item.id_operation}`}
+              onClick={() => setSelectedOperationForWorkflow(item.id_operation)}
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                padding: '10px',
+                cursor: 'pointer',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '10px'
+              }}
+            >
+              <div style={{ display: 'grid', gap: '4px' }}>
+                <strong style={{ fontSize: '0.9rem' }}>#{item.id_operation} - {item.type_demande || typeLabel}</strong>
+                <span style={{ fontSize: '0.8rem', color: '#475569' }}>{item.motif || item.titre || 'Sans motif'}</span>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{libelleRecu(item)}</span>
+              </div>
+              <div style={{ textAlign: 'right', display: 'grid', gap: '6px', justifyItems: 'end' }}>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{formaterDateOperation(item)}</span>
+                {peutActiver && (
+                  <button
+                    className="btn btn-success"
+                    onClick={(e) => activerOperationRh(item.id_operation, e)}
+                    style={{ fontSize: '0.75rem', padding: '4px 8px' }}
+                  >
+                    Activer
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+        {items.length === 0 && (
+          <div style={{ fontSize: '0.82rem', color: '#64748b' }}>Aucune demande reçue pour cette section.</div>
+        )}
+      </div>
+      {items.length > 0 && <Pagination {...pagination} />}
+    </>
+  )
+}
+
+

@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
-import LeaveRequestForm from '../components/LeaveRequestForm'
 import AvatarCircle from '../components/AvatarCircle'
 import { BarChart2, LogOut, Star, MessageSquare, ThumbsUp, BarChart, Send, Plus, X, ChevronDown, Search, Gift, Users, Briefcase, Clock, MoreVertical, Pencil, Trash2, CheckCircle } from 'lucide-react'
+import { toast, confirmDialog } from '../components/ui/bridge'
 
 // -- Team Engagement (backend persisted) --
 const WISHES_KEY = 'ems_wishes_v1'
@@ -198,18 +198,18 @@ export default function Home() {
     try {
       if (createModal === 'entite') {
         await api.post('/employees/create-entite', null, { params: { nom: createForm.nom } })
-        alert('Entité créée avec succès!')
+        toast.success('Entité créée avec succès')
       } else if (createModal === 'direction') {
         await api.post('/employees/create-direction', null, { params: { nom: createForm.nom, id_entite: createForm.id_entite } })
-        alert('Direction créée avec succès!')
+        toast.success('Direction créée avec succès')
       } else if (createModal === 'departement') {
         await api.post('/employees/create-departement', null, { params: { nom: createForm.nom, id_entite: createForm.id_entite, id_direction: createForm.id_direction } })
-        alert('Département créé avec succès!')
+        toast.success('Département créé avec succès')
       }
       setCreateModal(null)
       setCreateForm({ nom: '', id_entite: '', id_direction: '' })
     } catch (err) {
-      alert('Erreur: ' + (err.response?.data?.detail || err.message))
+      toast.error(err.response?.data?.detail || err.message)
     }
   }
 
@@ -413,7 +413,8 @@ export default function Home() {
   }
 
   const deletePost = async (id) => {
-    if (!window.confirm('Supprimer cette publication ?')) return
+    const ok = await confirmDialog({ title: 'Supprimer la publication', message: 'Supprimer définitivement cette publication ?', variant: 'danger', confirmLabel: 'Supprimer' })
+    if (!ok) return
     await api.delete(`/api/team-space/posts/${id}`)
     setPostMenuOpen(null)
     loadTeamSpacePosts()

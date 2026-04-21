@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..db import get_db
+from ..utils.audit import log_action
 
 
 router = APIRouter(prefix='/api/tasks', tags=['tasks'])
@@ -153,6 +154,7 @@ def creer_tache(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_d
     _set_assignees(task.id_task, assignees, db)
     db.commit()
     db.refresh(task)
+    log_action(db, matricule_actor, 'CREATE_TASK', 'task', task.id_task, {'titre': titre, 'priorite': priorite, 'assignees': assignees})
     return _serialize_task(task, db)
 
 
@@ -192,6 +194,7 @@ def modifier_tache(id_task: int, payload: Dict[str, Any] = Body(...), db: Sessio
     _set_assignees(task.id_task, assignees, db)
     db.commit()
     db.refresh(task)
+    log_action(db, matricule_actor, 'UPDATE_TASK', 'task', task.id_task, {'titre': titre, 'statut': statut, 'assignees': assignees})
     return _serialize_task(task, db)
 
 
@@ -215,6 +218,7 @@ def modifier_statut_tache(id_task: int, payload: Dict[str, Any] = Body(...), db:
     task.date_modification = datetime.utcnow()
     db.commit()
     db.refresh(task)
+    log_action(db, matricule_actor, 'UPDATE_TASK_STATUS', 'task', task.id_task, {'statut': statut})
     return _serialize_task(task, db)
 
 
@@ -227,6 +231,8 @@ def supprimer_tache(id_task: int, matricule_actor: int, role_actor: str = '', db
     if not _is_admin(role_actor) and task.cree_par != matricule_actor:
         raise HTTPException(status_code=403, detail='Seul le créateur ou un administrateur peut supprimer cette tâche')
 
+    titre_before = task.titre
     db.delete(task)
     db.commit()
+    log_action(db, matricule_actor, 'DELETE_TASK', 'task', id_task, {'titre': titre_before})
     return {'message': 'Tâche supprimée avec succès', 'id': id_task}

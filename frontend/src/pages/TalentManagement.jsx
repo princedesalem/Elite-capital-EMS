@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { Users, Plus, X, Target, Calendar, CheckCircle, Clock } from 'lucide-react'
 import '../styles/Operations.css'
+import { confirmDialog } from '../components/ui/bridge'
 
 const ACCENT = '#ce2b2b'
 const DARK = '#021630'
@@ -159,7 +160,8 @@ export default function TalentManagement() {
   }
 
   const deleteMeeting = async (id) => {
-    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette réunion ?")) return
+    const ok = await confirmDialog({ title: 'Supprimer la réunion', message: 'Êtes-vous sûr de vouloir supprimer cette réunion ?', variant: 'danger', confirmLabel: 'Supprimer' })
+    if (!ok) return
     await api.delete(`/api/talent/meetings/${id}`).catch(() => null)
     await loadTalentData()
   }

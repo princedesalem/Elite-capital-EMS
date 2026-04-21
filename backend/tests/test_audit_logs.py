@@ -182,3 +182,54 @@ def test_get_audit_logs_sort_timestamp_desc_default(client, audit_data, auth_hea
     # Default: timestamp desc → most recent (index 0 = LOGIN_SUCCESS, created last) first
     assert r.json()['items'][0]['action'] == 'LOGIN_SUCCESS'
 
+
+# ── Middleware + detail field tests (regression for empty "Détails" column) ──
+
+def test_audit_endpoint_returns_detail_field(client, audit_data, auth_headers):
+    """Ensures the GET endpoint exposes the `detail` key for every item so the
+    admin "Détails" modal is populated."""
+    refs, _ = audit_data
+    r = client.get('/api/admin/audit-logs', headers=auth_headers(refs['rh'].matricule, 'RH'))
+    assert r.status_code == 200
+    items = r.json()['items']
+    assert items, 'expected at least one seeded item'
+    for item in items:
+        assert 'detail' in item
+    # Seeded entries contain '{"index": N}'
+    seeded = [i for i in items if i['detail'] and 'index' in i['detail']]
+    assert seeded, 'seeded detail payloads must be returned as JSON strings'
+
+
+def test_middleware_populates_detail_on_mutating_request(client, seed_reference_data, db_session, auth_headers):
+    """The global audit middleware must fill `detail` with method/path/status so
+    the admin journal shows meaningful information instead of an empty modal."""
+    from app import models
+
+    # Trigger a mutating request (POST) that is guaranteed to go through the middleware.
+    # Even if the endpoint 404s / 422s, middleware still writes the log.
+    client.post('/api/__audit_probe__', json={'probe': True},
+                headers=auth_headers(seed_reference_data['admin'].matricule, 'ADMIN'))
+
+    entry = (
+        db_session.query(models.AuditLog)
+        .filter(models.AuditLog.entity == 'request')
+        .order_by(models.AuditLog.id.desc())
+        .first()
+    )
+    assert entry is not None, 'middleware should create an AuditLog entry for POST requests'
+    assert entry.detail, 'detail must not be empty/None'
+    assert '"method"' in entry.detail
+    assert '"path"' in entry.detail
+    assert '"status_code"' in entry.detail
+
+
+def test_middleware_skips_get_requests(client, seed_reference_data, db_session, auth_headers):
+    """Middleware must skip OPTIONS/HEAD/GET to avoid polluting the audit log."""
+    from app import models
+
+    before = db_session.query(models.AuditLog).filter(models.AuditLog.entity == 'request').count()
+    client.get('/api/admin/audit-logs', headers=auth_headers(seed_reference_data['admin'].matricule, 'ADMIN'))
+    db_session.expire_all()
+    after = db_session.query(models.AuditLog).filter(models.AuditLog.entity == 'request').count()
+    assert after == before, 'GET requests should not produce request-type audit logs'
+

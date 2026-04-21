@@ -13,7 +13,7 @@ import os
 from fastapi import FastAPI
 from .db import Base, engine
 from .routers import (
-    auth, organisation, employees, leaves, roles, dashboard, operations,
+    auth, organisation, employees, roles, dashboard, operations,
     conges, permissions_router, missions_router, remplacants_router,
     notifications_router, evaluations_router, workflow_router, tasks_router,
     commentaires_mission_router, sorties_router, team_space_router, module_store_router,
@@ -84,28 +84,59 @@ app.add_middleware(
 )
 
 # Audit middleware (après CORS)
+# Paths exclus de l'audit (assets statiques, health, docs, preflight)
+_AUDIT_SKIP_PATHS = {'/', '/health', '/docs', '/openapi.json', '/redoc', '/favicon.ico'}
+_AUDIT_SKIP_PREFIXES = ('/uploads', '/static', '/assets')
+
+
 @app.middleware('http')
 async def audit_middleware(request: Request, call_next):
     resp = await call_next(request)
     try:
+        path = request.url.path or ''
+        method = (request.method or 'GET').upper()
+        # Ne jamais auditer les preflights, les GET (lecture seule) et les assets/health
+        if method in ('OPTIONS', 'HEAD', 'GET'):
+            return resp
+        if path in _AUDIT_SKIP_PATHS or any(path.startswith(p) for p in _AUDIT_SKIP_PREFIXES):
+            return resp
+
         db = SessionLocal()
         actor = None
         auth = request.headers.get('authorization')
         if auth and auth.lower().startswith('bearer '):
-            token = auth.split(None,1)[1]
+            token = auth.split(None, 1)[1]
             try:
                 payload = security.jwt.decode(token, security.SECRET_KEY, algorithms=[security.ALGORITHM])
                 actor = payload.get('matricule')
             except Exception:
                 pass
-        action = f"{request.method} {request.url.path}"
+        action = f"{method} {path}"
         ip = request.client.host if request.client else None
-        audit_logger.info(json.dumps({"actor": actor, "action": action, "ip": ip}))
+        status_code = getattr(resp, 'status_code', None)
+        detail_payload = {
+            'method': method,
+            'path': path,
+            'status_code': status_code,
+            'query': str(request.url.query) if request.url.query else None,
+        }
+        audit_logger.info(json.dumps({"actor": actor, "action": action, "ip": ip, "status": status_code}))
         try:
-            db.add(models.AuditLog(actor=actor, action=action, entity='request', entity_id=None, detail=None, ip=ip, request_body=None))
+            db.add(models.AuditLog(
+                actor=actor,
+                action=action,
+                entity='request',
+                entity_id=None,
+                detail=json.dumps(detail_payload, ensure_ascii=False),
+                ip=ip,
+                request_body=None,
+            ))
             db.commit()
-        except:
-            pass
+        except Exception:
+            try:
+                db.rollback()
+            except Exception:
+                pass
         finally:
             db.close()
     except Exception:
@@ -123,7 +154,6 @@ app.mount('/uploads', StaticFiles(directory='/app/uploads'), name='uploads')
 app.include_router(auth.router)
 app.include_router(organisation.router)  # Include organisation router first (specific routes before generic /{matricule})
 app.include_router(employees.router)
-app.include_router(leaves.router)
 app.include_router(roles.router)
 app.include_router(dashboard.router)
 app.include_router(operations.router)

@@ -3,6 +3,7 @@ import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { Building2, Globe, MapPin, Plus, Pencil, Trash2, ChevronDown, ChevronRight, ArrowLeft, GitBranch, LayoutGrid, X } from 'lucide-react'
 import '../styles/Organisation.css'
+import { toast, confirmDialog } from '../components/ui/bridge'
 
 // Emoji drapeaux par code pays
 const FLAG_EMOJI = {
@@ -162,7 +163,7 @@ export default function Organisation() {
   const handleAddPays = async (country) => {
     const exists = pays.find((p) => p.code_pays.toUpperCase() === country.code.toUpperCase())
     if (exists) {
-      alert('ELITE CAPITAL DEJA PRESENT')
+      toast.warning('Ce pays est déjà présent')
       return
     }
 
@@ -176,20 +177,20 @@ export default function Organisation() {
       setShowAddPaysModal(false)
       await loadPays()
     } catch (err) {
-      alert('Erreur: ' + (err.response?.data?.detail || err.message))
+      toast.error(err.response?.data?.detail || err.message)
     }
   }
 
   // Handle add ville
   const handleAddVille = async (city) => {
     if (!selectedPays) {
-      alert('Sélectionnez un pays d\'abord')
+      toast.warning('Sélectionnez un pays d’abord')
       return
     }
 
     const exists = villes.find((v) => v.ville.toLowerCase() === city.name.toLowerCase())
     if (exists) {
-      alert('ELITE CAPITAL DEJA PRESENT')
+      toast.warning('Cette ville est déjà présente')
       return
     }
 
@@ -203,7 +204,7 @@ export default function Organisation() {
       setShowAddVilleModal(false)
       await loadVillesByPays(selectedPays.id_pays)
     } catch (err) {
-      alert('Erreur: ' + (err.response?.data?.detail || err.message))
+      toast.error(err.response?.data?.detail || err.message)
     }
   }
 
@@ -236,19 +237,20 @@ export default function Organisation() {
         await loadDataByTab(activeTab, selectedVille.id_localisation)
       }
     } catch (err) {
-      alert('Erreur: ' + (err.response?.data?.detail || err.message))
+      toast.error(err.response?.data?.detail || err.message)
     }
   }
 
   // Delete pays
   const handleDeletePays = async (id_pays, e) => {
     e.stopPropagation()
-    if (window.confirm("Êtes-vous sûr de vouloir supprimer ?")) {
+    const ok = await confirmDialog({ title: 'Supprimer le pays', message: 'Êtes-vous sûr de vouloir supprimer ce pays ?', variant: 'danger', confirmLabel: 'Supprimer' })
+    if (ok) {
       try {
         await api.delete(`/employees/pays/${id_pays}`)
         await loadPays()
       } catch (err) {
-        alert('Erreur: ' + (err.response?.data?.detail || err.message))
+        toast.error(err.response?.data?.detail || err.message)
       }
     }
   }
@@ -256,14 +258,15 @@ export default function Organisation() {
   // Delete ville
   const handleDeleteVille = async (id_localisation, e) => {
     e.stopPropagation()
-    if (window.confirm("Êtes-vous sûr de vouloir supprimer ?")) {
+    const ok = await confirmDialog({ title: 'Supprimer la ville', message: 'Êtes-vous sûr de vouloir supprimer cette ville ?', variant: 'danger', confirmLabel: 'Supprimer' })
+    if (ok) {
       try {
         await api.delete(`/employees/villes/${id_localisation}`)
         if (selectedPays) {
           await loadVillesByPays(selectedPays.id_pays)
         }
       } catch (err) {
-        alert('Erreur: ' + (err.response?.data?.detail || err.message))
+        toast.error(err.response?.data?.detail || err.message)
       }
     }
   }
@@ -344,13 +347,14 @@ export default function Organisation() {
         await loadDataByTab(activeTab, selectedVille.id_localisation)
       }
     } catch (err) {
-      alert('Erreur: ' + (err.response?.data?.detail || err.message))
+      toast.error(err.response?.data?.detail || err.message)
     }
   }
 
   // Handle delete item
   const handleDeleteItem = async (type, id) => {
-    if (window.confirm("Êtes-vous sûr de vouloir supprimer ?")) {
+    const ok = await confirmDialog({ title: 'Supprimer', message: 'Êtes-vous sûr de vouloir supprimer cet élément ?', variant: 'danger', confirmLabel: 'Supprimer' })
+    if (ok) {
       try {
         if (type === 'entite') {
           await api.delete(`/employees/entites/${id}`)
@@ -363,19 +367,25 @@ export default function Organisation() {
           await loadDataByTab(activeTab, selectedVille.id_localisation)
         }
       } catch (err) {
-        alert('Erreur: ' + (err.response?.data?.detail || err.message))
+        toast.error(err.response?.data?.detail || err.message)
       }
     }
   }
 
   // Unlink a department from the current city (does NOT delete the dept globally)
   const handleUnlinkDept = async (dept) => {
-    if (!window.confirm(`Retirer "${dept.nom}" de ${selectedVille?.ville} ?\nLe département reste dans l'Administration.`)) return
+    const ok = await confirmDialog({
+      title: 'Retirer le département',
+      message: `Retirer «${dept.nom}» de ${selectedVille?.ville} ? Le département reste dans l’Administration.`,
+      variant: 'warning',
+      confirmLabel: 'Retirer',
+    })
+    if (!ok) return
     try {
       await api.delete(`/employees/departements/${dept.dept_id}/villes/${selectedVille.id_localisation}`)
       await loadDataByTab('departements', selectedVille.id_localisation)
     } catch (err) {
-      alert('Erreur: ' + (err.response?.data?.detail || err.message))
+      toast.error(err.response?.data?.detail || err.message)
     }
   }
 
@@ -395,7 +405,7 @@ export default function Organisation() {
       setLinkDeptId('')
       setShowLinkDeptModal(true)
     } catch (err) {
-      alert('Erreur: ' + (err.response?.data?.detail || err.message))
+      toast.error(err.response?.data?.detail || err.message)
     }
   }
 
@@ -408,7 +418,7 @@ export default function Organisation() {
       setLinkDeptId('')
       await loadDataByTab('departements', selectedVille.id_localisation)
     } catch (err) {
-      alert('Erreur: ' + (err.response?.data?.detail || err.message))
+      toast.error(err.response?.data?.detail || err.message)
     }
   }
 

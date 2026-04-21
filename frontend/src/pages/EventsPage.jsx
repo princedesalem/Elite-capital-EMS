@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { CalendarDays, Plus, CheckCircle, Clock, FileText, X, MapPin, Users, Edit3, Trash2 } from 'lucide-react'
 import '../styles/Operations.css'
+import { confirmDialog } from '../components/ui/bridge'
 
 const STATUTS_EVENT = [
   { value: 'brouillon', label: 'Brouillon', color: '#64748b', bg: '#f8fafc' },
@@ -66,7 +67,8 @@ export default function EventsPage() {
 
   const deleteEvent = async (id) => {
     if (!isEventManager) return
-    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cet événement ?")) return
+    const ok = await confirmDialog({ title: 'Supprimer l’événement', message: 'Êtes-vous sûr de vouloir supprimer cet événement ?', variant: 'danger', confirmLabel: 'Supprimer' })
+    if (!ok) return
     try {
       await api.delete(`/api/events/${id}`)
       await loadEvents()

@@ -8,6 +8,8 @@ import ModifiedBadge from '../components/ModifiedBadge'
 import { missionDestLabel, fraisLabel } from '../utils/operationLabel'
 import '../styles/Operations.css'
 import { ClipboardList, AlertTriangle, FileText, CheckCircle, Upload, Eye, Banknote, Clock, Download, Trash2, FileDown } from 'lucide-react'
+import { toast, confirmDialog } from '../components/ui/bridge'
+import { Pagination, usePagination, TableSkeleton } from '../components/ui'
 
 const th = { padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', fontSize: '0.7rem', color: '#64748b', fontWeight: 700, whiteSpace: 'nowrap' }
 const td = { padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '0.76rem', color: '#111827', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
@@ -165,7 +167,13 @@ function PreuvesModal({ idOperation, matricule, estMissionnaire, onClose, onUplo
   const fmtDt = (v) => v ? new Date(v).toLocaleString('fr-FR') : ''
 
   const supprimerPreuve = async (index) => {
-    if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce justificatif ?")) return
+    const ok = await confirmDialog({
+      title: 'Supprimer le justificatif',
+      message: 'Êtes-vous sûr de vouloir supprimer ce justificatif ?',
+      variant: 'danger',
+      confirmLabel: 'Supprimer',
+    })
+    if (!ok) return
     setError('')
     try {
       await api.delete(`/api/missions/frais/${idFrais}/supprimer-preuve`, { params: { matricule, index } })
@@ -406,24 +414,38 @@ export default function FraisPage() {
   }
 
   async function confirmerPaiementMissionnaire(idMission) {
-    if (!confirm('Confirmer votre accord pour le paiement des frais ?')) return
+    const ok = await confirmDialog({
+      title: 'Confirmer le paiement',
+      message: 'Confirmer votre accord pour le paiement des frais ?',
+      variant: 'primary',
+      confirmLabel: 'Confirmer',
+    })
+    if (!ok) return
     try {
       await api.post(`/api/missions/${idMission}/valider-frais-missionnaire`, { matricule })
       await loadData()
       setFraisPaymentStatuts({})
+      toast.success('Paiement confirmé')
     } catch (err) {
-      alert('Erreur: ' + errMsg(err, err.message))
+      toast.error(errMsg(err, err.message))
     }
   }
 
   async function confirmerPaiementRH(idMission) {
-    if (!confirm('Confirmer le paiement des frais de cette mission ?')) return
+    const ok = await confirmDialog({
+      title: 'Confirmer le paiement RH',
+      message: 'Confirmer le paiement des frais de cette mission ?',
+      variant: 'primary',
+      confirmLabel: 'Confirmer',
+    })
+    if (!ok) return
     try {
       await api.post(`/api/missions/${idMission}/valider-paiement-rh`, { matricule })
       await loadData()
       setFraisPaymentStatuts({})
+      toast.success('Paiement RH enregistré')
     } catch (err) {
-      alert('Erreur: ' + errMsg(err, err.message))
+      toast.error(errMsg(err, err.message))
     }
   }
 
@@ -526,26 +548,41 @@ export default function FraisPage() {
   }, [workflowAValider, workflowValide, workflowRefuse, filterDate, filterStatut, filterSource, filterEmetteur, filterEtat, rowEtat, activeTab, senderName])
 
   const handleAnnuler = async (id) => {
-    if (!confirm('Annuler cette demande ?')) return
+    const ok = await confirmDialog({
+      title: 'Annuler la demande',
+      message: 'Annuler cette demande de frais ?',
+      variant: 'danger',
+      confirmLabel: 'Annuler la demande',
+      cancelLabel: 'Retour',
+    })
+    if (!ok) return
     try {
       await api.delete(`/api/missions/frais/${id}`)
       await loadData()
+      toast.success('Demande annulée')
     } catch (err) {
-      alert('Erreur: ' + err.message)
+      toast.error(err.message)
     }
   }
 
   const handleWorkflow = async (id, statut) => {
     let commentaire = null
     if (statut === 'refusé') {
-      commentaire = window.prompt('Motif du refus (obligatoire):')
-      if (!commentaire?.trim()) return
+      commentaire = await confirmDialog({
+        title: 'Motif du refus',
+        message: 'Indiquez le motif du refus. Ce commentaire sera visible par le demandeur.',
+        variant: 'danger',
+        confirmLabel: 'Refuser',
+        requireInput: { label: 'Motif du refus', placeholder: 'Ex. pièces manquantes…', multiline: true, required: true },
+      })
+      if (!commentaire) return
     }
     try {
       await api.post(`/api/workflow/valider/${id}`, null, { params: { matricule_validateur: user.matricule, statut, ...(commentaire ? { commentaire } : {}) } })
       await loadData()
+      toast.success(statut === 'refusé' ? 'Demande refusée' : 'Demande validée')
     } catch (err) {
-      alert('Erreur: ' + errMsg(err, err.message))
+      toast.error(errMsg(err, err.message))
     }
   }
 
@@ -553,10 +590,10 @@ export default function FraisPage() {
     setLoadingOp(id)
     try {
       const response = await api.post(`/api/missions/activation/${id}/demandeur`, null, { params: { matricule_demandeur: user.matricule } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur activation: ' + errMsg(err, err.message))
+      toast.error('Activation : ' + errMsg(err, err.message))
     } finally {
       setLoadingOp(null)
     }
@@ -566,25 +603,31 @@ export default function FraisPage() {
     setLoadingOp(id)
     try {
       const response = await api.post(`/api/missions/cloture/${id}/demandeur`, null, { params: { matricule_demandeur: user.matricule } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur clôture: ' + errMsg(err, err.message))
+      toast.error('Clôture : ' + errMsg(err, err.message))
     } finally {
       setLoadingOp(null)
     }
   }
 
   const handleRetourAnticipe = async (id) => {
-    if (!confirm('Confirmer le retour anticipé ? Les jours restants seront restitués au solde.')) return
+    const ok = await confirmDialog({
+      title: 'Retour anticipé',
+      message: 'Confirmer le retour anticipé ? Les jours restants seront restitués au solde.',
+      variant: 'warning',
+      confirmLabel: 'Confirmer le retour',
+    })
+    if (!ok) return
     setLoadingOp(id)
     try {
       const today = new Date().toISOString().split('T')[0]
       const response = await api.post(`/api/missions/cloture/${id}/demandeur`, null, { params: { matricule_demandeur: user.matricule, retour_anticipe: true, date_retour_anticipe: today } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur retour anticipé: ' + errMsg(err, err.message))
+      toast.error('Retour anticipé : ' + errMsg(err, err.message))
     } finally {
       setLoadingOp(null)
     }
@@ -594,10 +637,10 @@ export default function FraisPage() {
     setLoadingOp(id)
     try {
       const response = await api.post(`/api/missions/activation/${id}/rh`, null, { params: { matricule_rh: user.matricule } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur activation RH: ' + errMsg(err, err.message))
+      toast.error('Activation RH : ' + errMsg(err, err.message))
     } finally {
       setLoadingOp(null)
     }
@@ -607,10 +650,10 @@ export default function FraisPage() {
     setLoadingOp(id)
     try {
       const response = await api.post(`/api/missions/cloture/${id}/rh`, null, { params: { matricule_rh: user.matricule } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur clôture RH: ' + errMsg(err, err.message))
+      toast.error('Clôture RH : ' + errMsg(err, err.message))
     } finally {
       setLoadingOp(null)
     }
@@ -754,7 +797,9 @@ export default function FraisPage() {
     ))
   }
 
-  if (loading) return <div style={{ padding: 28 }}>{"Chargement..."}</div>
+  const _source = activeTab === 'envoye' ? envoye : recu
+  const pagination = usePagination(_source, { pageSize: 20 })
+  if (loading) return <div style={{ padding: 20 }}><TableSkeleton rows={6} columns={9} /></div>
 
   return (
     <div style={{ padding: 20 }}>
@@ -910,8 +955,9 @@ export default function FraisPage() {
               <th style={{ ...th, width: '14%' }}>{"Actions"}</th>
             </tr>
           </thead>
-          <tbody>{activeTab === 'envoye' ? renderRows(envoye, false) : renderRows(recu, true)}</tbody>
+          <tbody>{renderRows(pagination.pageItems, activeTab === 'recu')}</tbody>
         </table>
+        <Pagination {...pagination} />
       </div>
       {selectedOperationForWorkflow && (
         <WorkflowModal

@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   // never makes a cross-origin request and CORS is not an issue in development.
   const backendPrefixes = [
     '/auth', '/api', '/dashboard', '/employees',
-    '/leaves', '/roles', '/docs', '/openapi.json', '/redoc', '/uploads',
+    '/roles', '/docs', '/openapi.json', '/redoc', '/uploads',
   ]
   const proxy = {}
   for (const prefix of backendPrefixes) {

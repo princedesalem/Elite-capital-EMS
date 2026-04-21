@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import api from '../services/api'
 import { Users, UserPlus, KeyRound, ShieldCheck, Search, Plus, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { confirmDialog } from '../components/ui/bridge'
 export default function Utilisateurs() {
   const { user } = useAuth()
   const role = String(user?.role || '').toUpperCase()
@@ -102,7 +103,8 @@ export default function Utilisateurs() {
   }
 
   const resetPasswordTemporaire = async (matricule) => {
-    if (!window.confirm(`Réinitialiser le mot de passe du compte ${matricule} ?`)) return
+    const ok = await confirmDialog({ title: 'Réinitialiser le mot de passe', message: `Réinitialiser le mot de passe du compte ${matricule} ?`, variant: 'warning', confirmLabel: 'Réinitialiser' })
+    if (!ok) return
     setError('')
     setSuccess('')
     try {

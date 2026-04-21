@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { confirmDialog } from '../components/ui/bridge'
 export default function ProfilePage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -45,7 +46,8 @@ export default function ProfilePage() {
   }
 
   async function handleDeletePhoto() {
-    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette photo ?")) return
+    const ok = await confirmDialog({ title: 'Supprimer la photo', message: 'Êtes-vous sûr de vouloir supprimer cette photo ?', variant: 'danger', confirmLabel: 'Supprimer' })
+    if (!ok) return
     setUploading(true)
     setErr(null)
     setSuccess(null)

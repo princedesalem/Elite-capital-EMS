@@ -15,6 +15,7 @@ from .. import models
 from datetime import date, time, datetime
 from typing import List, Dict, Any, Optional
 from ..utils import workflow, notifications, activation_cloture, access_control
+from ..utils.audit import log_action
 import math
 import re
 
@@ -175,6 +176,10 @@ def create_sortie(payload: Dict[str, Any], db: Session = Depends(get_db)):
     db.commit()
     db.refresh(sortie)
 
+    log_action(db, int(matricule), 'CREATE_SORTIE', 'operation', operation.id_operation,
+               {'date': str(d), 'heure_sortie': str(h), 'heure_retour': heure_retour,
+                'duree_heures': duree_heures})
+
     prochain_role, prochain_matricule = workflow.obtenir_prochain_validateur(operation.id_operation, db)
     if prochain_matricule:
         notifications.creer_notification(
@@ -237,6 +242,9 @@ def annuler_sortie(id_operation: int, request: Request, db: Session = Depends(ge
     db.query(models.Sortie).filter(models.Sortie.id_sortie == id_operation, models.Sortie.id_operation.is_(None)).delete()
     db.delete(operation)
     db.commit()
+
+    log_action(db, actor_matricule, 'CANCEL_SORTIE', 'operation', id_operation, None,
+               ip_address=request.client.host if request.client else None)
 
     return {'message': f'Sortie #{id_operation} annulée avec succès', 'id_operation': id_operation}
 
@@ -308,6 +316,11 @@ def modifier_sortie(id_operation: int, payload: Dict[str, Any], request: Request
 
         db.commit()
         db.refresh(sortie)
+
+        log_action(db, actor_matricule, 'UPDATE_SORTIE', 'operation', id_operation,
+                   {'heure_retour': heure_retour_value, 'duree_heures': duree_heures,
+                    'commentaire': commentaire_payload},
+                   ip_address=request.client.host if request.client else None)
 
         return {
             'duree_heures': duree_heures,

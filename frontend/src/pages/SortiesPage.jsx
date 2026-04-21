@@ -7,6 +7,8 @@ import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import ModifiedBadge from '../components/ModifiedBadge'
 import { operationLabel } from '../utils/operationLabel'
 import { Eye, Pencil, CheckCircle, XCircle, Zap, Lock, CornerUpLeft, UserCheck, FileDown } from 'lucide-react'
+import { confirmDialog } from '../components/ui/bridge'
+import { Pagination, usePagination, TableSkeleton } from '../components/ui'
 
 const th = { padding: '6px', textAlign: 'left', borderBottom: '1px solid var(--border)', fontSize: '0.66rem', color: '#64748b', fontWeight: 700, whiteSpace: 'nowrap' }
 const td = { padding: '6px', borderBottom: '1px solid #f1f5f9', fontSize: '0.7rem', color: 'var(--text)', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
@@ -319,7 +321,14 @@ export default function SortiesPage() {
   }
 
   const handleAnnuler = async (idOperation) => {
-    if (!confirm("Êtes-vous sûr de vouloir annuler cette demande ?")) return
+    const ok = await confirmDialog({
+      title: 'Annuler la demande',
+      message: 'Êtes-vous sûr de vouloir annuler cette demande ?',
+      variant: 'danger',
+      confirmLabel: 'Annuler la demande',
+      cancelLabel: 'Retour',
+    })
+    if (!ok) return
     try {
       await api.put(`/api/sorties/${idOperation}/annuler`)
       setMsg({ type: 'success', text: `Opération #${idOperation} annulée.` })
@@ -375,7 +384,13 @@ export default function SortiesPage() {
   }
 
   const handleRetourAnticipe = async (idOperation) => {
-    if (!confirm("Êtes-vous sûr de vouloir déclarer un retour anticipé ?")) return
+    const ok = await confirmDialog({
+      title: 'Retour anticipé',
+      message: 'Déclarer un retour anticipé ?',
+      variant: 'warning',
+      confirmLabel: 'Confirmer le retour',
+    })
+    if (!ok) return
     setLoadingOp(idOperation)
     try {
       const today = new Date().toISOString().split('T')[0]
@@ -409,8 +424,14 @@ export default function SortiesPage() {
   const handleWorkflow = async (id, statut) => {
     let commentaire = null
     if (statut === 'refusé') {
-      commentaire = window.prompt('Motif du refus (obligatoire):')
-      if (!commentaire?.trim()) return
+      commentaire = await confirmDialog({
+        title: 'Motif du refus',
+        message: 'Indiquez le motif du refus. Ce commentaire sera visible par le demandeur.',
+        variant: 'danger',
+        confirmLabel: 'Refuser',
+        requireInput: { label: 'Motif du refus', placeholder: 'Ex. justification insuffisante…', multiline: true, required: true },
+      })
+      if (!commentaire) return
     }
     try {
       await api.post(`/api/workflow/valider/${id}`, null, { params: { matricule_validateur: matricule, statut, ...(commentaire ? { commentaire } : {}) } })
@@ -544,7 +565,9 @@ export default function SortiesPage() {
     })
   }
 
-  if (loading) return <div style={{ padding: 24 }}>{"Chargement..."}</div>
+  const _source = activeTab === 'envoye' ? envoye : recu
+  const pagination = usePagination(_source, { pageSize: 20 })
+  if (loading) return <div style={{ padding: 20 }}><TableSkeleton rows={6} columns={9} /></div>
 
   return (
     <div style={{ padding: 20 }}>
@@ -637,8 +660,9 @@ export default function SortiesPage() {
               <th style={{ ...th, width: '13%' }}>Actions</th>
             </tr>
           </thead>
-          <tbody>{activeTab === 'envoye' ? renderRows(envoye, false) : renderRows(recu, true)}</tbody>
+          <tbody>{renderRows(pagination.pageItems, activeTab === 'recu')}</tbody>
           </table>
+          <Pagination {...pagination} />
         </div>
       </div>
 

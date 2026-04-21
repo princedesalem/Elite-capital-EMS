@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from ..db import get_db
 from .. import models
 from ..utils import missions as mission_utils, workflow, notifications, activation_cloture, access_control
+from ..utils.audit import log_action
 import os
 import json
 
@@ -302,6 +303,8 @@ def creer_mission(
         raise HTTPException(status_code=400, detail=message)
     
     db.commit()
+    log_action(db, matricule, 'CREATE_MISSION', 'operation', operation.id_operation,
+               {'pays': pays, 'ville': ville, 'date_debut': str(date_debut), 'date_fin': str(date_fin), 'motif': motif})
     
     # Notifier le premier validateur
     prochain_role, prochain_matricule = workflow.obtenir_prochain_validateur(operation.id_operation, db)
@@ -492,6 +495,10 @@ def creer_mission_multi_segments(
         db.add(missionnaire)
     
     db.commit()
+    log_action(db, matricule, 'CREATE_MISSION_MULTI', 'operation', operation.id_operation,
+               {'missionnaires': mission_data.matricules_missionnaires,
+                'segments_count': len(mission_data.segments),
+                'motif': mission_data.motif})
     
     # Récupérer les noms des missionnaires pour la notification
     noms_missionnaires = []
@@ -683,6 +690,9 @@ def modifier_segments_mission(
     operation.date_modification = datetime.utcnow()
 
     db.commit()
+    log_action(db, actor_matricule, 'UPDATE_MISSION_SEGMENTS', 'operation', id_mission,
+               {'segments_count': len(new_segments)},
+               ip_address=request.client.host if request.client else None)
 
     return {
         "id_mission": id_mission,
@@ -756,6 +766,11 @@ def ajouter_missionnaire(
     )
     db.add(new_miss)
     db.commit()
+    _actor = actor_matricule if request is not None else None
+    _ip = request.client.host if (request is not None and request.client) else None
+    log_action(db, _actor, 'ADD_MISSIONNAIRE', 'mission', id_mission,
+               {'matricule_ajoute': matricule, 'role_mission': role_mission},
+               ip_address=_ip)
 
     return {
         "message": f"Missionnaire {matricule} ajouté avec succès",
@@ -811,8 +826,14 @@ def retirer_missionnaire(
         if responsables_count <= 1:
             raise HTTPException(status_code=400, detail="Impossible de retirer le dernier responsable de la mission")
 
+    _role_removed = missionnaire.role_mission
     db.delete(missionnaire)
     db.commit()
+    _actor = actor_matricule if request is not None else None
+    _ip = request.client.host if (request is not None and request.client) else None
+    log_action(db, _actor, 'REMOVE_MISSIONNAIRE', 'mission', id_mission,
+               {'matricule_retire': matricule, 'role_mission': _role_removed},
+               ip_address=_ip)
 
     return {
         "message": f"Missionnaire {matricule} retiré de la mission",
@@ -964,6 +985,16 @@ def modifier_frais_missionnaire(
     frais.justificatif = data.justificatif
 
     db.commit()
+    _actor = None
+    _ip = None
+    if request is not None:
+        try:
+            _actor, _ = access_control.get_actor_from_request(request)
+        except Exception:
+            _actor = None
+        _ip = request.client.host if request.client else None
+    log_action(db, _actor, 'UPDATE_FRAIS_MISSIONNAIRE', 'mission', id_mission,
+               {'matricule': mat, 'total_frais': float(frais.total_frais)}, ip_address=_ip)
 
     return {"message": "Frais mis à jour", "total_frais": float(frais.total_frais)}
 
@@ -1052,6 +1083,13 @@ def modifier_mission(
     mission.email_mission = email
     
     db.commit()
+    try:
+        _actor, _ = access_control.get_actor_from_request(request)
+    except Exception:
+        _actor = None
+    log_action(db, _actor, 'UPDATE_MISSION', 'operation', id_operation,
+               {'pays': pays, 'ville': ville, 'date_debut': str(date_debut), 'date_fin': str(date_fin), 'motif': motif},
+               ip_address=request.client.host if request.client else None)
     
     return {
         "id_operation": id_operation,
@@ -1105,6 +1143,9 @@ async def televerser_rapport(
     
     if not success:
         raise HTTPException(status_code=400, detail=message)
+
+    log_action(db, matricule, 'UPLOAD_RAPPORT_MISSION', 'operation', id_operation,
+               {'fichier': fichier.filename})
 
     # Notifier tous les validateurs de la séquence
     employe_op = db.query(models.Employe).filter(models.Employe.matricule == operation.matricule).first()
@@ -1753,6 +1794,8 @@ def valider_frais_missionnaire(
     mission.date_validation_frais_missionnaire = datetime.utcnow()
     
     db.commit()
+    log_action(db, matricule, 'VALIDATE_FRAIS_MISSIONNAIRE', 'mission', id_mission,
+               {'matricule': matricule})
     
     # Créer une notification pour le RH
     rh_employees = db.query(models.Employe).filter(
@@ -1830,6 +1873,8 @@ def valider_paiement_rh(
     mission.date_paiement_frais = datetime.utcnow()
     
     db.commit()
+    log_action(db, matricule, 'PAY_FRAIS_MISSION', 'mission', id_mission,
+               {'matricule_rh': matricule})
     
     # Notifier le/les missionnaire(s)
     # Récupérer tous les missionnaires

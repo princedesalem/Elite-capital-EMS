@@ -10,8 +10,6 @@ import EmailLoginCallback from './pages/EmailLoginCallback'
 import Dashboard from './pages/Dashboard'
 import Employees from './pages/Employees'
 import EmployeeForm from './pages/EmployeeForm'
-import Leaves from './pages/Leaves'
-import LeaveForm from './pages/LeaveForm'
 import CongesPage from './pages/CongesPage'
 import PermissionsPage from './pages/PermissionsPage'
 import MissionsPage from './pages/MissionsPage'
@@ -47,6 +45,7 @@ import AbsencesPage from './pages/AbsencesPage'
 import AuditLogPage from './pages/AuditLogPage'
 import ProfilePage from './pages/ProfilePage'
 import RemplacantsPage from './pages/RemplacantsPage'
+import { ToastProvider, ConfirmProvider } from './components/ui'
 import './index.css'
 
 export default function App(){
@@ -54,6 +53,8 @@ export default function App(){
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <ThemeProvider>
         <AuthProvider>
+        <ToastProvider>
+        <ConfirmProvider>
         <Navbar />
         <Routes>
           <Route path="/" element={<Navigate to="/rh/home" replace />} />
@@ -69,15 +70,10 @@ export default function App(){
             <Route path="employees/:id" element={<ProtectedRoute allowedRoles={["RH","PCA","ADMIN"]}><EmployeeForm /></ProtectedRoute>} />
             <Route path="employees/new" element={<ProtectedRoute allowedRoles={["RH","PCA","ADMIN"]}><EmployeeForm /></ProtectedRoute>} />
 
-            <Route path="leaves" element={<Leaves />} />
-            <Route path="leaves/new" element={<LeaveForm />} />
             <Route path="absences" element={<AbsencesPage />} />
             <Route path="conges" element={<CongesPage />} />
-            <Route path="conges/edit/:id" element={<LeaveForm />} />
             <Route path="permissions" element={<PermissionsPage />} />
-            <Route path="permissions/edit/:id" element={<LeaveForm />} />
             <Route path="missions" element={<MissionsPage />} />
-            <Route path="missions/edit/:id" element={<LeaveForm />} />
             <Route path="frais" element={<FraisPage />} />
             <Route path="operations" element={<Operations />} />
             <Route path="workflow" element={<WorkflowPage />} />
@@ -115,8 +111,8 @@ export default function App(){
           <Route path="/dashboard" element={<Navigate to="/rh/dashboard" replace />} />
           <Route path="/employees" element={<Navigate to="/rh/employees" replace />} />
           <Route path="/employees/new" element={<Navigate to="/rh/employees/new" replace />} />
-          <Route path="/leaves" element={<Navigate to="/rh/leaves" replace />} />
-          <Route path="/leaves/new" element={<Navigate to="/rh/leaves/new" replace />} />
+          <Route path="/leaves" element={<Navigate to="/rh/conges" replace />} />
+          <Route path="/leaves/new" element={<Navigate to="/rh/conges" replace />} />
           <Route path="/operations" element={<Navigate to="/rh/operations" replace />} />
           <Route path="/remplacants" element={<Navigate to="/rh/remplacants" replace />} />
           <Route path="/missions-ig" element={<Navigate to="/rh/missions-ig" replace />} />
@@ -132,6 +128,8 @@ export default function App(){
           <Route path="/utilisateurs" element={<Navigate to="/rh/utilisateurs" replace />} />
 
         </Routes>
+        </ConfirmProvider>
+        </ToastProvider>
       </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

@@ -4,6 +4,7 @@ import api from '../services/api'
 import AvatarCircle from '../components/AvatarCircle'
 import { Users, Plus, X, Star, Calendar, ChevronDown } from 'lucide-react'
 import '../styles/Operations.css'
+import { confirmDialog, toast } from '../components/ui/bridge'
 
 const ACCENT = '#ce2b2b'
 const DARK = '#021630'
@@ -181,7 +182,8 @@ export default function ClubReview() {
   }
 
   const deleteClub = async (id) => {
-    if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce club ?")) return
+    const ok = await confirmDialog({ title: 'Supprimer le club', message: 'Êtes-vous sûr de vouloir supprimer ce club ?', variant: 'danger', confirmLabel: 'Supprimer' })
+    if (!ok) return
     await api.delete(`/api/clubs/${id}`).catch(() => null)
     await loadClubData()
   }
@@ -219,7 +221,7 @@ export default function ClubReview() {
     e.preventDefault()
     if (!reviewForm.club_id) return
     const exists = reviews.find(r => r.club_id === Number(reviewForm.club_id) && String(r.user_id) === String(user?.matricule))
-    if (exists) { alert('Vous avez déjà évalué ce club.'); return }
+    if (exists) { toast.warning('Vous avez déjà évalué ce club.'); return }
     await api.post('/api/clubs/reviews', {
       ...reviewForm,
       club_id: Number(reviewForm.club_id),

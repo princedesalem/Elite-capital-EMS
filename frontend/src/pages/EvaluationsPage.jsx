@@ -119,12 +119,18 @@ export default function EvaluationsPage() {
         </>
       )})()}
 
-        {fichePoste && (
+        {fichePoste ? (
           <div style={{ marginTop: '40px', padding: '20px', background: '#ecf0f1', borderRadius: '8px' }}>
             <h2 style={{display:'flex',alignItems:'center',gap:6}}><ClipboardList size={16}/> {"Fiche de poste"}</h2>
             <div style={{ background: 'var(--card)', padding: '15px', borderRadius: '6px', fontFamily: 'monospace', fontSize: '0.9em', overflowX: 'auto', maxHeight: '400px', overflowY: 'auto' }}>
               <pre>{JSON.stringify(fichePoste, null, 2)}</pre>
             </div>
+          </div>
+        ) : !loading && (
+          <div style={{ marginTop: '40px', padding: '32px', background: '#f8fafc', border: '2px dashed #cbd5e1', borderRadius: 10, textAlign: 'center', color: '#64748b' }}>
+            <ClipboardList size={32} style={{ opacity: 0.35, marginBottom: 10 }} />
+            <h3 style={{ margin: '0 0 6px 0', color: '#334155', fontSize: '1rem' }}>{"Aucune fiche de poste"}</h3>
+            <p style={{ margin: '0 0 14px 0', fontSize: '0.85rem' }}>{"Votre fiche de poste n'a pas encore été renseignée. Contactez votre service RH pour créer la première fiche."}</p>
           </div>
         )}
       </div>

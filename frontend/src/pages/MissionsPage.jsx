@@ -9,6 +9,8 @@ import AutocompleteInput from '../components/AutocompleteInput'
 import ModifiedBadge from '../components/ModifiedBadge'
 import { operationLabel } from '../utils/operationLabel'
 import '../styles/Operations.css'
+import { toast, confirmDialog } from '../components/ui/bridge'
+import { Pagination, usePagination, TableSkeleton } from '../components/ui'
 
 import {
   ClipboardList, AlertTriangle, FileText, Plus, Trash2, Pencil, Users, CheckCircle, Search, Upload, FileUp, Eye, Banknote, Clock, Download, FileDown, Users2
@@ -172,7 +174,13 @@ function RapportModal({ idOperation, matricule, missionStatuts, estMissionnaire,
   }
 
   const supprimerRapport = async () => {
-    if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce rapport ?")) return
+    const ok = await confirmDialog({
+      title: 'Supprimer le rapport',
+      message: 'Êtes-vous sûr de vouloir supprimer ce rapport ?',
+      variant: 'danger',
+      confirmLabel: 'Supprimer',
+    })
+    if (!ok) return
     setError('')
     try {
       await api.delete(`/api/missions/${idOperation}/supprimer-rapport`, { params: { matricule } })
@@ -415,7 +423,7 @@ export default function MissionsPage() {
     setMissionSegments([...missionSegments, { id: nouveauId, pays: '', country_code: '', ville: '', date_debut: '', date_fin: '', heure_depart: '08:00:00', heure_arrivee: '18:00:00', heure_retour: '18:00:00', moyen_transport: 'aerien' }])
   }
   function supprimerSegmentMission(id) {
-    if (missionSegments.length <= 1) { alert('Au moins une destination est requise'); return }
+    if (missionSegments.length <= 1) { toast.warning('Au moins une destination est requise'); return }
     setMissionSegments(missionSegments.filter(s => s.id !== id))
     setCountryOptionsBySegment(prev => {
       const next = { ...prev }
@@ -537,7 +545,15 @@ export default function MissionsPage() {
       const dateDebut = missionSegments.reduce((min, seg) => !min || seg.date_debut < min ? seg.date_debut : min, null)
       const dateFin = missionSegments.reduce((max, seg) => !max || seg.date_fin > max ? seg.date_fin : max, null)
       const checkResponse = await api.get(`/api/missions/verifier-chevauchement/${matricule}`, { params: { date_debut: dateDebut, date_fin: dateFin, id_operation_exclure: missionEditMode ? missionEditId : null } })
-      if (checkResponse.data.conflit) { if (!window.confirm(checkResponse.data.message + '. Voulez-vous continuer quand même ?')) return }
+      if (checkResponse.data.conflit) {
+        const ok = await confirmDialog({
+          title: 'Chevauchement détecté',
+          message: checkResponse.data.message + '. Voulez-vous continuer quand même ?',
+          variant: 'warning',
+          confirmLabel: 'Continuer',
+        })
+        if (!ok) return
+      }
       if (missionEditMode && missionEditId) {
         const premierSegment = missionSegments[0]
         await api.put(`/api/missions/${missionEditId}/modifier`, null, { params: { pays: premierSegment.pays, country_code: premierSegment.country_code || null, ville: premierSegment.ville, date_debut: premierSegment.date_debut, date_fin: premierSegment.date_fin, heure_depart: premierSegment.heure_depart, heure_arrivee: premierSegment.heure_arrivee, heure_retour: premierSegment.heure_depart, email: missionForm.email_contact, motif: missionForm.motif || null } })
@@ -614,7 +630,13 @@ export default function MissionsPage() {
     } catch (err) { setFormError(errMsg(err, 'Erreur lors de la validation du paiement')) }
   }
   async function marquerFraisPaye(idMission) {
-    if (!window.confirm('Vous confirmez que les frais de mission ont été payés ?')) return
+    const ok = await confirmDialog({
+      title: 'Confirmer le paiement',
+      message: 'Vous confirmez que les frais de mission ont été payés ?',
+      variant: 'primary',
+      confirmLabel: 'Confirmer le paiement',
+    })
+    if (!ok) return
     try {
       setFormError(''); setFormSuccess('')
       await api.post(`/api/missions/${idMission}/marquer-paye`)
@@ -645,26 +667,41 @@ export default function MissionsPage() {
   }, [workflowMissionnaire, workflowAValider, workflowValide, workflowRefuse, filterDate, filterStatut, filterSource, filterEmetteur, filterEtat, rowEtat, activeTab, senderName])
 
   const handleAnnuler = async (id) => {
-    if (!confirm('Annuler cette demande ?')) return
+    const ok = await confirmDialog({
+      title: 'Annuler la demande',
+      message: 'Annuler cette demande ?',
+      variant: 'danger',
+      confirmLabel: 'Annuler la demande',
+      cancelLabel: 'Retour',
+    })
+    if (!ok) return
     try {
       await api.delete(`/api/operations/${id}`)
       await loadData()
+      toast.success('Demande annulée')
     } catch (err) {
-      alert('Erreur: ' + errMsg(err, err.message))
+      toast.error(errMsg(err, err.message))
     }
   }
 
   const handleWorkflow = async (id, statut) => {
     let commentaire = null
     if (statut === 'refusé') {
-      commentaire = window.prompt('Motif du refus (obligatoire):')
-      if (!commentaire?.trim()) return
+      commentaire = await confirmDialog({
+        title: 'Motif du refus',
+        message: 'Indiquez le motif du refus. Ce commentaire sera visible par le demandeur.',
+        variant: 'danger',
+        confirmLabel: 'Refuser',
+        requireInput: { label: 'Motif du refus', placeholder: 'Ex. mission non justifiée…', multiline: true, required: true },
+      })
+      if (!commentaire) return
     }
     try {
       await api.post(`/api/workflow/valider/${id}`, null, { params: { matricule_validateur: user.matricule, statut, ...(commentaire ? { commentaire } : {}) } })
       await loadData()
+      toast.success(statut === 'refusé' ? 'Demande refusée' : 'Demande validée')
     } catch (err) {
-      alert('Erreur: ' + errMsg(err, err.message))
+      toast.error(errMsg(err, err.message))
     }
   }
 
@@ -672,10 +709,10 @@ export default function MissionsPage() {
     setLoadingOp(id)
     try {
       const response = await api.post(`/api/missions/activation/${id}/demandeur`, null, { params: { matricule_demandeur: user.matricule } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur activation: ' + errMsg(err, err.message))
+      toast.error('Activation : ' + errMsg(err, err.message))
     } finally {
       setLoadingOp(null)
     }
@@ -685,25 +722,31 @@ export default function MissionsPage() {
     setLoadingOp(id)
     try {
       const response = await api.post(`/api/missions/cloture/${id}/demandeur`, null, { params: { matricule_demandeur: user.matricule } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur clôture: ' + errMsg(err, err.message))
+      toast.error('Clôture : ' + errMsg(err, err.message))
     } finally {
       setLoadingOp(null)
     }
   }
 
   const handleRetourAnticipe = async (id) => {
-    if (!confirm('Confirmer le retour anticipé ? Les jours restants seront restitués au solde.')) return
+    const ok = await confirmDialog({
+      title: 'Retour anticipé',
+      message: 'Confirmer le retour anticipé ? Les jours restants seront restitués au solde.',
+      variant: 'warning',
+      confirmLabel: 'Confirmer le retour',
+    })
+    if (!ok) return
     setLoadingOp(id)
     try {
       const today = new Date().toISOString().split('T')[0]
       const response = await api.post(`/api/missions/cloture/${id}/demandeur`, null, { params: { matricule_demandeur: user.matricule, retour_anticipe: true, date_retour_anticipe: today } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur retour anticipé: ' + errMsg(err, err.message))
+      toast.error('Retour anticipé : ' + errMsg(err, err.message))
     } finally {
       setLoadingOp(null)
     }
@@ -713,10 +756,10 @@ export default function MissionsPage() {
     setLoadingOp(id)
     try {
       const response = await api.post(`/api/missions/activation/${id}/rh`, null, { params: { matricule_rh: user.matricule } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      alert('Erreur activation RH: ' + errMsg(err, err.message))
+      toast.error('Activation RH : ' + errMsg(err, err.message))
     } finally {
       setLoadingOp(null)
     }
@@ -726,10 +769,10 @@ export default function MissionsPage() {
     setLoadingOp(id)
     try {
       const response = await api.post(`/api/missions/cloture/${id}/rh`, null, { params: { matricule_rh: user.matricule } })
-      if (response?.data?.message) alert(response.data.message)
+      if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-alert('Erreur clôture RH: ' + errMsg(err, err.message))
+      toast.error('Clôture RH : ' + errMsg(err, err.message))
     } finally {
       setLoadingOp(null)
     }
@@ -898,7 +941,9 @@ alert('Erreur clôture RH: ' + errMsg(err, err.message))
     ))
   }
 
-  if (loading) return <div style={{ padding: 28 }}>{"Chargement..."}</div>
+  const _source = activeTab === 'envoye' ? envoye : recu
+  const pagination = usePagination(_source, { pageSize: 20 })
+  if (loading) return <div style={{ padding: 20 }}><TableSkeleton rows={6} columns={9} /></div>
 
   return (
     <div style={{ padding: 20 }}>
@@ -1136,8 +1181,9 @@ alert('Erreur clôture RH: ' + errMsg(err, err.message))
               <th style={{ ...th, width: '16%' }}>{"Actions"}</th>
             </tr>
           </thead>
-          <tbody>{activeTab === 'envoye' ? renderRows(envoye, false) : renderRows(recu, true)}</tbody>
+          <tbody>{renderRows(pagination.pageItems, activeTab === 'recu')}</tbody>
         </table>
+        <Pagination {...pagination} />
         {activeTab === 'recu' && estRh && workflowPcaAg.length > 0 && (
           <div style={{ marginTop: 24 }}>
             <div style={{ padding: '10px 14px', background: 'rgba(2,22,46,0.06)', borderLeft: '3px solid var(--bleu)', borderTop: '1px solid rgba(2,22,46,0.15)', borderBottom: '1px solid rgba(2,22,46,0.15)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--bleu)', letterSpacing: '0.02em' }}>

@@ -3,6 +3,8 @@ import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { CheckSquare, Plus, Clock, AlertCircle, CheckCircle, User, Calendar, Trash2, Edit3, X, Flag } from 'lucide-react'
 import '../styles/Operations.css'
+import { confirmDialog } from '../components/ui/bridge'
+import { Pagination, usePagination } from '../components/ui'
 
 const PRIORITIES = [
   { value: 'haute', label: 'Haute', color: '#ce2b2b', bg: '#fef2f2' },
@@ -82,7 +84,13 @@ export default function TasksPage() {
   }
 
   const deleteTask = async (id) => {
-    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette tâche ?")) return
+    const ok = await confirmDialog({
+      title: 'Supprimer la tâche',
+      message: 'Êtes-vous sûr de vouloir supprimer cette tâche ?',
+      variant: 'danger',
+      confirmLabel: 'Supprimer',
+    })
+    if (!ok) return
     setError('')
     try {
       await api.delete(`/api/tasks/${id}`, { params: { matricule_actor: user?.matricule, role_actor: roleValue } })
@@ -133,6 +141,8 @@ export default function TasksPage() {
     }
     return true
   })
+
+  const tasksPagination = usePagination(filteredTasks, { pageSize: 20 })
 
   const counts = {
     a_faire: tasks.filter(t => t.statut === 'a_faire').length,
@@ -286,7 +296,7 @@ export default function TasksPage() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {filteredTasks.map(task => {
+          {tasksPagination.pageItems.map(task => {
             const prio = getPrio(task.priorite)
             const statut = getStatut(task.statut)
             const overdue = isOverdue(task)
@@ -352,6 +362,7 @@ export default function TasksPage() {
           })}
         </div>
       )}
+      {filteredTasks.length > 0 && <Pagination {...tasksPagination} />}
     </div>
   )
 }

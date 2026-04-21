@@ -5,6 +5,7 @@ import ProgressionValidation from '../components/ProgressionValidation'
 import CommentairesMission from '../components/CommentairesMission'
 import { CheckCircle, XCircle, UserCheck, RefreshCw } from 'lucide-react'
 import '../styles/Operations.css'
+import { toast } from '../components/ui/bridge'
 
 export default function WorkflowPage() {
   const { user } = useAuth()
@@ -82,7 +83,7 @@ export default function WorkflowPage() {
       setValidationRefreshKey(k => k + 1)
       return true
     } catch (err) {
-      alert(err.response?.data?.detail || 'Erreur lors de la validation')
+      toast.error(err.response?.data?.detail || 'Erreur lors de la validation')
       return false
     }
   }
@@ -90,7 +91,7 @@ export default function WorkflowPage() {
   async function soumettreDecision(statut) {
     if (!selectedOperation) return
     const commentaire = statut === 'refusé' ? workflowDecisionComment.trim() : (workflowDecisionComment.trim() || null)
-    if (statut === 'refusé' && !commentaire) { alert("Le motif de refus est obligatoire"); return }
+    if (statut === 'refusé' && !commentaire) { toast.warning('Le motif de refus est obligatoire'); return }
     const ok = await validerOperation(selectedOperation, statut, commentaire)
     if (ok) { setWorkflowDecisionComment(''); setSelectedOperation(null) }
   }

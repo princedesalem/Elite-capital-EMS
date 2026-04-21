@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from .. import models
 from ..utils import access_control, notifications, workflow
+from ..utils.audit import log_action
 from typing import List, Dict, Any
 from datetime import datetime, date
 
@@ -340,7 +341,11 @@ def annuler_operation(id_operation: int, request: Request, db: Session = Depends
         # Suppression physique de l'opération
         db.delete(operation)
         db.commit()
-        
+
+        log_action(db, actor_matricule, 'DELETE_OPERATION', 'operation', id_operation,
+                   {'type_demande': operation.type_demande, 'statut': operation.statut},
+                   ip_address=request.client.host if request.client else None)
+
         return {
             "message": f"Opération #{id_operation} annulée avec succès",
             "id_operation": id_operation
@@ -417,6 +422,14 @@ def modifier_operation(
 
         db.commit()
         db.refresh(operation)
+
+        try:
+            _actor, _ = access_control.get_actor_from_request(request) if request is not None else (None, None)
+        except Exception:
+            _actor = None
+        log_action(db, _actor, 'UPDATE_OPERATION', 'operation', id_operation,
+                   {'date_debut': date_debut_str, 'date_fin': date_fin_str, 'motif': motif},
+                   ip_address=(request.client.host if request and request.client else None))
 
         return {
             "message": f"Opération #{id_operation} modifiée avec succès",

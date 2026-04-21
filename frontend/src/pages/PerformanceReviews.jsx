@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { Star, Users, Plus, X, CheckCircle, Clock, BarChart2, Search, ChevronDown } from 'lucide-react'
 import '../styles/Operations.css'
+import { confirmDialog } from '../components/ui/bridge'
 
 const ACCENT = '#ce2b2b'
 const DARK = '#021630'
@@ -139,7 +140,8 @@ export default function PerformanceReviews() {
   }
 
   const deleteReview = async (id) => {
-    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette évaluation ?")) return
+    const ok = await confirmDialog({ title: 'Supprimer l’évaluation', message: 'Êtes-vous sûr de vouloir supprimer cette évaluation ?', variant: 'danger', confirmLabel: 'Supprimer' })
+    if (!ok) return
     await api.delete(`/api/performance-reviews/${id}`).catch(() => null)
     await loadReviews()
   }
