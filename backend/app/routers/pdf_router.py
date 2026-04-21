@@ -157,6 +157,28 @@ def _get_employee_info(matricule: int, db: Session):
     }
 
 
+def _add_remplacants_section(pdf: PDFReport, id_operation: int, db: Session):
+    """Add accepted replacements section to a PDF if any exist."""
+    remplacants = db.query(models.RemplacantPropose).filter(
+        models.RemplacantPropose.id_operation == id_operation,
+        models.RemplacantPropose.est_accepte == True,
+    ).all()
+    if not remplacants:
+        return
+    pdf.section_title('Remplaçant(s) accepté(s)')
+    rows = []
+    for r in remplacants:
+        emp = db.query(models.Employe).filter(models.Employe.matricule == r.matricule_remplacant).first()
+        nom = f"{emp.prenom or ''} {emp.nom or ''}".strip() if emp else str(r.matricule_remplacant)
+        fonction = emp.fonction or '-' if emp else '-'
+        rows.append([str(r.matricule_remplacant), nom, fonction])
+    pdf.table(
+        ['Matricule', 'Nom complet', 'Fonction'],
+        rows,
+        col_widths=[30, 80, 60]
+    )
+
+
 # ── Mission PDF ──────────────────────────────────────────────────────────────
 
 @router.get('/mission/{id_mission}')
@@ -258,11 +280,128 @@ def export_mission_pdf(id_mission: int, db: Session = Depends(get_db)):
         pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
         pdf.cell(0, 7, 'Aucune validation enregistrée.', new_x='LMARGIN', new_y='NEXT')
 
+    _add_remplacants_section(pdf, id_mission, db)
+
     content = bytes(pdf.output())
     return Response(
         content=content,
         media_type='application/pdf',
         headers={'Content-Disposition': f'attachment; filename=mission_{id_mission}.pdf'}
+    )
+
+
+# ── Frais Mission PDF ────────────────────────────────────────────────────────
+
+@router.get('/frais/{id_mission}')
+def export_frais_pdf(id_mission: int, db: Session = Depends(get_db)):
+    mission = db.query(models.Mission).filter(models.Mission.id_mission == id_mission).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+
+    operation = db.query(models.Operation).filter(models.Operation.id_operation == id_mission).first()
+    if not operation:
+        raise HTTPException(status_code=404, detail="Opération introuvable")
+
+    miss_list = db.query(models.MissionnairesMission).filter(
+        models.MissionnairesMission.id_mission == id_mission
+    ).all()
+    if miss_list:
+        noms = []
+        for mm in miss_list:
+            emp = db.query(models.Employe).filter(models.Employe.matricule == mm.matricule).first()
+            if emp:
+                noms.append(f"{emp.prenom or ''} {emp.nom or ''}".strip())
+        missionnaires_str = ', '.join(noms) if noms else '-'
+    else:
+        d = _get_employee_info(operation.matricule, db)
+        missionnaires_str = f"{d['prenom']} {d['nom']}"
+
+    pdf = PDFReport(title='FRAIS DE MISSION')
+    pdf.alias_nb_pages()
+    pdf.add_page()
+
+    pdf.section_title('Informations de la mission')
+    pdf.info_row('N° Mission:', str(id_mission))
+    pdf.info_row('Missionnaire(s):', missionnaires_str)
+    pdf.info_row('Destination:', f"{mission.ville or ''}, {mission.pays or ''}")
+    pdf.info_row('Date début:', str(operation.date_debut or '-'))
+    pdf.info_row('Date fin:', str(operation.date_fin or '-'))
+
+    # Frais de la demande principale (table Frais)
+    frais = db.query(models.Frais).filter(models.Frais.id_mission == id_mission).first()
+    if frais:
+        pdf.section_title('Frais déclarés')
+        frais_rows = []
+        if frais.frais_transport_voyage is not None:
+            frais_rows.append(['Transport / Voyage', f"{float(frais.frais_transport_voyage):.2f}"])
+        if frais.frais_hotel is not None:
+            frais_rows.append(['Hébergement', f"{float(frais.frais_hotel):.2f}"])
+        if frais.frais_deplacement is not None:
+            frais_rows.append(['Déplacement', f"{float(frais.frais_deplacement):.2f}"])
+        if frais.frais_nutrition is not None:
+            frais_rows.append(['Nutrition / Repas', f"{float(frais.frais_nutrition):.2f}"])
+        if frais_rows:
+            pdf.table(['Type de frais', 'Montant'], frais_rows, col_widths=[100, 70])
+        if frais.total_frais is not None:
+            pdf.ln(2)
+            pdf.set_font(pdf._body_font, 'B', 10)
+            pdf.set_text_color(17, 32, 51)
+            pdf.cell(0, 8, f"Total : {float(frais.total_frais):.2f}", new_x='LMARGIN', new_y='NEXT')
+            pdf.set_text_color(0, 0, 0)
+
+    # Frais par missionnaire (table FraisMissionnaire)
+    frais_miss = db.query(models.FraisMissionnaire).filter(
+        models.FraisMissionnaire.id_mission == id_mission
+    ).all()
+    if frais_miss:
+        pdf.section_title('Frais par missionnaire')
+        fm_rows = []
+        total_global = 0.0
+        for fm in frais_miss:
+            emp = db.query(models.Employe).filter(models.Employe.matricule == fm.matricule).first()
+            nom = f"{emp.prenom or ''} {emp.nom or ''}".strip() if emp else str(fm.matricule)
+            transport = float(fm.frais_transport or 0)
+            hotel = float(fm.frais_hotel or 0)
+            deplacement = float(fm.frais_deplacement or 0)
+            nutrition = float(fm.frais_nutrition or 0)
+            total = float(fm.total_frais or 0)
+            total_global += total
+            fm_rows.append([
+                nom,
+                f"{transport:.2f}", f"{hotel:.2f}",
+                f"{deplacement:.2f}", f"{nutrition:.2f}",
+                f"{total:.2f}", fm.statut or '-'
+            ])
+        pdf.table(
+            ['Missionnaire', 'Transport', 'Hôtel', 'Dépl.', 'Nutrition', 'Total', 'Statut'],
+            fm_rows,
+            col_widths=[40, 23, 23, 23, 23, 23, 20]
+        )
+        pdf.ln(2)
+        pdf.set_font(pdf._body_font, 'B', 10)
+        pdf.set_text_color(17, 32, 51)
+        pdf.cell(0, 8, f"Total global : {total_global:.2f}", new_x='LMARGIN', new_y='NEXT')
+        pdf.set_text_color(0, 0, 0)
+
+    # Workflow
+    history = _get_workflow_history(id_mission, db)
+    pdf.section_title('Historique de validation')
+    if history:
+        wf_rows = [[h['role'], h['nom'], h['statut'], h['date'], h['commentaire'][:40]] for h in history]
+        pdf.table(
+            ['Rôle', 'Validateur', 'Décision', 'Date', 'Commentaire'],
+            wf_rows,
+            col_widths=[30, 40, 25, 35, 40]
+        )
+    else:
+        pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
+        pdf.cell(0, 7, 'Aucune validation enregistrée.', new_x='LMARGIN', new_y='NEXT')
+
+    content = bytes(pdf.output())
+    return Response(
+        content=content,
+        media_type='application/pdf',
+        headers={'Content-Disposition': f'attachment; filename=frais_mission_{id_mission}.pdf'}
     )
 
 
@@ -315,6 +454,8 @@ def export_conge_pdf(id_operation: int, db: Session = Depends(get_db)):
     else:
         pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
         pdf.cell(0, 7, 'Aucune validation enregistrée.', new_x='LMARGIN', new_y='NEXT')
+
+    _add_remplacants_section(pdf, id_operation, db)
 
     content = bytes(pdf.output())
     return Response(
@@ -377,6 +518,8 @@ def export_permission_pdf(id_operation: int, db: Session = Depends(get_db)):
         pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
         pdf.cell(0, 7, 'Aucune validation enregistrée.', new_x='LMARGIN', new_y='NEXT')
 
+    _add_remplacants_section(pdf, id_operation, db)
+
     content = bytes(pdf.output())
     return Response(
         content=content,
@@ -412,7 +555,24 @@ def export_sortie_pdf(id_operation: int, db: Session = Depends(get_db)):
     pdf.info_row('N° Demande:', str(id_operation))
     pdf.info_row('Date:', str(operation.date_debut or '-'))
     if sortie:
-        pdf.info_row('Heure sortie:', str(sortie.heure_sortie) if sortie.heure_sortie else '-')
+        pdf.info_row('Heure de sortie:', str(sortie.heure_sortie) if sortie.heure_sortie else '-')
+        # Calcul de la durée si heure_retour disponible
+        heure_retour = getattr(sortie, 'heure_retour', None)
+        if sortie.heure_sortie and heure_retour:
+            from datetime import datetime as _dt, timedelta as _td
+            def _to_minutes(t):
+                return t.hour * 60 + t.minute
+            start_min = _to_minutes(sortie.heure_sortie)
+            end_min = _to_minutes(heure_retour)
+            diff_min = end_min - start_min
+            if diff_min < 0:
+                diff_min += 24 * 60  # overnight
+            hours, minutes = divmod(diff_min, 60)
+            duree_str = f"{hours}h{minutes:02d}" if hours else f"{minutes} min"
+            pdf.info_row('Heure de retour:', str(heure_retour))
+            pdf.info_row('Durée:', duree_str)
+        elif heure_retour:
+            pdf.info_row('Heure de retour:', str(heure_retour))
         pdf.info_row('Commentaire:', sortie.commentaire or '-')
     pdf.info_row('Motif:', operation.motif or '-')
     pdf.info_row('Statut:', '')

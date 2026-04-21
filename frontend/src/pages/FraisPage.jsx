@@ -7,7 +7,7 @@ import WorkflowModal from '../components/WorkflowModal'
 import ModifiedBadge from '../components/ModifiedBadge'
 import { missionDestLabel, fraisLabel } from '../utils/operationLabel'
 import '../styles/Operations.css'
-import { ClipboardList, AlertTriangle, FileText, CheckCircle, Upload, Eye, Banknote, Clock, Download, Trash2 } from 'lucide-react'
+import { ClipboardList, AlertTriangle, FileText, CheckCircle, Upload, Eye, Banknote, Clock, Download, Trash2, FileDown } from 'lucide-react'
 
 const th = { padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', fontSize: '0.7rem', color: '#64748b', fontWeight: 700, whiteSpace: 'nowrap' }
 const td = { padding: '8px', borderBottom: '1px solid #f1f5f9', fontSize: '0.76rem', color: '#111827', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
@@ -622,6 +622,7 @@ export default function FraisPage() {
     const isLoading = loadingOp === id
     const ps = fraisPaymentStatuts[id]
     const eyeBtn = <button key="eye" onClick={(e) => openFraisDetail(e, id)} style={{ ...rowBtn, background: '#6366f1' }} title="Voir détails"><Eye size={12} /></button>
+    const pdfBtn = isValid && ps?.id_mission ? <button key="pdf" onClick={(e) => { e.stopPropagation(); api.get(`/api/pdf/frais/${ps.id_mission}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `frais_mission_${ps.id_mission}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url) }) }} style={{ ...rowBtn, background: '#0e7490', display: 'inline-flex', alignItems: 'center' }} title="Télécharger PDF frais"><FileDown size={13} /></button> : null
 
     // Affiche le bouton de confirmation de paiement si disponible
     const paiementBtn = (() => {
@@ -682,6 +683,7 @@ export default function FraisPage() {
           {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'validé') }} style={okBtn} disabled={isLoading}>{"Approuver"}</button>}
           {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'refusé') }} style={dangerBtn} disabled={isLoading}>{"Refuser"}</button>}
           {paiementBtn}
+          {pdfBtn}
           {eyeBtn}
         </div>
       )
@@ -697,7 +699,7 @@ export default function FraisPage() {
       )
     }
 
-    return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{paiementBtn}{eyeBtn}</div>
+    return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{paiementBtn}{pdfBtn}{eyeBtn}</div>
   }
 
   const renderRows = (rows, isRecu) => {

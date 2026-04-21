@@ -3,13 +3,14 @@ import { useSearchParams } from 'react-router-dom'
 import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import WorkflowModal from '../components/WorkflowModal'
+import RemplacantModal from '../components/RemplacantModal'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import ModifiedBadge from '../components/ModifiedBadge'
 import { operationLabel } from '../utils/operationLabel'
 import '../styles/Operations.css'
 
 import {
-  ClipboardList, AlertTriangle, Calendar, FileText, Pin, Clock, Search, CheckCircle, Upload, Eye, Download, Trash2, X, FileDown
+  ClipboardList, AlertTriangle, Calendar, FileText, Pin, Clock, Search, CheckCircle, Upload, Eye, Download, Trash2, X, FileDown, Users2
 } from 'lucide-react'
 
 const PERMISSIONS_CONVENTIONNELLES = {
@@ -421,6 +422,8 @@ export default function PermissionsPage() {
   const [showUploadSection, setShowUploadSection] = useState(false)
   const [selectedOperationForWorkflow, setSelectedOperationForWorkflow] = useState(null)
   const [detailPermissionItem, setDetailPermissionItem] = useState(null)
+  const [showRemplacantModal, setShowRemplacantModal] = useState(false)
+  const [remplacantOpId, setRemplacantOpId] = useState(null)
   const [preuveModalItem, setProuveModalItem] = useState(null)
 
   const filteredPermissionTypes = useMemo(() => {
@@ -781,6 +784,7 @@ export default function PermissionsPage() {
     const btnStyle = (base) => ({ ...base, opacity: isLoading ? 0.6 : 1 })
     const eyeBtn = <button key="eye" onClick={(e) => { e.stopPropagation(); setDetailPermissionItem({ ...item, ...(permissionsById.get(item.id_operation) || {}) }) }} style={{ ...rowBtn, background: '#6366f1' }} title="Voir détails"><Eye size={12} /></button>
     const pdfBtn = isValid ? <button key="pdf" onClick={(e) => { e.stopPropagation(); setDownloadingPdf(id); api.get(`/api/pdf/permission/${id}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `permission_${id}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }).finally(() => setDownloadingPdf(null)) }} style={{ ...rowBtn, background: '#0e7490', display: 'inline-flex', alignItems: 'center', opacity: downloadingPdf === id ? 0.6 : 1 }} disabled={downloadingPdf === id} title="Télécharger PDF"><FileDown size={13} /></button> : null
+    const remplacantBtn = <button key="remplacant" onClick={(e) => { e.stopPropagation(); setRemplacantOpId(id); setShowRemplacantModal(true) }} style={{ ...rowBtn, background: '#2563eb', display: 'inline-flex', alignItems: 'center' }} title="Remplaçant"><Users2 size={12} /></button>
 
     if (isRefus) return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{eyeBtn}</div>
 
@@ -792,7 +796,7 @@ export default function PermissionsPage() {
           {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'refusé') }} style={dangerBtn} disabled={isLoading}>{"Refuser"}</button>}
           {estRh && isValid && etat === 'AttenteRH' && <button onClick={(e) => { e.stopPropagation(); handleActiverRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer'}</button>}
           {estRh && isValid && etat === 'Active' && <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : "Clôturer le congé"}</button>}
-          {pdfBtn}{eyeBtn}
+          {pdfBtn}{eyeBtn}{remplacantBtn}
         </div>
       )
     }
@@ -802,30 +806,30 @@ export default function PermissionsPage() {
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <button onClick={(e) => { e.stopPropagation(); handleEditPermission(item) }} style={primaryBtn}>{"Modifier"}</button>
           <button onClick={(e) => { e.stopPropagation(); handleAnnuler(id) }} style={dangerBtn}>{"Annuler"}</button>
-          {eyeBtn}
+          {eyeBtn}{remplacantBtn}
         </div>
       )
     }
 
     if (etat === '--') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleActiver(id) }} style={btnStyle(okBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer'}</button>{pdfBtn}{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleActiver(id) }} style={btnStyle(okBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer'}</button>{pdfBtn}{eyeBtn}{remplacantBtn}</div>
     }
 
     if (etat === 'AttenteRH') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>{"En attente RH"}</span>{pdfBtn}{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>{"En attente RH"}</span>{pdfBtn}{eyeBtn}{remplacantBtn}</div>
     }
 
     if (etat === 'Active') {
       const dateFin = item.date_fin || item.date_retour
       const canRetourAnticipe = dateFin && new Date() < new Date(dateFin)
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : "Clôturer le congé"}</button>{canRetourAnticipe && <button onClick={(e) => { e.stopPropagation(); handleRetourAnticipe(id) }} style={btnStyle({ ...primaryBtn, background: '#3b82f6' })} disabled={isLoading}>{isLoading ? '…' : 'Retour anticipé'}</button>}{pdfBtn}{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : "Clôturer le congé"}</button>{canRetourAnticipe && <button onClick={(e) => { e.stopPropagation(); handleRetourAnticipe(id) }} style={btnStyle({ ...primaryBtn, background: '#3b82f6' })} disabled={isLoading}>{isLoading ? '…' : 'Retour anticipé'}</button>}{pdfBtn}{eyeBtn}{remplacantBtn}</div>
     }
 
     if (etat === 'ClotureDemandee') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>{"En attente confirmation RH"}</span>{pdfBtn}{eyeBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>{"En attente confirmation RH"}</span>{pdfBtn}{eyeBtn}{remplacantBtn}</div>
     }
 
-    return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{pdfBtn}{eyeBtn}</div>
+    return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{pdfBtn}{eyeBtn}{remplacantBtn}</div>
   }
 
   const renderRows = (rows, isRecu) => {
@@ -1156,14 +1160,15 @@ export default function PermissionsPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <thead>
                 <tr>
-                  <th style={{ ...th, width: '22%' }}>Titre de demande</th>
-                  <th style={{ ...th, width: '12%' }}>Demandeur</th>
-                  <th style={{ ...th, width: '10%' }}>Statut</th>
-                  <th style={{ ...th, width: '11%' }}>Date creation</th>
-                  <th style={{ ...th, width: '10%' }}>Date depart</th>
-                  <th style={{ ...th, width: '10%' }}>Date retour</th>
-                  <th style={{ ...th, width: '6%' }}>Duree</th>
-                  <th style={{ ...th, width: '19%' }}>Etat</th>
+                  <th style={{ ...th, width: '18%' }}>Titre de demande</th>
+                  <th style={{ ...th, width: '10%' }}>Demandeur</th>
+                  <th style={{ ...th, width: '9%' }}>Statut</th>
+                  <th style={{ ...th, width: '9%' }}>Date création</th>
+                  <th style={{ ...th, width: '9%' }}>Date départ</th>
+                  <th style={{ ...th, width: '9%' }}>Date retour</th>
+                  <th style={{ ...th, width: '5%' }}>Durée</th>
+                  <th style={{ ...th, width: '17%' }}>État</th>
+                  <th style={{ ...th, width: '14%' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1179,12 +1184,13 @@ export default function PermissionsPage() {
                     <tr key={item.id_operation}>
                       <td style={td}>{item.titre || item.type_demande || 'Permission'} #{item.id_operation}</td>
                       <td style={td}>{item.demandeur?.nom_complet || item.demandeur?.nom || `#${item.matricule}`}</td>
-                      <td style={td}>{item.statut}</td>
+                      <td style={td}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: /valid/i.test(item.statut) ? '#065f46' : /refus/i.test(item.statut) ? '#991b1b' : '#92400e', background: /valid/i.test(item.statut) ? '#d1fae5' : /refus/i.test(item.statut) ? '#fee2e2' : '#fef3c7' }}>{item.statut || 'En attente'}</span></td>
                       <td style={td}>{item.date_demande ? String(item.date_demande).slice(0, 10) : '--'}</td>
                       <td style={td}>{item.date_depart ? String(item.date_depart).slice(0, 10) : '--'}</td>
                       <td style={td}>{item.date_retour ? String(item.date_retour).slice(0, 10) : '--'}</td>
                       <td style={td}>{item.duree_jours ?? item.duree ?? '--'} j</td>
                       <td style={td}>{etatBadge}</td>
+                      <td style={td}>{renderActionButtons(item, true)}</td>
                     </tr>
                   )
                 })}
@@ -1198,6 +1204,15 @@ export default function PermissionsPage() {
           isOpen={!!selectedOperationForWorkflow}
           operationId={selectedOperationForWorkflow}
           onClose={() => setSelectedOperationForWorkflow(null)}
+        />
+      )}
+
+      {showRemplacantModal && (
+        <RemplacantModal
+          operationId={remplacantOpId}
+          userRole={user?.role}
+          userMatricule={user?.matricule}
+          onClose={() => { setShowRemplacantModal(false); setRemplacantOpId(null) }}
         />
       )}
 

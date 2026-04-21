@@ -36,6 +36,7 @@ export default function Dashboard(){
   const [activeSlices, setActiveSlices] = useState({})
   const [filterMois, setFilterMois] = useState(null)
   const [filterAnnee, setFilterAnnee] = useState(null)
+  const [employeeDistribution, setEmployeeDistribution] = useState(null)
 
   // ── Widget config ──
   const WIDGET_DEFS = [
@@ -141,6 +142,10 @@ export default function Dashboard(){
     }
     fetchFiltered()
   }, [filterMois, filterAnnee])
+
+  useEffect(() => {
+    api.get('/dashboard/employee-distribution').then(r => setEmployeeDistribution(r.data || null)).catch(() => {})
+  }, [])
 
   const calculateAnciennete = (dateEmbauche) => {
     if (!dateEmbauche) return 'N/A'
@@ -407,6 +412,91 @@ export default function Dashboard(){
               </div>
             </div>
           </div>}
+
+          {/* CONGÉS + MISSIONS + CHARTS WIDGETS */}
+          {(widgets.conges !== false || widgets.missions !== false || widgets.charts !== false) && analytics && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, marginBottom: 12 }}>
+
+              {/* SOLDE & CONGÉS */}
+              {widgets.conges !== false && (
+                <div style={{ background: 'white', border: '1px solid #e2e8f0', borderTop: '4px solid #1b4f9e', borderRadius: 10, padding: '16px', boxShadow: '0 1px 8px rgba(2,22,48,0.07)' }}>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '0.78rem', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid #f0f2f5', paddingBottom: 8 }}>
+                    <Umbrella size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Solde & Congés
+                  </h3>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginBottom: 12 }}>
+                    <span style={{ fontSize: '2.6rem', fontWeight: 800, color: '#1b4f9e', lineHeight: 1 }}>{employe?.solde_conges ?? 'N/A'}</span>
+                    <span style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: 6 }}>jours disponibles</span>
+                  </div>
+                  {analytics.mes_operations?.by_type && (
+                    <div style={{ fontSize: '0.78rem', color: '#475569' }}>
+                      {(() => {
+                        const congeEntry = analytics.mes_operations.by_type.find(t => t.type === 'Congé')
+                        return congeEntry ? (
+                          <span>
+                            <strong style={{ color: '#1b4f9e' }}>{congeEntry.count}</strong> demande(s) de congé au total
+                          </span>
+                        ) : <span style={{ color: '#94a3b8' }}>Aucune demande de congé</span>
+                      })()}
+                    </div>
+                  )}
+                  {analytics.mes_operations?.by_statut && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                      {analytics.mes_operations.by_statut.slice(0, 3).map(s => (
+                        <span key={s.statut} style={{ fontSize: '0.72rem', padding: '2px 9px', borderRadius: 20, background: '#f1f5f9', color: '#334155', fontWeight: 600 }}>
+                          {s.statut}: {s.count}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* MES MISSIONS */}
+              {widgets.missions !== false && (
+                <div style={{ background: 'white', border: '1px solid #e2e8f0', borderTop: '4px solid #4a3470', borderRadius: 10, padding: '16px', boxShadow: '0 1px 8px rgba(2,22,48,0.07)' }}>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '0.78rem', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid #f0f2f5', paddingBottom: 8 }}>
+                    <Briefcase size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Mes Missions
+                  </h3>
+                  {analytics.mes_operations?.by_type ? (() => {
+                    const missionEntry = analytics.mes_operations.by_type.find(t => t.type === 'Mission')
+                    const total = missionEntry?.count ?? 0
+                    const validated = analytics.mes_operations?.by_statut?.find(s => s.statut === 'validé')?.count ?? 0
+                    const pending = analytics.mes_operations?.by_statut?.find(s => s.statut === 'en attente')?.count ?? 0
+                    return (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginBottom: 12 }}>
+                          <span style={{ fontSize: '2.6rem', fontWeight: 800, color: '#4a3470', lineHeight: 1 }}>{total}</span>
+                          <span style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: 6 }}>mission(s) totale(s)</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.72rem', padding: '2px 9px', borderRadius: 20, background: '#dcfce7', color: '#16a34a', fontWeight: 600 }}>Validées: {validated}</span>
+                          <span style={{ fontSize: '0.72rem', padding: '2px 9px', borderRadius: 20, background: '#fef3c7', color: '#d97706', fontWeight: 600 }}>En attente: {pending}</span>
+                        </div>
+                      </>
+                    )
+                  })() : <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Aucune donnée</span>}
+                </div>
+              )}
+
+              {/* GRAPHIQUES */}
+              {widgets.charts !== false && analytics.mes_operations?.by_type && analytics.mes_operations.by_type.length > 0 && (
+                <div style={{ background: 'white', border: '1px solid #e2e8f0', borderTop: '4px solid #3a9ab2', borderRadius: 10, padding: '16px', boxShadow: '0 1px 8px rgba(2,22,48,0.07)' }}>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '0.78rem', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid #f0f2f5', paddingBottom: 8 }}>Répartition de mes opérations</h3>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <PieChart>
+                      <Pie data={analytics.mes_operations.by_type} dataKey="count" nameKey="type" cx="50%" cy="50%" outerRadius={65}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelStyle={{ fontSize: '0.65rem' }}>
+                        {analytics.mes_operations.by_type.map((_, idx) => (
+                          <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ fontSize: '0.75rem' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ANALYTICS */}
           {analytics && (
@@ -885,6 +975,36 @@ export default function Dashboard(){
                     <div style={{ width: '4px', height: '20px', background: '#4a3470', borderRadius: '2px', flexShrink: 0 }}></div>
                     <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#021630', letterSpacing: '0.02em' }}>Dashboard RH — Organisation</h2>
                   </div>
+
+                  {/* DISTRIBUTION DES EMPLOYÉS */}
+                  {employeeDistribution && (
+                    <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '16px 20px', marginBottom: 16, boxShadow: '0 1px 8px rgba(2,22,48,0.07)' }}>
+                      <h3 style={{ margin: '0 0 16px', fontSize: '0.82rem', fontWeight: 700, color: '#021630', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Distribution des employés actifs</h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                        {[
+                          { key: 'by_entite', label: 'Par entité', color: '#1b4f9e' },
+                          { key: 'by_direction', label: 'Par direction', color: '#4a3470' },
+                          { key: 'by_departement', label: 'Par département', color: '#3a9ab2' },
+                        ].map(({ key, label, color }) => {
+                          const data = employeeDistribution[key] || []
+                          if (!data.length) return null
+                          return (
+                            <div key={key}>
+                              <div style={{ fontSize: '0.78rem', fontWeight: 700, color, marginBottom: 8 }}>{label}</div>
+                              <ResponsiveContainer width="100%" height={200}>
+                                <BarChart data={data.slice(0, 8)} layout="vertical" margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
+                                  <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                                  <YAxis type="category" dataKey="label" tick={{ fontSize: 9 }} width={90} />
+                                  <Tooltip contentStyle={{ fontSize: '0.75rem' }} />
+                                  <Bar dataKey="count" fill={color} radius={[0, 4, 4, 0]} />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* ORGANISATION - KPIs PAR PAYS */}
                   {analytics.perimetre?.kpis?.by_pays && analytics.perimetre.kpis.by_pays.length > 0 && (

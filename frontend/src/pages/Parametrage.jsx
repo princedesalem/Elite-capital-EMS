@@ -1,5 +1,7 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTheme } from '../contexts/ThemeContext'
+import { useAuth } from '../contexts/AuthContext'
+import api from '../services/api'
 
 export const LS_TZ_KEY = 'ems_timezone'
 
@@ -153,9 +155,45 @@ const DATA = {
   ],
 }
 
+// Module-level save callback (set by Parametrage component)
+let _saveSettings = () => {}
+
 export default function Parametrage() {
   const [active, setActive] = useState('Général')
   const [search, setSearch] = useState('')
+  const { theme, setTheme } = useTheme()
+  const { user } = useAuth()
+  const matricule = user?.matricule || user?.sub
+  const saveTimer = useRef(null)
+
+  // Load settings from DB on mount
+  useEffect(() => {
+    if (!matricule) return
+    api.get(`/api/settings/${matricule}`).then(res => {
+      const s = res.data?.settings || {}
+      if (s.theme) setTheme(s.theme)
+      if (s.timezone) {
+        if (s.timezone === 'auto') localStorage.removeItem(LS_TZ_KEY)
+        else localStorage.setItem(LS_TZ_KEY, s.timezone)
+        window.dispatchEvent(new Event('ems_tz_changed'))
+      }
+    }).catch(() => {})
+  }, [matricule])
+
+  // Save settings to DB (debounced)
+  function saveSettings(patch) {
+    if (!matricule) return
+    clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      api.get(`/api/settings/${matricule}`).then(res => {
+        const current = res.data?.settings || {}
+        return api.put(`/api/settings/${matricule}`, { settings: { ...current, ...patch } })
+      }).catch(() => {})
+    }, 500)
+  }
+
+  // Register module-level callback for sub-components
+  useEffect(() => { _saveSettings = saveSettings }, [matricule])
 
   const filteredSections = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -275,7 +313,7 @@ function SettingRow({ row }) {
         <RadioInline
           options={row.options || []}
           value={theme === 'sombre' ? 'Sombre' : 'Clair'}
-          onChange={(opt) => setTheme(opt === 'Sombre' ? 'sombre' : 'clair')}
+          onChange={(opt) => { const t = opt === 'Sombre' ? 'sombre' : 'clair'; setTheme(t); _saveSettings({ theme: t }) }}
         />
       ) : row.type === 'radio' ? (
         <RadioInline options={row.options || []} defaultValue={row.defaultValue} />
@@ -314,6 +352,7 @@ function TimezoneSelect() {
     setTz(val)
     if (val === 'auto') localStorage.removeItem(LS_TZ_KEY)
     else localStorage.setItem(LS_TZ_KEY, val)
+    _saveSettings({ timezone: val })
   }
   return (
     <div style={{ marginTop: 6 }}>

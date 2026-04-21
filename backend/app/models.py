@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Enum, Boolean, Text, JSON, DECIMAL, Time
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Enum, Boolean, Text, JSON, DECIMAL, Time, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .db import Base
 import enum
@@ -697,3 +697,22 @@ class ClubReviewItem(Base):
     rating = Column(Integer, nullable=False)
     commentaire = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ── Tâches multi-assignees ────────────────────────────────────────────────────
+class TaskAssignee(Base):
+    __tablename__ = 'TASK_ASSIGNEE'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_task = Column(Integer, ForeignKey('TASK.id_task', ondelete='CASCADE'), nullable=False)
+    matricule_employe = Column(Integer, ForeignKey('EMPLOYE.matricule', ondelete='CASCADE'), nullable=False)
+    __table_args__ = (
+        UniqueConstraint('id_task', 'matricule_employe', name='uq_task_employe'),
+    )
+
+
+# ── Paramètres utilisateurs (persistence DB) ──────────────────────────────────
+class UserSettings(Base):
+    __tablename__ = 'USER_SETTINGS'
+    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule', ondelete='CASCADE'), primary_key=True)
+    settings = Column(JSON, nullable=False, default=dict)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

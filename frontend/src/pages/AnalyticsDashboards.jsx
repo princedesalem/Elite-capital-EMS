@@ -63,6 +63,7 @@ export default function AnalyticsDashboards() {
   const [trends, setTrends] = useState([])
   const [absenteisme, setAbsenteisme] = useState([])
   const [soldeConges, setSoldeConges] = useState([])
+  const [formationRate, setFormationRate] = useState(null)
 
   useEffect(() => {
     api.get('/employees/').then(r => { setEmployees(r.data || []); setLoading(false) }).catch(() => setLoading(false))
@@ -77,6 +78,7 @@ export default function AnalyticsDashboards() {
   useEffect(() => {
     api.get('/dashboard/absenteisme-par-dept').then(r => setAbsenteisme(r.data || [])).catch(() => {})
     api.get('/dashboard/solde-conges-par-tranche').then(r => setSoldeConges(r.data || [])).catch(() => {})
+    api.get('/dashboard/formation-rate').then(r => setFormationRate(r.data || null)).catch(() => {})
   }, [])
 
   const MOIS = useMemo(() => [
@@ -103,30 +105,34 @@ export default function AnalyticsDashboards() {
       return (now - new Date(d)) / (1000 * 60 * 60 * 24 * 365.25)
     }
 
-    // Headcount by month/year of hire (growth)
+    // Filter employees by year/mois/entite/direction
+    const filtered = employees.filter(e => {
+      if (filterEntite !== 'tous' && (e.nom_entite || e.entite || '') !== filterEntite) return false
+      if (filterDirection !== 'tous' && (e.nom_direction || e.direction || '') !== filterDirection) return false
+      if (filterMois !== 'tous' && e.date_embauche) {
+        const month = new Date(e.date_embauche).getMonth() + 1
+        if (String(month) !== filterMois) return false
+      }
+      return true
+    })
+
+    // Headcount by month/year of hire (growth) — built from filtered employees
     const hiresByMonth = {}
-    employees.forEach(e => {
+    filtered.forEach(e => {
       if (!e.date_embauche) return
       const d = new Date(e.date_embauche)
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
       hiresByMonth[key] = (hiresByMonth[key] || 0) + 1
     })
 
-    // Unique entites and directions
+    // Unique entites and directions (from all employees for filter dropdowns)
     const entites = [...new Set(employees.map(e => e.nom_entite || e.entite || '').filter(Boolean))]
     const directions = [...new Set(employees.map(e => e.nom_direction || e.direction || '').filter(Boolean))]
 
-    // Build monthly data for selected year
+    // Build monthly data for selected year (based on filtered employees)
     const monthlyData = MOIS.map((mois, i) => {
       const monthStr = `${filterYear}-${String(i + 1).padStart(2, '0')}`
       return { mois, embauches: hiresByMonth[monthStr] || 0 }
-    })
-
-    // Filter employees by year/mois/entite/direction
-    const filtered = employees.filter(e => {
-      if (filterEntite !== 'tous' && (e.nom_entite || e.entite || '') !== filterEntite) return false
-      if (filterDirection !== 'tous' && (e.nom_direction || e.direction || '') !== filterDirection) return false
-      return true
     })
 
     const totalEmployees = filtered.length
@@ -401,7 +407,12 @@ export default function AnalyticsDashboards() {
                       </div>
                     </div>
                     <h3 style={{ margin: '20px 0 10px', color: DARK, fontSize: '0.9rem', fontWeight: 700 }}>KPI Développement</h3>
-                    <KpiFormulaCard icon={<GraduationCap size={16} />} label="Taux d’accès à la formation" value="N/A" formula="(Formés dans l’année / Effectif total) × 100" />
+                    <KpiFormulaCard
+                      icon={<GraduationCap size={16} />}
+                      label="Taux d'accès à la formation"
+                      value={formationRate ? `${formationRate.taux}% (${formationRate.formes}/${formationRate.total} en ${formationRate.annee})` : 'N/A'}
+                      formula="(Employés formés dans l'année / Effectif total) × 100"
+                    />
                     {analytics.pctSenior !== null && (
                       <KpiFormulaCard icon={<Users size={16} />} label="Indice de vieillissement" value={`${analytics.pctSenior} %`} formula="(Employés ≥†45 ans / Effectif total) × 100" />
                     )}

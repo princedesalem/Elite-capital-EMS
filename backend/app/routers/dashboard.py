@@ -1026,3 +1026,126 @@ def get_solde_conges_par_tranche(db: Session = Depends(get_db)):
             tranches['36+ j'] += 1
 
     return [{'tranche': k, 'count': v} for k, v in tranches.items()]
+
+
+@router.get('/formation-rate')
+def get_formation_rate(db: Session = Depends(get_db)):
+    """
+    Taux d'accès à la formation :
+    (Employés ayant participé à une formation cette année / Effectif total) × 100
+    
+    Sources : missions (titre/commentaire/motif contient 'formation'),
+              tâches terminées (titre contient 'formation'),
+              événements (titre contient 'formation').
+    """
+    from datetime import date
+    import re
+    current_year = date.today().year
+    formation_re = re.compile(r'formations?', re.IGNORECASE)
+
+    formatted_employees: set = set()
+
+    # 1) Missions avec "formation" dans titre, commentaire ou motif
+    missions = db.query(models.Operation).filter(
+        models.Operation.type_demande == 'Mission',
+        models.Operation.statut.in_(['validé', 'validée', 'en attente']),
+    ).all()
+    for op in missions:
+        if op.date_debut and op.date_debut.year != current_year:
+            continue
+        if (formation_re.search(op.titre or '') or
+                formation_re.search(op.commentaire or '') or
+                formation_re.search(op.motif or '')):
+            formatted_employees.add(op.matricule)
+
+    # 2) Tâches terminées avec "formation" dans le titre
+    tasks = db.query(models.Task).filter(models.Task.statut == 'termine').all()
+    for task in tasks:
+        if task.date_modification and task.date_modification.year != current_year:
+            continue
+        if formation_re.search(task.titre or ''):
+            # Ajouter le créateur et tous les assignés
+            formatted_employees.add(task.cree_par)
+            for ta in db.query(models.TaskAssignee).filter(models.TaskAssignee.id_task == task.id_task).all():
+                formatted_employees.add(ta.matricule_employe)
+            if task.assigne_a:
+                formatted_employees.add(task.assigne_a)
+
+    # 3) Événements avec "formation" dans le titre
+    events = db.query(models.Evenement).all()
+    for ev in events:
+        if formation_re.search(ev.titre or ''):
+            # On ne sait pas qui a participé — on compte les employés concernés via created_by
+            # et on ne gonfle pas artificiellement : on peut seulement compter ceux qui y sont liés
+            if ev.created_by:
+                formatted_employees.add(ev.created_by)
+
+    # Effectif total actif
+    total = db.query(models.Employe).filter(
+        models.Employe.statut_employe != models.StatutEmployeEnum.CONGEDIE
+    ).count()
+
+    formes = len(formatted_employees)
+    taux = round((formes / total) * 100, 1) if total > 0 else 0
+
+    return {
+        'formes': formes,
+        'total': total,
+        'taux': taux,
+        'annee': current_year,
+    }
+
+
+@router.get('/employee-distribution')
+def get_employee_distribution(db: Session = Depends(get_db)):
+    """
+    Répartition des employés par entité, direction et département.
+    Utilisé pour les diagrammes du Dashboard.
+    """
+    # Par entité
+    by_entite_rows = db.query(
+        models.Entite.nom,
+        func.count(models.Employe.matricule).label('count')
+    ).outerjoin(
+        models.Employe, models.Employe.id_entite == models.Entite.id_entite
+    ).group_by(models.Entite.nom).all()
+
+    by_entite = [
+        {'label': nom or 'Non renseigné', 'count': int(count)}
+        for nom, count in by_entite_rows
+        if count > 0
+    ]
+
+    # Par direction
+    by_direction_rows = db.query(
+        models.Direction.nom,
+        func.count(models.Employe.matricule).label('count')
+    ).outerjoin(
+        models.Employe, models.Employe.id_direction == models.Direction.id_direction
+    ).group_by(models.Direction.nom).all()
+
+    by_direction = [
+        {'label': nom or 'Non renseignée', 'count': int(count)}
+        for nom, count in by_direction_rows
+        if count > 0
+    ]
+
+    # Par département
+    by_dept_rows = db.query(
+        models.Departement.nom,
+        func.count(models.Employe.matricule).label('count')
+    ).outerjoin(
+        models.Employe, models.Employe.dept_id == models.Departement.dept_id
+    ).group_by(models.Departement.nom).all()
+
+    by_departement = [
+        {'label': nom or 'Non renseigné', 'count': int(count)}
+        for nom, count in by_dept_rows
+        if count > 0
+    ]
+
+    return {
+        'by_entite': sorted(by_entite, key=lambda x: x['count'], reverse=True),
+        'by_direction': sorted(by_direction, key=lambda x: x['count'], reverse=True),
+        'by_departement': sorted(by_departement, key=lambda x: x['count'], reverse=True),
+    }

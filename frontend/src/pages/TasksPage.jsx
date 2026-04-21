@@ -23,7 +23,7 @@ const emptyForm = {
   priorite: 'moyenne',
   statut: 'a_faire',
   date_echeance: '',
-  assigne_a: '',
+  assignees: [],
 }
 
 export default function TasksPage() {
@@ -65,8 +65,7 @@ export default function TasksPage() {
     e.preventDefault()
     setError('')
     const payload = {
-      ...form,
-      matricule_actor: user?.matricule,
+      ...form,      assignees: form.assignees,      matricule_actor: user?.matricule,
       role_actor: roleValue,
     }
     try {
@@ -110,7 +109,7 @@ export default function TasksPage() {
       priorite: task.priorite,
       statut: task.statut,
       date_echeance: task.date_echeance || '',
-      assigne_a: task.assigne_a || '',
+      assignees: Array.isArray(task.assignees) ? task.assignees.map(a => a.matricule ?? a) : (task.assigne_a ? [Number(task.assigne_a)] : []),
     })
     setEditingId(task.id)
     setShowForm(true)
@@ -126,7 +125,12 @@ export default function TasksPage() {
     if (filterStatut !== 'tous' && t.statut !== filterStatut) return false
     if (filterPrio !== 'tous' && t.priorite !== filterPrio) return false
     if (searchQ && !t.titre.toLowerCase().includes(searchQ.toLowerCase())) return false
-    if (!isAdmin && t.created_by !== user?.matricule && t.assigne_a !== String(user?.matricule)) return false
+    if (!isAdmin) {
+      const myMat = String(user?.matricule)
+      const assignees = Array.isArray(t.assignees) ? t.assignees.map(a => String(a.matricule ?? a)) : []
+      const isAssigned = assignees.includes(myMat) || String(t.assigne_a) === myMat
+      if (String(t.created_by) !== myMat && !isAssigned) return false
+    }
     return true
   })
 
@@ -215,13 +219,36 @@ export default function TasksPage() {
             </div>
             {isAdmin && (
               <div className="form-group">
-                <label>{"Assigné à"}</label>
-                <select className="form-control" value={form.assigne_a} onChange={e => setForm({ ...form, assigne_a: e.target.value })}>
-                  <option value="">— Moi-même —</option>
+                <label>{"Assigné(s) à"}</label>
+                <select
+                  className="form-control"
+                  multiple
+                  size={Math.min(5, employees.length + 1)}
+                  value={form.assignees.map(String)}
+                  onChange={e => {
+                    const selected = Array.from(e.target.selectedOptions, o => Number(o.value))
+                    setForm({ ...form, assignees: selected })
+                  }}
+                  style={{ minHeight: 80 }}
+                >
                   {employees.map(emp => (
                     <option key={emp.matricule} value={emp.matricule}>{emp.prenom} {emp.nom} ({emp.matricule})</option>
                   ))}
                 </select>
+                {form.assignees.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                    {form.assignees.map(mat => {
+                      const emp = employees.find(e => e.matricule === mat)
+                      return (
+                        <span key={mat} style={{ background: '#e0e7ff', color: '#021630', fontSize: '0.75rem', padding: '2px 8px', borderRadius: 20, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {emp ? `${emp.prenom} ${emp.nom}` : mat}
+                          <button type="button" onClick={() => setForm({ ...form, assignees: form.assignees.filter(m => m !== mat) })} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, color: '#475569' }}>×</button>
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+                <small style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Maintenir Ctrl/Cmd pour sélectionner plusieurs</small>
               </div>
             )}
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
@@ -296,7 +323,18 @@ export default function TasksPage() {
                   {task.description && <p style={{ margin: '0 0 6px', fontSize: '0.82rem', color: '#64748b', lineHeight: 1.4 }}>{task.description}</p>}
                   <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: '0.76rem', color: '#94a3b8' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Calendar size={11} /> {task.date_echeance || 'Aucune échéance'}</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><User size={11} /> {task.assigne_a || task.created_by || '—'}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                      <User size={11} />
+                      {Array.isArray(task.assignees) && task.assignees.length > 0 ? (
+                        task.assignees.map(a => (
+                          <span key={a.matricule} style={{ background: '#e0e7ff', color: '#021630', fontSize: '0.72rem', padding: '1px 7px', borderRadius: 20, fontWeight: 600 }}>
+                            {a.nom ? `${a.nom}` : a.matricule}
+                          </span>
+                        ))
+                      ) : (
+                        <span>{task.assigne_a || task.created_by || '—'}</span>
+                      )}
+                    </span>
                     <span style={{ color: statut.color, fontWeight: 600 }}>{statut.icon} {statut.label}</span>
                   </div>
                 </div>

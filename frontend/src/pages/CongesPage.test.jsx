@@ -3,6 +3,8 @@ import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import CongesPage from './CongesPage'
 
+const mockUser = vi.hoisted(() => ({ value: { matricule: '1001', role: 'EMPLOYE', prenom: 'Jean', nom: 'Test' } }))
+
 const apiGetMock = vi.fn((url) => {
   if (url.includes('/api/conges/historique/')) return Promise.resolve({ data: [] })
   if (url.includes('/api/workflow/boite/')) return Promise.resolve({ data: {} })
@@ -21,12 +23,17 @@ vi.mock('../services/api', () => ({
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
-    user: { matricule: '1001', role: 'EMPLOYE', prenom: 'Jean', nom: 'Test' },
+    user: mockUser.value,
   }),
+}))
+
+vi.mock('../components/RemplacantModal', () => ({
+  default: () => null,
 }))
 
 describe('CongesPage', () => {
   beforeEach(() => {
+    mockUser.value = { matricule: '1001', role: 'EMPLOYE', prenom: 'Jean', nom: 'Test' }
     apiGetMock.mockReset()
     apiGetMock.mockImplementation((url) => {
       if (url.includes('/api/conges/historique/')) return Promise.resolve({ data: [] })
@@ -360,5 +367,76 @@ describe('CongesPage', () => {
 
     expect(screen.getByText('Activé')).toBeInTheDocument()
     expect(screen.getByText('Clôture en att. RH')).toBeInTheDocument()
+  })
+
+  it('masque le bouton remplaçant sur une opération refusée', async () => {
+    apiGetMock.mockImplementation((url) => {
+      if (url.includes('/api/conges/historique/')) return Promise.resolve({ data: [] })
+      if (url.includes('/api/workflow/boite/')) {
+        return Promise.resolve({
+          data: {
+            envoye: [{
+              id_operation: 501,
+              type_demande: 'conge',
+              statut: 'refusé',
+              motif: 'Repos',
+              date_debut: '2026-05-01',
+              date_fin: '2026-05-05',
+              date_demande: '2026-04-20',
+            }],
+            recu: [], valide: [], refuse: [],
+          },
+        })
+      }
+      if (url.includes('/api/conges/solde/')) return Promise.resolve({ data: { solde_conges: 12 } })
+      return Promise.resolve({ data: {} })
+    })
+
+    await act(async () => {
+      render(<MemoryRouter><CongesPage /></MemoryRouter>)
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByTitle('Remplaçant')).not.toBeInTheDocument()
+  })
+
+  it("section PCA/AG affiche statut coloré et boutons d'action pour RH", async () => {
+    mockUser.value = { matricule: '2001', role: 'RH', prenom: 'Marie', nom: 'RH' }
+    apiGetMock.mockImplementation((url) => {
+      if (url.includes('/api/conges/historique/')) return Promise.resolve({ data: [] })
+      if (url.includes('/api/workflow/boite/')) {
+        return Promise.resolve({
+          data: {
+            envoye: [],
+            recu: [],
+            valide: [],
+            refuse: [],
+            recu_pca_ag: [{
+              id_operation: 601,
+              type_demande: 'conge',
+              statut: 'validé',
+              motif: 'PCA test',
+              date_debut: '2026-06-01',
+              date_fin: '2026-06-10',
+              date_demande: '2026-05-20',
+            }],
+          },
+        })
+      }
+      if (url.includes('/api/conges/solde/')) return Promise.resolve({ data: { solde_conges: 12 } })
+      return Promise.resolve({ data: {} })
+    })
+
+    await act(async () => {
+      render(<MemoryRouter><CongesPage /></MemoryRouter>)
+      await Promise.resolve()
+    })
+
+    fireEvent.click(screen.getByText(/Re[çc]u/i))
+
+    expect(screen.getByText('Pour information — PCA / AG')).toBeInTheDocument()
+    expect(screen.getByTitle('Voir détails')).toBeInTheDocument()
+    expect(screen.getByTitle('Remplaçant')).toBeInTheDocument()
+    expect(screen.getByTitle('Télécharger PDF')).toBeInTheDocument()
   })
 })

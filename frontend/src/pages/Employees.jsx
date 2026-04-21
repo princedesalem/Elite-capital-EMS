@@ -314,7 +314,8 @@ export default function Employees(){
   const handleExport = async (format) => {
     setExporting(true)
     try {
-      const res = await api.get(`/employees/export?format=${format}`, { responseType: 'blob' })
+      const url_path = format === 'pdf' ? '/api/pdf/report/employees' : `/employees/export?format=${format}`
+      const res = await api.get(url_path, { responseType: 'blob' })
       const blob = new Blob([res.data])
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -403,6 +404,7 @@ export default function Employees(){
                         <button type="button" className="floating-submenu-item" onClick={() => handleExport('csv')}>CSV</button>
                         <button type="button" className="floating-submenu-item" onClick={() => handleExport('xlsx')}>XLSX</button>
                         <button type="button" className="floating-submenu-item" onClick={() => handleExport('xls')}>XLS</button>
+                        <button type="button" className="floating-submenu-item" onClick={() => handleExport('pdf')}>PDF</button>
                       </div>
                     )}
                   </div>

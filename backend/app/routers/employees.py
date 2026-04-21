@@ -562,9 +562,29 @@ def _read_import_dataframe(upload: UploadFile, table: Optional[str] = None):
 
 def _employee_export_rows(db: Session):
     employees = db.query(models.Employe).all()
+    # Build n+1 name cache
+    n1_cache: dict = {}
     rows = []
     for e in employees:
         data = _serialize_employee(e, db)
+        # Resolve localisation name (city + country)
+        localisation_nom = ''
+        if data.get('ville') and data.get('pays'):
+            localisation_nom = f"{data['ville']}, {data['pays']}"
+        elif data.get('ville'):
+            localisation_nom = data['ville']
+        elif data.get('pays'):
+            localisation_nom = data['pays']
+
+        # Resolve n+1 name
+        n1_mat = e.n1
+        n1_nom = ''
+        if n1_mat:
+            if n1_mat not in n1_cache:
+                n1_emp = db.query(models.Employe).filter(models.Employe.matricule == n1_mat).first()
+                n1_cache[n1_mat] = f"{n1_emp.prenom or ''} {n1_emp.nom or ''}".strip() if n1_emp else str(n1_mat)
+            n1_nom = n1_cache[n1_mat]
+
         rows.append({
             'matricule': data.get('matricule'),
             'nom': data.get('nom'),
@@ -580,7 +600,7 @@ def _employee_export_rows(db: Session):
             'role': data.get('role'),
             'pays': data.get('pays'),
             'ville': data.get('ville'),
-            'id_localisation': data.get('id_localisation'),
+            'localisation': localisation_nom,
             'diplome': data.get('diplome'),
             'contact_urgence': data.get('contact_urgence'),
             'date_embauche': data.get('date_embauche'),
@@ -588,7 +608,7 @@ def _employee_export_rows(db: Session):
             'categorie': data.get('categorie'),
             'annee_experience': data.get('annee_experience'),
             'statut_employe': data.get('statut_employe'),
-            'n1': data.get('n1'),
+            'superieur_hierarchique': n1_nom,
             'statut_matrimonial': data.get('statut_matrimonial'),
             'nombre_enfants': data.get('nombre_enfants'),
         })
@@ -760,8 +780,8 @@ def export_employees(
     if format == 'csv':
         columns = [
             'matricule', 'nom', 'prenom', 'email', 'date_naissance', 'sexe', 'telephone',
-            'fonction', 'departement', 'direction', 'entite', 'role', 'pays', 'ville', 'id_localisation', 'diplome', 'contact_urgence',
-            'date_embauche', 'solde_conges', 'categorie', 'annee_experience', 'statut_employe', 'n1',
+            'fonction', 'departement', 'direction', 'entite', 'role', 'pays', 'ville', 'localisation', 'diplome', 'contact_urgence',
+            'date_embauche', 'solde_conges', 'categorie', 'annee_experience', 'statut_employe', 'superieur_hierarchique',
             'statut_matrimonial', 'nombre_enfants'
         ]
         df = pd.DataFrame(rows, columns=columns)

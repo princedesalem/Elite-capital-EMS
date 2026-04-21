@@ -177,7 +177,7 @@ function PhoneInput({ value, onChange, placeholder = 'Numéro de téléphone' })
           style={{ width: '100%', height: '100%', minHeight: 35, padding: '0 8px', background: 'var(--bg)', border: 'none', borderRight: '1px solid #e5e7eb', cursor: 'pointer', fontSize: '0.82rem', outline: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}
         >
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedLabel}</span>
-          <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>?</span>
+          <span style={{ display: 'inline-block', width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: '4px solid currentColor', opacity: 0.7, flexShrink: 0 }} />
         </button>
         {open && (
           <div
@@ -524,6 +524,12 @@ export default function EmployeeForm(){
           {/* Diplôme */}
           <div className="form-row">
             <AutocompleteInput placeholder="Diplôme" value={form.diplome} onChange={v=>setField('diplome',v)} options={options.diplome} />
+            {(!id || id === 'new') && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Solde initial de congés (jours)</label>
+                <input className="input" type="number" min={0} placeholder="Solde initial de congés (jours)" value={form.solde_conges ?? 0} onChange={e=>setField('solde_conges', e.target.value)} />
+              </div>
+            )}
           </div>
           {/* Org hierarchy */}
           <div className="form-row">

@@ -251,4 +251,27 @@ describe('EmployeeForm', () => {
 
     consoleSpy.mockRestore()
   })
+
+  it('phone button shows exactly "CM (+237)" with no stray characters', async () => {
+    renderPage()
+
+    const buttons = await screen.findAllByRole('button', { name: /choisir le code pays/i })
+    const phoneButton = buttons[0]
+
+    // The visible text must be "CM (+237)" — no extra "?" from broken flag emoji
+    const text = phoneButton.textContent.trim()
+    expect(text).toBe('CM (+237)')
+    expect(text).not.toMatch(/\?/)
+  })
+
+  it('phone country code dropdown renders country names without broken characters', async () => {
+    renderPage()
+
+    const buttons = await screen.findAllByRole('button', { name: /choisir le code pays/i })
+    fireEvent.click(buttons[0])
+
+    // Key countries must appear with their proper ISO code, not "XX"
+    expect(screen.getByText(/Cameroun \(\+237\)/)).toBeInTheDocument()
+    expect(screen.getByText(/France \(\+33\)/)).toBeInTheDocument()
+  })
 })
