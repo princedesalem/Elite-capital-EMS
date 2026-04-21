@@ -92,3 +92,21 @@ class FonctionReferenceCreate(BaseModel):
     libelle: str = Field(min_length=2, max_length=200)
     id_direction: Optional[int] = None
     dept_id: Optional[int] = None
+
+
+class ParcoursEmployeOut(BaseModel):
+    id_parcours: int
+    matricule: int
+    type_action: str
+    champ_modifie: Optional[str] = None
+    ancienne_valeur: Optional[str] = None
+    nouvelle_valeur: Optional[str] = None
+    libelle: Optional[str] = None
+    actor: Optional[str] = None
+    date_action: date
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RemplacantCommentaireUpdate(BaseModel):
+    commentaire: Optional[str] = Field(default=None, max_length=2000)

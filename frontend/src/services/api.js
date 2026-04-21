@@ -9,6 +9,7 @@
  * - RESPONSE : sur 401 hors /auth/login, nettoie les tokens et redirige vers /login
  */
 import axios from 'axios'
+import { emit, DATA_CHANGED } from '../utils/eventBus'
 
 // In development Vite proxies all backend paths, so relative URLs work without CORS.
 // In production the build embeds VITE_API_URL (or falls back to empty = same origin).
@@ -25,8 +26,24 @@ api.interceptors.request.use(config => {
   return config
 })
 
+const MUTATING_METHODS = new Set(['post', 'put', 'patch', 'delete'])
+
 api.interceptors.response.use(
-  response => response,
+  response => {
+    try {
+      const method = String(response?.config?.method || '').toLowerCase()
+      if (MUTATING_METHODS.has(method)) {
+        emit(DATA_CHANGED, {
+          url: response?.config?.url,
+          method,
+          status: response?.status,
+        })
+      }
+    } catch {
+      // ne jamais bloquer une réponse API pour un événement
+    }
+    return response
+  },
   error => {
     if (error.response && error.response.status === 401 && !error.config.url?.includes('/auth/login')) {
       localStorage.removeItem('ec_token')

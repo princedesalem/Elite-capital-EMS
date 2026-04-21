@@ -364,9 +364,9 @@ export default function CongesPage() {
     const etat = rowEtat[id] || '--'
     const isLoading = loadingOp === id
     const btnStyle = (base) => ({ ...base, opacity: isLoading ? 0.6 : 1 })
-    const eyeBtn = <button key="eye" onClick={(e) => { e.stopPropagation(); setDetailCongeItem(item) }} style={{ ...rowBtn, background: '#6366f1' }} title="Voir détails"><Eye size={12} /></button>
-    const pdfBtn = isValid ? <button key="pdf" onClick={(e) => { e.stopPropagation(); setDownloadingPdf(id); api.get(`/api/pdf/conges/${id}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `conge_${id}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }).finally(() => setDownloadingPdf(null)) }} style={{ ...rowBtn, background: '#0e7490', display: 'inline-flex', alignItems: 'center', opacity: downloadingPdf === id ? 0.6 : 1 }} disabled={downloadingPdf === id} title="Télécharger PDF"><FileDown size={13} /></button> : null
-    const remplacantBtn = <button key="remplacant" onClick={(e) => { e.stopPropagation(); setRemplacantOpId(id); setShowRemplacantModal(true) }} style={{ ...rowBtn, background: '#2563eb', display: 'inline-flex', alignItems: 'center' }} title="Remplaçant"><Users2 size={12} /></button>
+    const eyeBtn = <button key="eye" onClick={(e) => { e.stopPropagation(); setDetailCongeItem(item) }} className="btn-ghost-primary" style={{ ...rowBtn, display: 'inline-flex', alignItems: 'center' }} title="Voir détails"><Eye size={12} /></button>
+    const pdfBtn = isValid ? <button key="pdf" onClick={(e) => { e.stopPropagation(); setDownloadingPdf(id); api.get(`/api/pdf/conges/${id}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `conge_${id}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }).finally(() => setDownloadingPdf(null)) }} className="btn-ghost-primary" style={{ ...rowBtn, display: 'inline-flex', alignItems: 'center', opacity: downloadingPdf === id ? 0.6 : 1 }} disabled={downloadingPdf === id} title="Télécharger PDF"><FileDown size={13} /></button> : null
+    const remplacantBtn = <button key="remplacant" onClick={(e) => { e.stopPropagation(); setRemplacantOpId(id); setShowRemplacantModal(true) }} className="btn-ghost-primary" style={{ ...rowBtn, display: 'inline-flex', alignItems: 'center' }} title="Remplaçant"><Users2 size={12} /></button>
 
     if (isRefus) return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{eyeBtn}</div>
 
@@ -481,7 +481,7 @@ export default function CongesPage() {
             {renderStatusBadge(normalizeListStatus(item.statut || item.status || 'en attente'))}
           </span>
         </td>
-        <td style={td}>{fmtDate(item.date_demande || item.date_creation || item.created_at || item.date_debut)}</td>
+        <td style={td} title={(() => { const v = item.date_demande || item.date_creation || item.created_at || item.date_debut; return v ? new Date(v).toLocaleString('fr-FR') : '' })()}>{fmtDate(item.date_demande || item.date_creation || item.created_at || item.date_debut)}</td>
         {isRecu && <td style={td} title={getEmitterName(item, true, senderName)}>{getEmitterName(item, true, senderName)}</td>}
         <td style={td}>{fmtDate(item.date_debut)}</td>
         <td style={td}>{fmtDate(item.date_fin)}</td>
@@ -562,7 +562,7 @@ export default function CongesPage() {
         </table>
         {activeTab === 'recu' && estRh && workflowPcaAg.length > 0 && (
           <div style={{ marginTop: 24 }}>
-            <div style={{ padding: '8px 14px', background: '#eff6ff', borderTop: '2px solid #bfdbfe', borderBottom: '1px solid #dbeafe', fontWeight: 700, fontSize: '0.85rem', color: '#1d4ed8', letterSpacing: '0.02em' }}>
+            <div style={{ padding: '10px 14px', background: 'rgba(2,22,46,0.06)', borderLeft: '3px solid var(--bleu)', borderTop: '1px solid rgba(2,22,46,0.15)', borderBottom: '1px solid rgba(2,22,46,0.15)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--bleu)', letterSpacing: '0.02em' }}>
               Pour information — PCA / AG
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
@@ -581,16 +581,21 @@ export default function CongesPage() {
               </thead>
               <tbody>
                 {workflowPcaAg.map(item => (
-                  <tr key={item.id_operation}>
+                  <tr
+                    key={item.id_operation}
+                    onClick={() => setSelectedOperationForWorkflow(item.id_operation)}
+                    style={{ cursor: 'pointer' }}
+                    title="Cliquez pour afficher le diagramme de progression"
+                  >
                     <td style={td}>{item.titre || item.type_demande || 'Congé'} #{item.id_operation}</td>
                     <td style={td}>{item.demandeur?.nom_complet || item.demandeur?.nom || `#${item.matricule}`}</td>
                     <td style={td}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: /valid/i.test(item.statut) ? '#065f46' : /refus/i.test(item.statut) ? '#991b1b' : '#92400e', background: /valid/i.test(item.statut) ? '#d1fae5' : /refus/i.test(item.statut) ? '#fee2e2' : '#fef3c7' }}>{item.statut || 'En attente'}</span></td>
-                    <td style={td}>{item.date_demande ? String(item.date_demande).slice(0, 10) : '--'}</td>
+                    <td style={td} title={item.date_demande ? new Date(item.date_demande).toLocaleString('fr-FR') : ''}>{item.date_demande ? String(item.date_demande).slice(0, 10) : '--'}</td>
                     <td style={td}>{item.date_depart ? String(item.date_depart).slice(0, 10) : '--'}</td>
                     <td style={td}>{item.date_retour ? String(item.date_retour).slice(0, 10) : '--'}</td>
                     <td style={td}>{item.duree_jours ?? item.duree ?? '--'} j</td>
-                    <td style={td}>{renderEtatCell(item)}</td>
-                    <td style={td}>{renderActionButtons(item, true)}</td>
+                    <td style={td} onClick={(e) => e.stopPropagation()}>{renderEtatCell(item)}</td>
+                    <td style={td} onClick={(e) => e.stopPropagation()}>{renderActionButtons(item, true)}</td>
                   </tr>
                 ))}
               </tbody>

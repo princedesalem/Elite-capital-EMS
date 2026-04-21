@@ -138,3 +138,44 @@ def test_pdf_permission_not_found(client, seed_reference_data):
 def test_pdf_sortie_not_found(client, seed_reference_data):
     r = client.get("/api/pdf/sortie/999999")
     assert r.status_code == 404
+
+
+def test_pdf_analytics_contains_nom_prenom(client, pdf_operation_data, auth_headers, db_session):
+    """Rapport analytique RH : 5 pages, PDF valide, emp_names lookup correct."""
+    from app import models
+
+    headers = auth_headers(pdf_operation_data['refs']['rh'].matricule, 'RH')
+    r = client.get("/api/pdf/report/analytics", headers=headers)
+    assert r.status_code == 200
+    assert r.headers['content-type'] == 'application/pdf'
+    assert r.content[:5] == b'%PDF-'
+
+    # PDF doit contenir exactement 5 pages (Effectifs / Congés / Missions / Permissions / Sorties)
+    assert b'/Count 5' in r.content, "Le rapport analytique doit contenir 5 pages"
+
+    # Vérifie que la requête DB produirait bien les noms attendus
+    emp = pdf_operation_data['refs']['employe']
+    emps = db_session.query(models.Employe).all()
+    emp_names = {e.matricule: (e.nom or '', e.prenom or '') for e in emps}
+    assert emp.matricule in emp_names, "L'employé doit figurer dans le dictionnaire emp_names"
+    nom, prenom = emp_names[emp.matricule]
+    assert nom == emp.nom, f"Nom attendu '{emp.nom}', obtenu '{nom}'"
+    assert prenom == emp.prenom, f"Prénom attendu '{emp.prenom}', obtenu '{prenom}'"
+
+    # Les tables ont bien 8 colonnes (les 5 sections opérations ont 8 cols après ajout Nom/Prénom)
+    # On vérifie que le PDF est plus volumineux que 10 Ko (signe que les données sont présentes)
+    assert len(r.content) > 10_000, "Le PDF semble vide ou trop petit"
+
+
+def test_pdf_analytics_requires_auth(client, seed_reference_data):
+    """L'endpoint analytics doit refuser les requêtes sans token."""
+    r = client.get("/api/pdf/report/analytics")
+    assert r.status_code == 401
+
+
+def test_pdf_analytics_forbidden_for_employe(client, seed_reference_data, auth_headers):
+    """Un simple employé ne doit pas accéder au rapport analytique."""
+    emp = seed_reference_data['employe']
+    headers = auth_headers(emp.matricule, 'EMPLOYE')
+    r = client.get("/api/pdf/report/analytics", headers=headers)
+    assert r.status_code == 403

@@ -428,8 +428,8 @@ export default function SortiesPage() {
     const etat = rowEtat[id] || '--'
     const isLoading = loadingOp === id
     const btnStyle = (base) => ({ ...base, opacity: isLoading ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 3 })
-    const eyeBtn = <button key="eye" onClick={(e) => { e.stopPropagation(); setDetailSortieItem({ ...(item.__sortie || {}), ...item }) }} style={{ ...rowBtn, background: '#6366f1', display: 'inline-flex', alignItems: 'center' }} title="Voir détails"><Eye size={12} /></button>
-    const pdfBtn = isValid ? <button key="pdf" onClick={(e) => { e.stopPropagation(); setDownloadingPdf(id); api.get(`/api/pdf/sortie/${id}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `sortie_${id}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }).finally(() => setDownloadingPdf(null)) }} style={{ ...rowBtn, background: '#0e7490', display: 'inline-flex', alignItems: 'center', opacity: downloadingPdf === id ? 0.6 : 1 }} disabled={downloadingPdf === id} title="Télécharger PDF"><FileDown size={13} /></button> : null
+    const eyeBtn = <button key="eye" onClick={(e) => { e.stopPropagation(); setDetailSortieItem({ ...(item.__sortie || {}), ...item }) }} className="btn-ghost-primary" style={{ ...rowBtn, display: 'inline-flex', alignItems: 'center' }} title="Voir détails"><Eye size={12} /></button>
+    const pdfBtn = isValid ? <button key="pdf" onClick={(e) => { e.stopPropagation(); setDownloadingPdf(id); api.get(`/api/pdf/sortie/${id}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `sortie_${id}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }).finally(() => setDownloadingPdf(null)) }} className="btn-ghost-primary" style={{ ...rowBtn, display: 'inline-flex', alignItems: 'center', opacity: downloadingPdf === id ? 0.6 : 1 }} disabled={downloadingPdf === id} title="Télécharger PDF"><FileDown size={13} /></button> : null
 
     if (isRefus) return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{eyeBtn}</div>
 
@@ -506,7 +506,7 @@ export default function SortiesPage() {
               {renderStatusBadge(normalizeListStatus(item.statut || item.status || 'en attente'))}
             </span>
           </td>
-          <td style={td}>{fmtDate(item.date_demande || item.date_creation || item.created_at || item.date_debut)}</td>
+          <td style={td} title={(() => { const v = item.date_demande || item.date_creation || item.created_at || item.date_debut; return v ? new Date(v).toLocaleString('fr-FR') : '' })()}>{fmtDate(item.date_demande || item.date_creation || item.created_at || item.date_debut)}</td>
           {isRecu && <td style={td} title={getEmitterName(item, true, senderName)}>{getEmitterName(item, true, senderName)}</td>}
           <td style={td}>{fmtDate(detail.date_sortie || item.date_debut)}</td>
           <td style={td}>{heureDepart}</td>

@@ -66,6 +66,15 @@ class StatutMatrimonialEnum(str, enum.Enum):
     MARIE = 'Marie'
 
 
+class TypeParcoursEnum(str, enum.Enum):
+    PROMOTION = 'PROMOTION'
+    MUTATION = 'MUTATION'
+    TRANSFERT = 'TRANSFERT'
+    EMBAUCHE = 'EMBAUCHE'
+    CONGEDIEMENT = 'CONGEDIEMENT'
+    AUTRE = 'AUTRE'
+
+
 class Pays(Base):
     __tablename__ = 'PAYS'
     id_pays = Column(Integer, primary_key=True, autoincrement=True)
@@ -467,6 +476,21 @@ class RemplacantPropose(Base):
     ordre_proposition = Column(Integer)
     est_accepte = Column(Boolean, default=False)
     demande_envoyee = Column(Boolean, default=False)
+    commentaire = Column(Text, nullable=True)
+
+
+class ParcoursEmploye(Base):
+    __tablename__ = 'PARCOURS_EMPLOYE'
+    id_parcours = Column(Integer, primary_key=True, autoincrement=True)
+    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False, index=True)
+    type_action = Column(Enum(TypeParcoursEnum), nullable=False)
+    champ_modifie = Column(String(64), nullable=True)
+    ancienne_valeur = Column(String(255), nullable=True)
+    nouvelle_valeur = Column(String(255), nullable=True)
+    libelle = Column(Text, nullable=True)
+    actor = Column(String(64), nullable=True)
+    date_action = Column(Date, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 class Notification(Base):
     __tablename__ = 'Notification'

@@ -9,6 +9,8 @@
     "test": "vitest run --config vitest.config.mjs",
     "test:watch": "vitest --config vitest.config.mjs",
     "test:e2e": "playwright test --config playwright.config.js",
+    "test:health": "playwright test --config playwright.health.config.js",
+    "health": "node health-check.js",
     "check": "vite build"
   },
   "dependencies": {

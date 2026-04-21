@@ -30,7 +30,9 @@ describe('EmployeeTimeline', () => {
   beforeEach(() => {
     apiGetMock.mockReset()
     apiGetMock.mockImplementation((url) => {
-      if (String(url).includes('/employees/1001')) return Promise.resolve({ data: EMPLOYEE })
+      const s = String(url)
+      if (s.includes('/parcours')) return Promise.resolve({ data: [] })
+      if (s.includes('/employees/1001')) return Promise.resolve({ data: EMPLOYEE })
       return Promise.resolve({ data: [] })
     })
   })

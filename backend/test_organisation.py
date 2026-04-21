@@ -27,13 +27,12 @@ def override_get_db():
         db.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
-
-
 @pytest.fixture(autouse=True, scope='module')
 def setup_db():
+    app.dependency_overrides[get_db] = override_get_db
     Base.metadata.create_all(bind=engine)
     yield
+    app.dependency_overrides.pop(get_db, None)
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
     if os.path.exists('test_organisation.db'):
@@ -41,36 +40,10 @@ def setup_db():
 
 
 # ── Auth helper ─────────────────────────────────────────────────────────────
-def get_token(client: TestClient):
-    """Create a test admin user and log in."""
-    from app import models
-    from app.utils.security import hash_password
-
-    db = TestingSessionLocal()
-    try:
-        existing = db.query(models.Employe).filter(models.Employe.matricule == 'TEST01').first()
-        if not existing:
-            emp = models.Employe(
-                matricule='TEST01',
-                nom='Test',
-                prenom='Admin',
-                email='testadmin@test.com',
-                mot_de_passe_hash=hash_password('Test1234!'),
-                role='ADMIN',
-            )
-            db.add(emp)
-            db.commit()
-    finally:
-        db.close()
-
-    resp = client.post(
-        '/auth/login',
-        data={'username': 'TEST01', 'password': 'Test1234!'},
-        headers={'Content-Type': 'application/x-www-form-urlencoded'},
-    )
-    if resp.status_code == 200:
-        return resp.json().get('access_token')
-    return None
+def get_token():
+    """Generate a JWT token for an ADMIN user without hitting the DB."""
+    from app.utils.security import create_access_token
+    return create_access_token({'matricule': 9001, 'role': 'ADMIN'})
 
 
 client = TestClient(app)
@@ -78,7 +51,7 @@ client = TestClient(app)
 
 class TestEntites:
     def setup_method(self):
-        self.token = get_token(client)
+        self.token = get_token()
         self.headers = {'Authorization': f'Bearer {self.token}'} if self.token else {}
 
     def test_get_entites_no_filter_returns_200(self):

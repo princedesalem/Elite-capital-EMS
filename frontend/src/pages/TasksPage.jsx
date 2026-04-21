@@ -307,10 +307,10 @@ export default function TasksPage() {
                   <select
                     value={task.statut}
                     onChange={e => changeStatut(task.id, e.target.value)}
-                    style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: 0 }}
+                    style={{ border: '1px solid #e2e8f0', background: 'var(--card)', cursor: 'pointer', fontSize: '0.78rem', borderRadius: 6, padding: '3px 6px', color: 'var(--text)' }}
                     title="Changer le statut"
                   >
-                    {STATUTS.map(s => <option key={s.value} value={s.value}>{s.icon}</option>)}
+                    {STATUTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 </div>
                 {/* Content */}
@@ -335,7 +335,7 @@ export default function TasksPage() {
                         <span>{task.assigne_a || task.created_by || '—'}</span>
                       )}
                     </span>
-                    <span style={{ color: statut.color, fontWeight: 600 }}>{statut.icon} {statut.label}</span>
+                    <span style={{ color: statut.color, fontWeight: 600 }}>{statut.label}</span>
                   </div>
                 </div>
                 {/* Actions */}

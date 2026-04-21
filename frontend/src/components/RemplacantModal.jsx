@@ -4,6 +4,45 @@ import api from '../services/api'
 
 const ADMIN_ROLES = ['RH', 'DG', 'PCA', 'ADMIN', 'AG', 'DIRECTEUR']
 
+/**
+ * Petit éditeur de commentaire pour une proposition de remplaçant.
+ * Persiste via PATCH au blur, avec feedback "Enregistré" temporaire.
+ */
+function CommentaireRemplacant({ initial, onSave }) {
+  const [value, setValue] = useState(initial || '')
+  const [saved, setSaved] = useState(false)
+  const [savingError, setSavingError] = useState('')
+  const handleBlur = async () => {
+    if ((value || '') === (initial || '')) return
+    try {
+      await onSave(value || '')
+      setSavingError('')
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1500)
+    } catch (err) {
+      setSavingError('Erreur enregistrement')
+    }
+  }
+  return (
+    <div>
+      <label style={{ display: 'block', fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: 4 }}>
+        Commentaire
+      </label>
+      <textarea
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onBlur={handleBlur}
+        placeholder="Note interne pour ce remplaçant (facultatif)"
+        rows={2}
+        aria-label="Commentaire du remplaçant"
+        style={{ width: '100%', padding: '6px 8px', fontSize: '0.78rem', borderRadius: 6, border: '1px solid #cbd5e1', fontFamily: 'inherit', resize: 'vertical' }}
+      />
+      {saved && <span style={{ fontSize: '0.68rem', color: '#16a34a', fontWeight: 600 }}>Enregistré</span>}
+      {savingError && <span style={{ fontSize: '0.68rem', color: '#b91c1c', fontWeight: 600 }}>{savingError}</span>}
+    </div>
+  )
+}
+
 export default function RemplacantModal({ operationId, userRole, userMatricule, onClose }) {
   const [propositions, setPropositions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -57,6 +96,15 @@ export default function RemplacantModal({ operationId, userRole, userMatricule, 
       await load()
     } catch (e) {
       setError(e?.response?.data?.detail || 'Erreur lors de l\'acceptation')
+    }
+  }
+
+  const saveCommentaire = async (idProposition, commentaire) => {
+    setError('')
+    try {
+      await api.patch(`/api/remplacants/propositions/${idProposition}/commentaire`, { commentaire })
+    } catch (e) {
+      setError(e?.response?.data?.detail || "Erreur lors de l'enregistrement du commentaire")
     }
   }
 
@@ -127,24 +175,31 @@ export default function RemplacantModal({ operationId, userRole, userMatricule, 
                       Propositions
                     </div>
                     {pending.map(p => (
-                      <div key={p.matricule} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 6 }}>
-                        <div style={{ flex: 1, fontSize: '0.82rem' }}>
-                          <span style={{ fontWeight: 600, color: '#021630' }}>{p.nom_complet}</span>
-                          {p.fonction && <span style={{ color: '#64748b', marginLeft: 8, fontSize: '0.78rem' }}>{p.fonction}</span>}
-                          {p.demande_envoyee && (
-                            <span style={{ display: 'block', marginTop: 2, fontSize: '0.7rem', color: '#d97706', fontWeight: 600 }}>
-                              Demande envoyée — en attente de réponse
-                            </span>
+                      <div key={p.matricule} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ flex: 1, fontSize: '0.82rem' }}>
+                            <span style={{ fontWeight: 600, color: '#021630' }}>{p.nom_complet}</span>
+                            {p.fonction && <span style={{ color: '#64748b', marginLeft: 8, fontSize: '0.78rem' }}>{p.fonction}</span>}
+                            {p.demande_envoyee && (
+                              <span style={{ display: 'block', marginTop: 2, fontSize: '0.7rem', color: '#d97706', fontWeight: 600 }}>
+                                Demande envoyée — en attente de réponse
+                              </span>
+                            )}
+                          </div>
+                          {!p.demande_envoyee && (
+                            <button
+                              onClick={() => demander(p.matricule)}
+                              style={{ padding: '6px 14px', background: '#021630', color: 'white', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
+                            >
+                              <Send size={11} /> Demander
+                            </button>
                           )}
                         </div>
-                        {!p.demande_envoyee && (
-                          <button
-                            onClick={() => demander(p.matricule)}
-                            style={{ padding: '6px 14px', background: '#021630', color: 'white', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
-                          >
-                            <Send size={11} /> Demander
-                          </button>
-                        )}
+                        <CommentaireRemplacant
+                          key={`c-${p.id_remplacant_propose}`}
+                          initial={p.commentaire || ''}
+                          onSave={(val) => saveCommentaire(p.id_remplacant_propose, val)}
+                        />
                       </div>
                     ))}
                   </div>

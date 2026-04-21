@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date
 from ..db import get_db
-from .. import models
+from .. import models, schemas
 from ..utils import remplacants as rempl_utils, notifications, security, email as email_utils
 
 router = APIRouter(prefix='/api/remplacants', tags=['remplacants'])
@@ -132,10 +132,32 @@ def obtenir_remplacants_proposes(id_operation: int, db: Session = Depends(get_db
                 "direction_id": employe.id_direction,
                 "ordre_proposition": prop.ordre_proposition,
                 "est_accepte": prop.est_accepte,
-                "demande_envoyee": prop.demande_envoyee if prop.demande_envoyee is not None else False
+                "demande_envoyee": prop.demande_envoyee if prop.demande_envoyee is not None else False,
+                "commentaire": prop.commentaire or ""
             })
     
     return result
+
+
+@router.patch('/propositions/{id_remplacant_propose}/commentaire')
+def mettre_a_jour_commentaire_remplacant(
+    id_remplacant_propose: int,
+    payload: schemas.RemplacantCommentaireUpdate,
+    db: Session = Depends(get_db),
+):
+    """Mettre à jour le commentaire associé à une proposition de remplaçant."""
+    prop = db.query(models.RemplacantPropose).filter(
+        models.RemplacantPropose.id_remplacant_propose == id_remplacant_propose
+    ).first()
+    if not prop:
+        raise HTTPException(status_code=404, detail="Proposition de remplaçant introuvable")
+    prop.commentaire = (payload.commentaire or '').strip() or None
+    db.commit()
+    db.refresh(prop)
+    return {
+        "id_remplacant_propose": prop.id_remplacant_propose,
+        "commentaire": prop.commentaire or "",
+    }
 
 
 @router.post('/generer/{id_operation}')

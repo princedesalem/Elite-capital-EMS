@@ -7,6 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from ..db import get_db
 from .. import models
+from ..utils.formatting import fmt_fcfa
 from fpdf import FPDF
 from datetime import datetime
 
@@ -136,6 +137,7 @@ def _get_workflow_history(id_operation: int, db: Session):
         ).first()
         history.append({
             'role': val.role_validateur or '-',
+            'matricule': str(val.matricule_validateur) if val.matricule_validateur is not None else '-',
             'nom': f"{validateur.prenom} {validateur.nom}" if validateur else str(val.matricule_validateur),
             'statut': val.statut_validation or '-',
             'date': val.timestamp_action.strftime('%d/%m/%Y %H:%M') if val.timestamp_action else '-',
@@ -260,21 +262,21 @@ def export_mission_pdf(id_mission: int, db: Session = Depends(get_db)):
     frais = db.query(models.Frais).filter(models.Frais.id_mission == id_mission).first()
     if frais:
         pdf.section_title('Frais de mission')
-        pdf.info_row('Transport:', f"{float(frais.frais_transport_voyage or 0):,.0f} FCFA")
-        pdf.info_row('Hôtel:', f"{float(frais.frais_hotel or 0):,.0f} FCFA")
-        pdf.info_row('Déplacement:', f"{float(frais.frais_deplacement or 0):,.0f} FCFA")
-        pdf.info_row('Nutrition:', f"{float(frais.frais_nutrition or 0):,.0f} FCFA")
-        pdf.info_row('Total:', f"{float(frais.total_frais or 0):,.0f} FCFA")
+        pdf.info_row('Transport:', fmt_fcfa(frais.frais_transport_voyage or 0))
+        pdf.info_row('Hôtel:', fmt_fcfa(frais.frais_hotel or 0))
+        pdf.info_row('Déplacement:', fmt_fcfa(frais.frais_deplacement or 0))
+        pdf.info_row('Nutrition:', fmt_fcfa(frais.frais_nutrition or 0))
+        pdf.info_row('Total:', fmt_fcfa(frais.total_frais or 0))
 
     # Workflow history
     history = _get_workflow_history(id_mission, db)
     pdf.section_title('Historique de validation')
     if history:
-        wf_rows = [[h['role'], h['nom'], h['statut'], h['date'], h['commentaire'][:40]] for h in history]
+        wf_rows = [[h['role'], h['matricule'], h['nom'], h['statut'], h['date'], h['commentaire'][:30]] for h in history]
         pdf.table(
-            ['Rôle', 'Validateur', 'Décision', 'Date', 'Commentaire'],
+            ['Rôle', 'Matricule', 'Validateur', 'Décision', 'Date', 'Commentaire'],
             wf_rows,
-            col_widths=[30, 40, 25, 35, 40]
+            col_widths=[25, 20, 35, 22, 30, 38]
         )
     else:
         pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
@@ -333,20 +335,20 @@ def export_frais_pdf(id_mission: int, db: Session = Depends(get_db)):
         pdf.section_title('Frais déclarés')
         frais_rows = []
         if frais.frais_transport_voyage is not None:
-            frais_rows.append(['Transport / Voyage', f"{float(frais.frais_transport_voyage):.2f}"])
+            frais_rows.append(['Transport / Voyage', fmt_fcfa(frais.frais_transport_voyage)])
         if frais.frais_hotel is not None:
-            frais_rows.append(['Hébergement', f"{float(frais.frais_hotel):.2f}"])
+            frais_rows.append(['Hébergement', fmt_fcfa(frais.frais_hotel)])
         if frais.frais_deplacement is not None:
-            frais_rows.append(['Déplacement', f"{float(frais.frais_deplacement):.2f}"])
+            frais_rows.append(['Déplacement', fmt_fcfa(frais.frais_deplacement)])
         if frais.frais_nutrition is not None:
-            frais_rows.append(['Nutrition / Repas', f"{float(frais.frais_nutrition):.2f}"])
+            frais_rows.append(['Nutrition / Repas', fmt_fcfa(frais.frais_nutrition)])
         if frais_rows:
             pdf.table(['Type de frais', 'Montant'], frais_rows, col_widths=[100, 70])
         if frais.total_frais is not None:
             pdf.ln(2)
             pdf.set_font(pdf._body_font, 'B', 10)
             pdf.set_text_color(17, 32, 51)
-            pdf.cell(0, 8, f"Total : {float(frais.total_frais):.2f}", new_x='LMARGIN', new_y='NEXT')
+            pdf.cell(0, 8, f"Total : {fmt_fcfa(frais.total_frais)}", new_x='LMARGIN', new_y='NEXT')
             pdf.set_text_color(0, 0, 0)
 
     # Frais par missionnaire (table FraisMissionnaire)
@@ -368,9 +370,9 @@ def export_frais_pdf(id_mission: int, db: Session = Depends(get_db)):
             total_global += total
             fm_rows.append([
                 nom,
-                f"{transport:.2f}", f"{hotel:.2f}",
-                f"{deplacement:.2f}", f"{nutrition:.2f}",
-                f"{total:.2f}", fm.statut or '-'
+                fmt_fcfa(transport), fmt_fcfa(hotel),
+                fmt_fcfa(deplacement), fmt_fcfa(nutrition),
+                fmt_fcfa(total), fm.statut or '-'
             ])
         pdf.table(
             ['Missionnaire', 'Transport', 'Hôtel', 'Dépl.', 'Nutrition', 'Total', 'Statut'],
@@ -380,18 +382,18 @@ def export_frais_pdf(id_mission: int, db: Session = Depends(get_db)):
         pdf.ln(2)
         pdf.set_font(pdf._body_font, 'B', 10)
         pdf.set_text_color(17, 32, 51)
-        pdf.cell(0, 8, f"Total global : {total_global:.2f}", new_x='LMARGIN', new_y='NEXT')
+        pdf.cell(0, 8, f"Total global : {fmt_fcfa(total_global)}", new_x='LMARGIN', new_y='NEXT')
         pdf.set_text_color(0, 0, 0)
 
     # Workflow
     history = _get_workflow_history(id_mission, db)
     pdf.section_title('Historique de validation')
     if history:
-        wf_rows = [[h['role'], h['nom'], h['statut'], h['date'], h['commentaire'][:40]] for h in history]
+        wf_rows = [[h['role'], h['matricule'], h['nom'], h['statut'], h['date'], h['commentaire'][:30]] for h in history]
         pdf.table(
-            ['Rôle', 'Validateur', 'Décision', 'Date', 'Commentaire'],
+            ['Rôle', 'Matricule', 'Validateur', 'Décision', 'Date', 'Commentaire'],
             wf_rows,
-            col_widths=[30, 40, 25, 35, 40]
+            col_widths=[25, 20, 35, 22, 30, 38]
         )
     else:
         pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
@@ -445,11 +447,11 @@ def export_conge_pdf(id_operation: int, db: Session = Depends(get_db)):
     history = _get_workflow_history(id_operation, db)
     pdf.section_title('Historique de validation')
     if history:
-        wf_rows = [[h['role'], h['nom'], h['statut'], h['date'], h['commentaire'][:40]] for h in history]
+        wf_rows = [[h['role'], h['matricule'], h['nom'], h['statut'], h['date'], h['commentaire'][:30]] for h in history]
         pdf.table(
-            ['Rôle', 'Validateur', 'Décision', 'Date', 'Commentaire'],
+            ['Rôle', 'Matricule', 'Validateur', 'Décision', 'Date', 'Commentaire'],
             wf_rows,
-            col_widths=[30, 40, 25, 35, 40]
+            col_widths=[25, 20, 35, 22, 30, 38]
         )
     else:
         pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
@@ -508,11 +510,11 @@ def export_permission_pdf(id_operation: int, db: Session = Depends(get_db)):
     history = _get_workflow_history(id_operation, db)
     pdf.section_title('Historique de validation')
     if history:
-        wf_rows = [[h['role'], h['nom'], h['statut'], h['date'], h['commentaire'][:40]] for h in history]
+        wf_rows = [[h['role'], h['matricule'], h['nom'], h['statut'], h['date'], h['commentaire'][:30]] for h in history]
         pdf.table(
-            ['Rôle', 'Validateur', 'Décision', 'Date', 'Commentaire'],
+            ['Rôle', 'Matricule', 'Validateur', 'Décision', 'Date', 'Commentaire'],
             wf_rows,
-            col_widths=[30, 40, 25, 35, 40]
+            col_widths=[25, 20, 35, 22, 30, 38]
         )
     else:
         pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
@@ -582,11 +584,11 @@ def export_sortie_pdf(id_operation: int, db: Session = Depends(get_db)):
     history = _get_workflow_history(id_operation, db)
     pdf.section_title('Historique de validation')
     if history:
-        wf_rows = [[h['role'], h['nom'], h['statut'], h['date'], h['commentaire'][:40]] for h in history]
+        wf_rows = [[h['role'], h['matricule'], h['nom'], h['statut'], h['date'], h['commentaire'][:30]] for h in history]
         pdf.table(
-            ['Rôle', 'Validateur', 'Décision', 'Date', 'Commentaire'],
+            ['Rôle', 'Matricule', 'Validateur', 'Décision', 'Date', 'Commentaire'],
             wf_rows,
-            col_widths=[30, 40, 25, 35, 40]
+            col_widths=[25, 20, 35, 22, 30, 38]
         )
     else:
         pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
@@ -730,6 +732,7 @@ def export_analytics_report_pdf(request: Request, db: Session = Depends(get_db))
     pdf.add_page()
     pdf.section_title(f'Effectifs au {datetime.utcnow().strftime("%d/%m/%Y")}')
     all_emps = db.query(models.Employe).all()
+    emp_names = {e.matricule: (e.nom or '', e.prenom or '') for e in all_emps}
     actifs_c = sum(1 for e in all_emps if e.statut_employe == models.StatutEmployeEnum.ACTIF)
     suspendus_c = sum(1 for e in all_emps if e.statut_employe == models.StatutEmployeEnum.SUSPENDU)
     congedies_c = sum(1 for e in all_emps if e.statut_employe == models.StatutEmployeEnum.CONGEDIE)
@@ -770,11 +773,14 @@ def export_analytics_report_pdf(request: Request, db: Session = Depends(get_db))
     if conges:
         pdf.section_title('50 dernières demandes de congé')
         pdf.table(
-            ['Mat.', 'Début', 'Fin', 'Durée', 'Motif', 'Statut'],
-            [[str(c.matricule or ''), str(c.date_debut or '')[:10], str(c.date_fin or '')[:10],
-              f'{c.duree_jours or 0} j', (c.motif or '-')[:25], str(c.statut or '-')]
+            ['Mat.', 'Nom', 'Prénom', 'Début', 'Fin', 'Durée', 'Motif', 'Statut'],
+            [[str(c.matricule or ''),
+              emp_names.get(c.matricule, ('', ''))[0][:20],
+              emp_names.get(c.matricule, ('', ''))[1][:18],
+              str(c.date_debut or '')[:10], str(c.date_fin or '')[:10],
+              f'{c.duree_jours or 0} j', (c.motif or '-')[:22], str(c.statut or '-')]
              for c in conges[:50]],
-            col_widths=[18, 24, 24, 18, 70, 36],
+            col_widths=[14, 30, 24, 22, 22, 14, 38, 26],
         )
 
     # ── Page 3 : Missions ──
@@ -794,11 +800,14 @@ def export_analytics_report_pdf(request: Request, db: Session = Depends(get_db))
     if mission_rows:
         pdf.section_title('50 dernières missions')
         pdf.table(
-            ['Mat.', 'Début', 'Fin', 'Pays', 'Ville', 'Statut'],
-            [[str(op.matricule or ''), str(op.date_debut or '')[:10], str(op.date_fin or '')[:10],
-              (m.pays or '-')[:18], (m.ville or '-')[:20], str(op.statut or '-')]
+            ['Mat.', 'Nom', 'Prénom', 'Début', 'Fin', 'Pays', 'Ville', 'Statut'],
+            [[str(op.matricule or ''),
+              emp_names.get(op.matricule, ('', ''))[0][:18],
+              emp_names.get(op.matricule, ('', ''))[1][:16],
+              str(op.date_debut or '')[:10], str(op.date_fin or '')[:10],
+              (m.pays or '-')[:16], (m.ville or '-')[:18], str(op.statut or '-')]
              for op, m in mission_rows[:50]],
-            col_widths=[18, 24, 24, 36, 40, 48],
+            col_widths=[14, 28, 22, 22, 22, 22, 26, 34],
         )
 
     # ── Page 4 : Permissions ──
@@ -819,11 +828,14 @@ def export_analytics_report_pdf(request: Request, db: Session = Depends(get_db))
     if permissions:
         pdf.section_title('50 dernières permissions')
         pdf.table(
-            ['Mat.', 'Début', 'Fin', 'Durée', 'Motif', 'Statut'],
-            [[str(p.matricule or ''), str(p.date_debut or '')[:10], str(p.date_fin or '')[:10],
-              f'{p.duree_jours or 0} j', (p.motif or '-')[:25], str(p.statut or '-')]
+            ['Mat.', 'Nom', 'Prénom', 'Début', 'Fin', 'Durée', 'Motif', 'Statut'],
+            [[str(p.matricule or ''),
+              emp_names.get(p.matricule, ('', ''))[0][:20],
+              emp_names.get(p.matricule, ('', ''))[1][:18],
+              str(p.date_debut or '')[:10], str(p.date_fin or '')[:10],
+              f'{p.duree_jours or 0} j', (p.motif or '-')[:22], str(p.statut or '-')]
              for p in permissions[:50]],
-            col_widths=[18, 24, 24, 18, 70, 36],
+            col_widths=[14, 30, 24, 22, 22, 14, 38, 26],
         )
 
     # ── Page 5 : Sorties ──
@@ -839,11 +851,14 @@ def export_analytics_report_pdf(request: Request, db: Session = Depends(get_db))
     if sorties:
         pdf.section_title('50 dernières sorties')
         pdf.table(
-            ['Mat.', 'Date', 'Heure', 'Commentaire', 'Statut'],
-            [[str(s.matricule or ''), str(s.date_sortie or '')[:10], str(s.heure_sortie or '-')[:5],
-              (s.commentaire or '-')[:40], str(s.statut or '-')]
+            ['Mat.', 'Nom', 'Prénom', 'Date', 'Heure', 'Commentaire', 'Statut'],
+            [[str(s.matricule or ''),
+              emp_names.get(s.matricule, ('', ''))[0][:20],
+              emp_names.get(s.matricule, ('', ''))[1][:16],
+              str(s.date_sortie or '')[:10], str(s.heure_sortie or '-')[:5],
+              (s.commentaire or '-')[:34], str(s.statut or '-')]
              for s in sorties[:50]],
-            col_widths=[18, 28, 20, 88, 36],
+            col_widths=[14, 28, 22, 22, 16, 54, 34],
         )
 
     pdf.section_title(f'Rapport généré le {datetime.utcnow().strftime("%d/%m/%Y à %H:%M")} UTC')

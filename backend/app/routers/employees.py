@@ -930,6 +930,15 @@ def anonymize_employee(matricule: str, request: Request, db: Session = Depends(g
 @router.put('/{matricule}', response_model=schemas.EmployeOut)
 def update_employee(matricule: str, payload: schemas.EmployeBase, request: Request, db: Session = Depends(get_db)):
     data = _prepare_employee_payload(payload, db)
+    # Snapshot BEFORE update pour détecter promotions/mutations/transferts
+    before = crud.get_employe(db, matricule)
+    before_snapshot = {
+        'id_role': getattr(before, 'id_role', None) if before else None,
+        'dept_id': getattr(before, 'dept_id', None) if before else None,
+        'id_direction': getattr(before, 'id_direction', None) if before else None,
+        'id_entite': getattr(before, 'id_entite', None) if before else None,
+        'id_localisation': getattr(before, 'id_localisation', None) if before else None,
+    } if before else {}
     e = crud.update_employe(db, matricule, data)
     if not e:
         raise HTTPException(status_code=404, detail='Non trouvé')
@@ -944,6 +953,21 @@ def update_employee(matricule: str, payload: schemas.EmployeBase, request: Reque
         except Exception:
             actor_matricule = None
     log_action(db, actor_matricule, 'EMPLOYEE_UPDATED', 'employe', matricule, {'nom': data.get('nom'), 'prenom': data.get('prenom')}, ip_address=request.client.host if request.client else None)
+    # Historiser les changements de carrière (promotion/mutation/transfert)
+    if before_snapshot:
+        try:
+            from ..utils import parcours as _parcours
+            after_snapshot = {
+                'id_role': getattr(e, 'id_role', None),
+                'dept_id': getattr(e, 'dept_id', None),
+                'id_direction': getattr(e, 'id_direction', None),
+                'id_entite': getattr(e, 'id_entite', None),
+                'id_localisation': getattr(e, 'id_localisation', None),
+            }
+            _parcours.record_employee_diff(db, int(matricule), before_snapshot, after_snapshot, actor=actor_matricule)
+        except Exception:
+            # Ne jamais bloquer la mise à jour employé en cas d'échec d'historisation
+            db.rollback()
     return _serialize_employee(e, db)
 
 
@@ -1527,6 +1551,18 @@ def _serialize_utilisateur_admin(utilisateur: models.Utilisateur, db: Session):
     }
 
 
+@router.get('/{matricule}/parcours', response_model=list[schemas.ParcoursEmployeOut])
+def get_employee_parcours(matricule: int, db: Session = Depends(get_db)):
+    """Retourne l'historique de parcours (promotions / mutations / transferts) d'un employé, trié du plus récent au plus ancien."""
+    rows = (
+        db.query(models.ParcoursEmploye)
+        .filter(models.ParcoursEmploye.matricule == matricule)
+        .order_by(models.ParcoursEmploye.date_action.desc(), models.ParcoursEmploye.id_parcours.desc())
+        .all()
+    )
+    return rows
+
+
 @router.get('/admin/utilisateurs')
 def get_admin_utilisateurs(request: Request, db: Session = Depends(get_db)):
     """Lister les comptes utilisateurs (admin seulement)."""
@@ -1551,12 +1587,18 @@ def update_admin_utilisateur(
     if not utilisateur:
         raise HTTPException(status_code=404, detail='Utilisateur non trouve')
 
+    previous_role_id = utilisateur.role_id
+
     if payload.role is not None:
         role_name = str(payload.role).strip().upper()
         role = db.query(models.Role).filter(func.upper(models.Role.name) == role_name).first()
         if not role:
             raise HTTPException(status_code=400, detail='Role inconnu')
         utilisateur.role_id = role.id
+        # Synchroniser la table EMPLOYE pour cohérence
+        emp = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
+        if emp is not None:
+            emp.id_role = role.id
 
     if payload.active is not None:
         if payload.active:
@@ -1580,6 +1622,24 @@ def update_admin_utilisateur(
 
     db.commit()
     db.refresh(utilisateur)
+
+    # Historiser une promotion si le rôle a changé
+    if payload.role is not None and previous_role_id != utilisateur.role_id:
+        try:
+            from ..utils import parcours as _parcours
+            _parcours.record_event(
+                db,
+                matricule=int(matricule),
+                type_action=models.TypeParcoursEnum.PROMOTION,
+                champ_modifie='id_role',
+                ancienne_valeur=_parcours._role_label(db, previous_role_id),
+                nouvelle_valeur=_parcours._role_label(db, utilisateur.role_id),
+                libelle=f"Rôle : {_parcours._role_label(db, previous_role_id) or '—'} → {_parcours._role_label(db, utilisateur.role_id) or '—'}",
+                actor=actor_matricule,
+            )
+        except Exception:
+            db.rollback()
+
     return _serialize_utilisateur_admin(utilisateur, db)
 
 

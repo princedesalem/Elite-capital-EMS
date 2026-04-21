@@ -20,7 +20,7 @@ const EVENT_TYPES = {
   autre:          { label: 'Autre',                color: '#475569', bg: '#f8fafc' },
 }
 
-function buildTimeline(employee, conges, missions) {
+function buildTimeline(employee, conges, missions, parcours) {
   const events = []
 
   if (employee?.date_embauche) {
@@ -31,6 +31,28 @@ function buildTimeline(employee, conges, missions) {
       detail: `Poste: ${employee.fonction || 'Non renseigné'} — Entité: ${employee.nom_entite || employee.entite || 'N/A'}`,
     })
   }
+
+  parcours?.forEach(p => {
+    const t = String(p.type_action || '').toUpperCase()
+    const mapped = t === 'PROMOTION' ? 'promotion'
+      : t === 'MUTATION' || t === 'TRANSFERT' ? 'mutation'
+      : t === 'EMBAUCHE' ? 'embauche'
+      : 'autre'
+    const label = t === 'PROMOTION' ? 'Promotion'
+      : t === 'MUTATION' ? 'Mutation'
+      : t === 'TRANSFERT' ? 'Transfert'
+      : t === 'EMBAUCHE' ? 'Embauche'
+      : (p.champ_modifie || 'Changement')
+    const detail = p.libelle
+      || [p.ancienne_valeur, p.nouvelle_valeur].filter(Boolean).join(' → ')
+      || (p.champ_modifie ? `Champ modifié: ${p.champ_modifie}` : 'Changement enregistré')
+    events.push({
+      date: p.date_action || p.created_at,
+      type: mapped,
+      title: label,
+      detail,
+    })
+  })
 
   conges?.forEach(c => {
     if (c.statut === 'APPROUVE' || c.statut === 'approuve') {
@@ -68,6 +90,7 @@ export default function EmployeeTimeline() {
   const [employee, setEmployee] = useState(null)
   const [conges, setConges] = useState([])
   const [missions, setMissions] = useState([])
+  const [parcours, setParcours] = useState([])
   const [loading, setLoading] = useState(false)
   const [filterType, setFilterType] = useState('tous')
 
@@ -84,7 +107,8 @@ export default function EmployeeTimeline() {
       api.get(`/employees/${selectedMatricule}`).catch(() => null),
       api.get('/conges').catch(() => ({ data: [] })),
       api.get('/missions/list').catch(() => ({ data: [] })),
-    ]).then(([empRes, congesRes, missionsRes]) => {
+      api.get(`/employees/${selectedMatricule}/parcours`).catch(() => ({ data: [] })),
+    ]).then(([empRes, congesRes, missionsRes, parcoursRes]) => {
       setEmployee(empRes?.data || null)
       const allConges = congesRes?.data || []
       const allMissions = missionsRes?.data || []
@@ -93,6 +117,7 @@ export default function EmployeeTimeline() {
         ? m.missionnaires.some(mn => String(mn.matricule) === String(selectedMatricule))
         : String(m.matricule) === String(selectedMatricule)
       ))
+      setParcours(parcoursRes?.data || [])
     }).finally(() => setLoading(false))
   }, [selectedMatricule])
 
@@ -102,7 +127,7 @@ export default function EmployeeTimeline() {
     return (e.prenom + ' ' + e.nom).toLowerCase().includes(q) || String(e.matricule).includes(q)
   })
 
-  const timeline = buildTimeline(employee, conges, missions)
+  const timeline = buildTimeline(employee, conges, missions, parcours)
   const filtered = filterType === 'tous' ? timeline : timeline.filter(e => e.type === filterType)
 
   const calcAge = (d) => {

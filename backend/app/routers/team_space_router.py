@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -11,6 +11,126 @@ from ..db import get_db
 router = APIRouter(prefix='/api/team-space', tags=['team-space'])
 
 VALID_TYPES = {'shoutout', 'kudos', 'poll'}
+
+POST_TYPE_LABELS = {
+    'shoutout': 'Shout-out',
+    'kudos': 'Kudos',
+    'poll': 'Sondage',
+}
+
+
+def _resolve_audience_matricules(
+    audience_type: str,
+    audience_selected: List[str],
+    destinataire: str,
+    db: Session,
+) -> Set[int]:
+    """Return the set of active employee matricules that should receive the post notification."""
+    audience_type = (audience_type or 'all').lower()
+    selected = [str(s).strip() for s in (audience_selected or []) if str(s).strip()]
+
+    base_query = db.query(models.Employe).filter(
+        models.Employe.statut_employe == models.StatutEmployeEnum.ACTIF
+    )
+    targets: Set[int] = set()
+
+    if audience_type == 'all' or not selected:
+        for emp in base_query.all():
+            if emp.matricule is not None:
+                targets.add(int(emp.matricule))
+    elif audience_type == 'entites':
+        ids = [e.id_entite for e in db.query(models.Entite).filter(models.Entite.nom.in_(selected)).all()]
+        if ids:
+            for emp in base_query.filter(models.Employe.id_entite.in_(ids)).all():
+                targets.add(int(emp.matricule))
+    elif audience_type == 'directions':
+        ids = [d.id_direction for d in db.query(models.Direction).filter(models.Direction.nom.in_(selected)).all()]
+        if ids:
+            for emp in base_query.filter(models.Employe.id_direction.in_(ids)).all():
+                targets.add(int(emp.matricule))
+    elif audience_type == 'departements':
+        ids = [d.dept_id for d in db.query(models.Departement).filter(models.Departement.nom.in_(selected)).all()]
+        if ids:
+            for emp in base_query.filter(models.Employe.dept_id.in_(ids)).all():
+                targets.add(int(emp.matricule))
+
+    # Always include destinataire by name if resolvable (for shoutout / kudos)
+    dest = (destinataire or '').strip()
+    if dest:
+        tokens = dest.split()
+        match = None
+        if len(tokens) >= 2:
+            first, last = tokens[0], ' '.join(tokens[1:])
+            match = (
+                base_query.filter(
+                    ((models.Employe.prenom == first) & (models.Employe.nom == last))
+                    | ((models.Employe.nom == first) & (models.Employe.prenom == last))
+                ).first()
+            )
+        if not match:
+            match = base_query.filter(
+                (models.Employe.nom == dest) | (models.Employe.prenom == dest)
+            ).first()
+        if match and match.matricule is not None:
+            targets.add(int(match.matricule))
+
+    return targets
+
+
+def _notify_post_created(post: models.TeamSpacePost, db: Session) -> None:
+    """Create in-app notifications for a newly created team-space post."""
+    audience_type = post.audience_type or 'all'
+    audience_selected = list(post.audience_selected or [])
+    destinataire = post.destinataire or ''
+
+    try:
+        targets = _resolve_audience_matricules(audience_type, audience_selected, destinataire, db)
+    except Exception:
+        return
+
+    if post.author_matricule:
+        targets.discard(int(post.author_matricule))
+    if not targets:
+        return
+
+    label = POST_TYPE_LABELS.get(post.post_type, 'Publication')
+    author = post.author_name or 'Un collègue'
+    if post.post_type == 'shoutout':
+        titre = f'Nouveau shout-out de {author}'
+        message = (post.message or '').strip()
+        if destinataire:
+            message = f'À {destinataire} : {message}' if message else f'Shout-out à {destinataire}'
+    elif post.post_type == 'kudos':
+        titre = f'Nouveau kudos de {author}'
+        parts = []
+        if post.valeur:
+            parts.append(str(post.valeur))
+        if destinataire:
+            parts.append(f'pour {destinataire}')
+        if post.raison:
+            parts.append(f'— {post.raison}')
+        message = ' '.join(parts) or 'Un collègue a reçu un kudos.'
+    elif post.post_type == 'poll':
+        titre = f'Nouveau sondage de {author}'
+        message = (post.question or '').strip() or 'Un nouveau sondage est disponible.'
+    else:
+        titre = f'Nouvelle publication ({label})'
+        message = (post.message or post.question or '').strip() or 'Nouvelle publication dans l’Espace Équipe.'
+
+    message = message[:500]
+    notifications = [
+        models.Notification(
+            matricule=mat,
+            type_notification=models.TypeNotificationEnum.AUTRE,
+            titre=titre[:200],
+            message=message,
+            id_operation=None,
+        )
+        for mat in targets
+    ]
+    if notifications:
+        db.add_all(notifications)
+        db.commit()
 
 
 def _serialize(post: models.TeamSpacePost) -> Dict[str, Any]:
@@ -115,6 +235,7 @@ def create_post(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_d
     db.add(post)
     db.commit()
     db.refresh(post)
+    _notify_post_created(post, db)
     return _serialize(post)
 
 

@@ -1,0 +1,21 @@
+/* Styles des boutons fantômes (transparents) respectant la charte graphique EC.
+ * Appliqués aux actions secondaires "PDF" et "Remplaçants" dans les pages
+ * de gestion (Congés, Permissions, Missions, Sorties, Frais).
+ */
+
+.btn-ghost-primary {
+  background: transparent !important;
+  color: var(--bleu) !important;
+  border: 1px solid var(--bleu) !important;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-ghost-primary:hover:not(:disabled) {
+  background: var(--bleu) !important;
+  color: #fff !important;
+}
+
+.btn-ghost-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

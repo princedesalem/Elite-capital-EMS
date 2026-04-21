@@ -83,6 +83,9 @@ services:
     working_dir: /app
     volumes:
       - ./frontend:/app
+    environment:
+      - FRONTEND_URL=http://frontend:5173
+      - BACKEND_URL=http://backend:8000
     command: ["sh", "-c", "npm install --silent --no-audit --no-fund && npm run test:e2e -- e2e/sorties-visual.spec.js"]
 
 volumes:

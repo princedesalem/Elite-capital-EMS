@@ -154,3 +154,7 @@ app.include_router(settings_router.router)
 @app.get('/')
 def root():
     return {"message": "Backend running"}
+
+@app.get('/health')
+def health():
+    return {"status": "ok", "service": "extranet-backend"}

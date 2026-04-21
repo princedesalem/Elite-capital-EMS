@@ -1,7 +1,26 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..db import get_db
+from ..utils.audit import log_action
+
+
+def _actor_from_request(request: Request | None):
+    """Extrait le matricule acteur + IP depuis un Request FastAPI (best-effort)."""
+    if request is None:
+        return None, None
+    actor = None
+    ip = request.client.host if request.client else None
+    auth = request.headers.get('authorization', '')
+    if auth.lower().startswith('bearer '):
+        try:
+            from ..utils import security as _sec
+            token_data = _sec.jwt.decode(auth.split(None, 1)[1], _sec.SECRET_KEY, algorithms=[_sec.ALGORITHM])
+            actor = token_data.get('matricule') or token_data.get('sub')
+        except Exception:
+            actor = None
+    return actor, ip
+
 
 router = APIRouter(prefix='/employees', tags=['organisation'])
 
@@ -343,7 +362,7 @@ def get_all_entites(id_localisation: int = None, db: Session = Depends(get_db)):
 
 
 @router.post('/entites')
-def create_entite(data: dict, db: Session = Depends(get_db)):
+def create_entite(data: dict, request: Request = None, db: Session = Depends(get_db)):
     """Create a new entite"""
     nom = data.get('nom')
     id_localisation = data.get('id_localisation')
@@ -369,7 +388,9 @@ def create_entite(data: dict, db: Session = Depends(get_db)):
             implantation = models.Implantation(id_localisation=id_localisation, id_entite=entite.id_entite)
             db.add(implantation)
             db.commit()
-    
+
+    actor, ip = _actor_from_request(request)
+    log_action(db, actor, 'CREATE_ENTITE', 'ENTITE', entite.id_entite, {'nom': entite.nom, 'id_localisation': id_localisation}, ip_address=ip)
     return {'id_entite': entite.id_entite, 'nom': entite.nom, 'directions_count': 0}
 
 
@@ -409,7 +430,7 @@ def get_all_directions(id_localisation: int = None, db: Session = Depends(get_db
 
 
 @router.post('/directions')
-def create_direction(data: dict, db: Session = Depends(get_db)):
+def create_direction(data: dict, request: Request = None, db: Session = Depends(get_db)):
     """Create a new direction"""
     nom = data.get('nom')
     id_entite = data.get('id_entite')
@@ -440,7 +461,9 @@ def create_direction(data: dict, db: Session = Depends(get_db)):
     db.add(direction)
     db.commit()
     db.refresh(direction)
-    
+
+    actor, ip = _actor_from_request(request)
+    log_action(db, actor, 'CREATE_DIRECTION', 'DIRECTION', direction.id_direction, {'nom': direction.nom, 'id_entite': id_entite, 'id_localisation': id_localisation}, ip_address=ip)
     return {
         'id_direction': direction.id_direction,
         'id_entite': direction.id_entite,
@@ -554,7 +577,7 @@ def get_all_departements(id_localisation: int = None, id_pays: int = None, db: S
 
 
 @router.post('/departements')
-def create_departement(data: dict, db: Session = Depends(get_db)):
+def create_departement(data: dict, request: Request = None, db: Session = Depends(get_db)):
     """Create a new departement.
 
     Optional city-linking fields:
@@ -615,6 +638,8 @@ def create_departement(data: dict, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(departement)
 
+    actor, ip = _actor_from_request(request)
+    log_action(db, actor, 'CREATE_DEPARTEMENT', 'DEPARTEMENT', departement.dept_id, {'nom': departement.nom, 'id_entite': id_entite, 'id_direction': id_direction, 'villes_ids': all_loc_ids}, ip_address=ip)
     return {
         'dept_id': departement.dept_id,
         'nom': departement.nom,
@@ -678,7 +703,7 @@ def unlink_departement_from_ville(dept_id: int, id_localisation: int, db: Sessio
 # ==================== ENTITES - DELETE & UPDATE ====================
 
 @router.put('/entites/{id_entite}')
-def update_entite(id_entite: int, data: dict, db: Session = Depends(get_db)):
+def update_entite(id_entite: int, data: dict, request: Request = None, db: Session = Depends(get_db)):
     """Update an entite"""
     nom = data.get('nom')
     
@@ -699,13 +724,17 @@ def update_entite(id_entite: int, data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail='Entité avec ce nom existe déjà')
     
     # Update entite
+    old_nom = entite.nom
     entite.nom = nom
     db.commit()
     db.refresh(entite)
-    
+
+    actor, ip = _actor_from_request(request)
+    log_action(db, actor, 'UPDATE_ENTITE', 'ENTITE', entite.id_entite, {'old_nom': old_nom, 'new_nom': entite.nom}, ip_address=ip)
+
     # Count directions
     dir_count = db.query(models.Direction).filter(models.Direction.id_entite == entite.id_entite).count()
-    
+
     return {
         'id_entite': entite.id_entite,
         'nom': entite.nom,
@@ -714,7 +743,7 @@ def update_entite(id_entite: int, data: dict, db: Session = Depends(get_db)):
 
 
 @router.delete('/entites/{id_entite}')
-def delete_entite(id_entite: int, db: Session = Depends(get_db)):
+def delete_entite(id_entite: int, request: Request = None, db: Session = Depends(get_db)):
     """Delete an entite"""
     # Check if entite exists
     entite = db.query(models.Entite).filter(models.Entite.id_entite == id_entite).first()
@@ -734,16 +763,20 @@ def delete_entite(id_entite: int, db: Session = Depends(get_db)):
     db.query(models.Departement).filter(models.Departement.id_entite == id_entite).delete()
     
     # Delete entite
+    entite_nom = entite.nom
     db.delete(entite)
     db.commit()
-    
+
+    actor, ip = _actor_from_request(request)
+    log_action(db, actor, 'DELETE_ENTITE', 'ENTITE', id_entite, {'nom': entite_nom}, ip_address=ip)
+
     return {'status': 'ok', 'message': 'Entité supprimée avec succès'}
 
 
 # ==================== DIRECTIONS - DELETE & UPDATE ====================
 
 @router.put('/directions/{id_direction}')
-def update_direction(id_direction: int, data: dict, db: Session = Depends(get_db)):
+def update_direction(id_direction: int, data: dict, request: Request = None, db: Session = Depends(get_db)):
     """Update a direction"""
     nom = data.get('nom')
     id_entite = data.get('id_entite')
@@ -771,10 +804,14 @@ def update_direction(id_direction: int, data: dict, db: Session = Depends(get_db
         direction.id_localisation = id_localisation
     
     # Update direction
+    old_nom = direction.nom
     direction.nom = nom
     db.commit()
     db.refresh(direction)
-    
+
+    actor, ip = _actor_from_request(request)
+    log_action(db, actor, 'UPDATE_DIRECTION', 'DIRECTION', direction.id_direction, {'old_nom': old_nom, 'new_nom': direction.nom, 'id_entite': direction.id_entite, 'id_localisation': direction.id_localisation}, ip_address=ip)
+
     # Get entite name
     entite = db.query(models.Entite).filter(models.Entite.id_entite == direction.id_entite).first()
     
@@ -792,7 +829,7 @@ def update_direction(id_direction: int, data: dict, db: Session = Depends(get_db
 
 
 @router.delete('/directions/{id_direction}')
-def delete_direction(id_direction: int, db: Session = Depends(get_db)):
+def delete_direction(id_direction: int, request: Request = None, db: Session = Depends(get_db)):
     """Delete a direction"""
     # Check if direction exists
     direction = db.query(models.Direction).filter(models.Direction.id_direction == id_direction).first()
@@ -801,18 +838,22 @@ def delete_direction(id_direction: int, db: Session = Depends(get_db)):
     
     # Delete all departments for this direction
     db.query(models.Departement).filter(models.Departement.id_direction == id_direction).delete()
-    
+
     # Delete direction
+    direction_nom = direction.nom
     db.delete(direction)
     db.commit()
-    
+
+    actor, ip = _actor_from_request(request)
+    log_action(db, actor, 'DELETE_DIRECTION', 'DIRECTION', id_direction, {'nom': direction_nom}, ip_address=ip)
+
     return {'status': 'ok', 'message': 'Direction supprimée avec succès'}
 
 
 # ==================== DEPARTEMENTS - DELETE & UPDATE ====================
 
 @router.put('/departements/{dept_id}')
-def update_departement(dept_id: int, data: dict, db: Session = Depends(get_db)):
+def update_departement(dept_id: int, data: dict, request: Request = None, db: Session = Depends(get_db)):
     """Update a departement"""
     nom = data.get('nom')
     id_entite = data.get('id_entite')
@@ -839,11 +880,15 @@ def update_departement(dept_id: int, data: dict, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail='Direction invalide')
     
     # Update departement
+    old_snapshot = {'nom': departement.nom, 'id_entite': departement.id_entite, 'id_direction': departement.id_direction}
     departement.nom = nom
     departement.id_entite = id_entite
     departement.id_direction = id_direction
     db.commit()
     db.refresh(departement)
+
+    actor, ip = _actor_from_request(request)
+    log_action(db, actor, 'UPDATE_DEPARTEMENT', 'DEPARTEMENT', departement.dept_id, {'before': old_snapshot, 'after': {'nom': departement.nom, 'id_entite': departement.id_entite, 'id_direction': departement.id_direction}}, ip_address=ip)
 
     return {
         'dept_id': departement.dept_id,
@@ -856,7 +901,7 @@ def update_departement(dept_id: int, data: dict, db: Session = Depends(get_db)):
 
 
 @router.delete('/departements/{dept_id}')
-def delete_departement(dept_id: int, db: Session = Depends(get_db)):
+def delete_departement(dept_id: int, request: Request = None, db: Session = Depends(get_db)):
     """Delete a departement"""
     # Check if departement exists
     departement = db.query(models.Departement).filter(models.Departement.dept_id == dept_id).first()
@@ -864,7 +909,11 @@ def delete_departement(dept_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail='Département non trouvé')
     
     # Delete departement
+    dept_nom = departement.nom
     db.delete(departement)
     db.commit()
-    
+
+    actor, ip = _actor_from_request(request)
+    log_action(db, actor, 'DELETE_DEPARTEMENT', 'DEPARTEMENT', dept_id, {'nom': dept_nom}, ip_address=ip)
+
     return {'status': 'ok', 'message': 'Département supprimé avec succès'}

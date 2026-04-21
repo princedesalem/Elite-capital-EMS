@@ -621,8 +621,8 @@ export default function FraisPage() {
     const isValid = isValidated(item.statut || item.status) || item.validation_terminee
     const isLoading = loadingOp === id
     const ps = fraisPaymentStatuts[id]
-    const eyeBtn = <button key="eye" onClick={(e) => openFraisDetail(e, id)} style={{ ...rowBtn, background: '#6366f1' }} title="Voir détails"><Eye size={12} /></button>
-    const pdfBtn = isValid && ps?.id_mission ? <button key="pdf" onClick={(e) => { e.stopPropagation(); api.get(`/api/pdf/frais/${ps.id_mission}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `frais_mission_${ps.id_mission}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url) }) }} style={{ ...rowBtn, background: '#0e7490', display: 'inline-flex', alignItems: 'center' }} title="Télécharger PDF frais"><FileDown size={13} /></button> : null
+    const eyeBtn = <button key="eye" onClick={(e) => openFraisDetail(e, id)} className="btn-ghost-primary" style={{ ...rowBtn, display: 'inline-flex', alignItems: 'center' }} title="Voir détails"><Eye size={12} /></button>
+    const pdfBtn = isValid && ps?.id_mission ? <button key="pdf" onClick={(e) => { e.stopPropagation(); api.get(`/api/pdf/frais/${ps.id_mission}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `frais_mission_${ps.id_mission}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url) }) }} className="btn-ghost-primary" style={{ ...rowBtn, display: 'inline-flex', alignItems: 'center' }} title="Télécharger PDF frais"><FileDown size={13} /></button> : null
 
     // Affiche le bouton de confirmation de paiement si disponible
     const paiementBtn = (() => {
@@ -722,7 +722,7 @@ export default function FraisPage() {
             {renderStatusBadge(normalizeListStatus(item.statut || item.status || 'en attente'))}
           </span>
         </td>
-        <td style={td}>{fmtDate(item.date_demande || item.date_creation || item.created_at || item.date_debut)}</td>
+        <td style={td} title={(() => { const v = item.date_demande || item.date_creation || item.created_at || item.date_debut; return v ? new Date(v).toLocaleString('fr-FR') : '' })()}>{fmtDate(item.date_demande || item.date_creation || item.created_at || item.date_debut)}</td>
         {isRecu && <td style={td}>{getEmitterName(item, true, senderName)}</td>}
         <td style={td}>{fmtDate(item.date_debut)}</td>
         <td style={td}>{fmtDate(item.date_fin)}</td>
