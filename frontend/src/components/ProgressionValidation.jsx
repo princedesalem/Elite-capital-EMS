@@ -169,48 +169,84 @@ const ProgressionValidation = ({ idOperation, typeDefault = null, onClose = null
             </div>
           </div>
 
-          {/* Vertical Steps Timeline - Professional Design */}
+          {/* Timeline verticale : étapes séquentielles + lignes horizontales pour validateurs parallèles (ex: multi-DG) */}
           <div className="progression-timeline-horizontal">
-            {etapes && etapes.map((etape, idx) => (
-              <div key={etape.numero} className="timeline-step-horizontal">
-                {/* Connector line before */}
-                {idx > 0 && (
-                  <div className={`connector-line ${
-                    etapes[idx - 1].statut === 'validé' ? 'validee' : 'pending'
-                  }`} />
-                )}
+            {(() => {
+              // Regrouper les étapes consécutives qui partagent le même `groupe` parallèle
+              const rows = []
+              for (let i = 0; i < etapes.length; i++) {
+                const e = etapes[i]
+                if (e.parallele && e.groupe) {
+                  const group = [e]
+                  while (i + 1 < etapes.length && etapes[i + 1].parallele && etapes[i + 1].groupe === e.groupe) {
+                    group.push(etapes[i + 1])
+                    i++
+                  }
+                  rows.push({ type: 'parallel', items: group })
+                } else {
+                  rows.push({ type: 'single', item: e })
+                }
+              }
 
-                {/* Step bubble */}
+              const renderBubble = (etape, rowIdx) => (
                 <div
-                  className={`step-bubble ${
-                    etape.statut === 'validé'
-                      ? 'validee'
-                      : etape.statut === 'refusé'
-                      ? 'refusee'
-                      : 'en-attente'
-                  }`}
-                  title={etape.validateur || 'En attente'}
+                  key={`${etape.numero}-${etape.matricule_validateur_attendu || etape.role}`}
+                  className="timeline-step-horizontal"
                 >
-                  <div className="bubble-content">
-                    <div className="bubble-icon">
-                      {etape.statut === 'validé' ? 'OK' : etape.statut === 'refusé' ? 'KO' : etapes.length - idx}
+                  <div
+                    className={`step-bubble ${
+                      etape.statut === 'validé'
+                        ? 'validee'
+                        : etape.statut === 'refusé'
+                        ? 'refusee'
+                        : 'en-attente'
+                    }`}
+                    title={etape.validateur || 'En attente'}
+                  >
+                    <div className="bubble-content">
+                      <div className="bubble-icon">
+                        {etape.statut === 'validé' ? 'OK' : etape.statut === 'refusé' ? 'KO' : etapes.length - rowIdx}
+                      </div>
+                      <div className="bubble-role">{etape.role}</div>
+                      {etape.validateur && <div className="bubble-name">{etape.validateur.split(' ')[0]}</div>}
                     </div>
-                    <div className="bubble-role">{etape.role}</div>
-                    {etape.validateur && <div className="bubble-name">{etape.validateur.split(' ')[0]}</div>}
                   </div>
-                </div>
 
-                {/* Tooltip on hover */}
-                {(etape.validateur || etape.date || etape.commentaire) && (
-                  <div className="step-tooltip">
-                    {etape.validateur && <div className="tooltip-line"><strong>{etape.validateur}</strong></div>}
-                    {etape.date && <div className="tooltip-line tooltip-date">{formatDate(etape.date)}</div>}
-                    {etape.commentaire && <div className="tooltip-line tooltip-comment">{etape.commentaire}</div>}
-                    {etape.statut === 'en attente' && <div className="tooltip-line tooltip-pending">En attente</div>}
-                  </div>
-                )}
-              </div>
-            ))}
+                  {(etape.validateur || etape.date || etape.commentaire) && (
+                    <div className="step-tooltip">
+                      {etape.validateur && <div className="tooltip-line"><strong>{etape.validateur}</strong></div>}
+                      {etape.date && <div className="tooltip-line tooltip-date">{formatDate(etape.date)}</div>}
+                      {etape.commentaire && <div className="tooltip-line tooltip-comment">{etape.commentaire}</div>}
+                      {etape.statut === 'en attente' && <div className="tooltip-line tooltip-pending">En attente</div>}
+                    </div>
+                  )}
+                </div>
+              )
+
+              return rows.map((row, rIdx) => {
+                const prevRow = rIdx > 0 ? rows[rIdx - 1] : null
+                const prevValide = prevRow
+                  ? (prevRow.type === 'parallel'
+                      ? prevRow.items.every(e => e.statut === 'validé')
+                      : prevRow.item.statut === 'validé')
+                  : false
+
+                return (
+                  <React.Fragment key={`row-${rIdx}`}>
+                    {rIdx > 0 && (
+                      <div className={`connector-line ${prevValide ? 'validee' : 'pending'}`} />
+                    )}
+                    {row.type === 'parallel' ? (
+                      <div className="timeline-parallel-row">
+                        {row.items.map(etape => renderBubble(etape, rIdx))}
+                      </div>
+                    ) : (
+                      renderBubble(row.item, rIdx)
+                    )}
+                  </React.Fragment>
+                )
+              })
+            })()}
           </div>
         </div>
 

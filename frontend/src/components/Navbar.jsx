@@ -156,31 +156,64 @@ export default function Navbar(){
     }
 
     let active = true
-    const loadCounter = () => {
-      api.get(`/api/notifications/compteur/${matricule}`).then((res) => {
+
+    // Clé de session (par matricule) pour éviter de re-déclencher le toast/son
+    // après un simple refresh de page. Le toast se redéclenche :
+    //  - à chaque nouvelle session (nouvelle ouverture de navigateur/tab),
+    //  - dès qu'une notification d'ID supérieur à la dernière vue apparaît.
+    const storageKey = `ems:lastSeenNotifId:${matricule}`
+    const readLastSeen = () => {
+      try { return Number(window.sessionStorage.getItem(storageKey) || 0) || 0 } catch { return 0 }
+    }
+    const writeLastSeen = (id) => {
+      try { window.sessionStorage.setItem(storageKey, String(id)) } catch {}
+    }
+
+    // Affiche le toast et joue le son dans le MÊME tick synchrone pour qu'ils
+    // apparaissent au même instant (pas de latence entre les deux).
+    const triggerToastAndSound = (notif) => {
+      setToast(notif)
+      playNotifSound()
+      if (document.hidden || !document.hasFocus()) {
+        showSystemNotification(notif)
+      }
+      window.dispatchEvent(new CustomEvent('ems:newNotification'))
+    }
+
+    const loadCounter = async () => {
+      try {
+        const res = await api.get(`/api/notifications/compteur/${matricule}`)
         if (!active) return
         const newCount = Number(res?.data?.non_lues || 0)
-        if (prevCountRef.current >= 0 && newCount > prevCountRef.current) {
-          window.dispatchEvent(new CustomEvent('ems:newNotification'))
-          playNotifSound()
-          api.get(`/api/notifications/non-lues/${matricule}`)
-            .then(r => {
-              if (!active) return
-              if (Array.isArray(r.data) && r.data.length > 0) {
-                const first = r.data[0]
-                setToast(first)
-                if (document.hidden || !document.hasFocus()) {
-                  showSystemNotification(first)
-                }
-              }
-            }).catch(() => {})
-        }
-        prevCountRef.current = newCount
+        const prevCount = prevCountRef.current
+        const firstLoadInSession = prevCount < 0
+        const countIncreased = !firstLoadInSession && newCount > prevCount
+
         setNotificationCount(newCount)
-      }).catch(() => {
+        prevCountRef.current = newCount
+
+        // Pas besoin d'examiner la liste si aucune non-lue, ou si ni 1er load,
+        // ni nouvelle notif.
+        if (newCount <= 0) return
+        if (!firstLoadInSession && !countIncreased) return
+
+        const listRes = await api.get(`/api/notifications/non-lues/${matricule}`)
+        if (!active) return
+        const list = Array.isArray(listRes?.data) ? listRes.data : []
+        if (list.length === 0) return
+
+        const latest = list[0]
+        const latestId = Number(latest?.id_notification || 0)
+        const lastSeen = readLastSeen()
+
+        if (latestId > lastSeen) {
+          triggerToastAndSound(latest)
+          writeLastSeen(latestId)
+        }
+      } catch {
         if (!active) return
         setNotificationCount(0)
-      })
+      }
     }
 
     loadCounter()

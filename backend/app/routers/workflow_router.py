@@ -709,11 +709,66 @@ def obtenir_progression_validation(id_operation: int, db: Session = Depends(get_
     ).order_by(models.Validation.timestamp_action).all()
     
     _TERMINAUX_PROG = {'PCA', 'AG'}
-    validations_dict = {v.role_validateur: v for v in validations}
-    
+    # Pour les rôles non-DG on garde un mapping 1→1 (la dernière gagne, cas normal).
+    validations_dict = {v.role_validateur: v for v in validations if v.role_validateur != 'DG'}
+    # Pour DG on conserve un mapping matricule → validation (multi-DG parallèle).
+    validations_dg_par_matricule = {
+        v.matricule_validateur: v
+        for v in validations
+        if v.role_validateur == 'DG' and v.matricule_validateur is not None
+    }
+
+    # Liste des DG de l'application (ordonnée). Utilisée uniquement si la séquence
+    # contient le rôle DG ; sinon on n'affiche rien de plus.
+    matricules_dg = wf_utils.obtenir_tous_matricules_dg(db) if 'DG' in sequence else []
+
     # Construire les étapes
     etapes = []
-    for idx, role in enumerate(sequence):
+    numero_courant = 0
+    for role in sequence:
+        if role == 'DG' and matricules_dg:
+            # Étape DG : on émet une sous-étape par DG (affichage côte à côte).
+            for matricule_dg in matricules_dg:
+                numero_courant += 1
+                validation = validations_dg_par_matricule.get(matricule_dg)
+                dg_employe = db.query(models.Employe).filter(
+                    models.Employe.matricule == matricule_dg
+                ).first()
+                nom_dg = (
+                    f"{dg_employe.prenom} {dg_employe.nom}"
+                    if dg_employe else f"DG {matricule_dg}"
+                )
+                if validation:
+                    etapes.append({
+                        "numero": numero_courant,
+                        "role": "DG",
+                        "statut": validation.statut_validation,
+                        "validateur": nom_dg,
+                        "matricule_validateur": validation.matricule_validateur,
+                        "matricule_validateur_attendu": matricule_dg,
+                        "date": validation.timestamp_action.isoformat() if validation.timestamp_action else None,
+                        "commentaire": validation.commentaire,
+                        "icone": "✅" if validation.statut_validation == "validé" else "❌",
+                        "parallele": len(matricules_dg) > 1,
+                        "groupe": "DG",
+                    })
+                else:
+                    etapes.append({
+                        "numero": numero_courant,
+                        "role": "DG",
+                        "statut": "en attente",
+                        "validateur": nom_dg,
+                        "matricule_validateur": None,
+                        "matricule_validateur_attendu": matricule_dg,
+                        "date": None,
+                        "commentaire": None,
+                        "icone": "⏳",
+                        "parallele": len(matricules_dg) > 1,
+                        "groupe": "DG",
+                    })
+            continue
+
+        numero_courant += 1
         validation = validations_dict.get(role)
         # Backward-compat: si le rôle terminal a été stocké avec l'alias opposé
         # (données créées avant la correction du stockage entity-aware)
@@ -728,26 +783,30 @@ def obtenir_progression_validation(id_operation: int, db: Session = Depends(get_
             ).first()
             
             etapes.append({
-                "numero": idx + 1,
+                "numero": numero_courant,
                 "role": role,
                 "statut": statut,
                 "validateur": f"{validateur.prenom} {validateur.nom}" if validateur else "Inconnu",
                 "matricule_validateur": validation.matricule_validateur,
                 "date": validation.timestamp_action.isoformat() if validation.timestamp_action else None,
                 "commentaire": validation.commentaire,
-                "icone": "✅" if statut == "validé" else "❌"
+                "icone": "✅" if statut == "validé" else "❌",
+                "parallele": False,
+                "groupe": None,
             })
         else:
             # Étape non encore effectuée
             etapes.append({
-                "numero": idx + 1,
+                "numero": numero_courant,
                 "role": role,
                 "statut": "en attente",
                 "validateur": None,
                 "matricule_validateur": None,
                 "date": None,
                 "commentaire": None,
-                "icone": "⏳"
+                "icone": "⏳",
+                "parallele": False,
+                "groupe": None,
             })
     
     # Calculer la progression

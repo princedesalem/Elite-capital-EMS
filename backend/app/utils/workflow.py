@@ -90,25 +90,37 @@ def determiner_sequence_validation(
         append_role(dernier_validateur)
     elif role_demandeur == 'RH':
         if is_ecg:
+            # Règle métier : toute demande avec frais passe par DFC puis DG
+            # (la DG valide après le DFC) avant le PCA/AG, quelle que soit
+            # l'entité (y compris ECG).
             if a_des_frais:
                 append_role('DFC')
+                append_role('DG')
             append_role(dernier_validateur)
         else:
-            append_role('DG')
             if a_des_frais:
                 append_role('DFC')
+            append_role('DG')
             append_role(dernier_validateur)
     elif role_demandeur == 'DIRECTEUR':
+        # Règle métier : quand un DIRECTEUR fait une demande, la DG doit figurer
+        # dans le workflow quelle que soit l'entité (y compris ECG). Tous les DG
+        # de l'application devront valider avant passage au PCA/AG.
+        # Si la demande comporte des frais, le DFC valide avant la DG.
         append_role('RH')
-        if is_ecg:
-            if a_des_frais:
-                append_role('DFC')
-            append_role(dernier_validateur)
-        else:
-            append_role('DG')
-            if a_des_frais:
-                append_role('DFC')
-            append_role(dernier_validateur)
+        if a_des_frais:
+            append_role('DFC')
+        append_role('DG')
+        append_role(dernier_validateur)
+    elif role_demandeur == 'RESPONSABLE':
+        # Règle métier : un RESPONSABLE qui fait une demande ne passe pas par un
+        # DIRECTEUR. Il va RH → (DFC?) → DG → PCA/AG, DG obligatoire quelle
+        # que soit l'entité (y compris ECG). Si frais, DFC valide avant la DG.
+        append_role('RH')
+        if a_des_frais:
+            append_role('DFC')
+        append_role('DG')
+        append_role(dernier_validateur)
     else:
         departement = None
         if employe.dept_id:
@@ -119,10 +131,12 @@ def determiner_sequence_validation(
         if departement and departement.id_direction:
             append_role('DIRECTEUR')
             append_role('RH')
-        elif employe.id_direction:
-            append_role('DIRECTEUR')
-            append_role('RH')
         else:
+            # Département sans direction rattachée (ou employé sans département)
+            # → c'est le RESPONSABLE du département qui valide, pas un directeur.
+            # On ignore volontairement employe.id_direction ici : la règle métier
+            # impose que seul le rattachement département→direction définit si
+            # un DIRECTEUR doit intervenir dans la séquence.
             if rh_shortcut:
                 # One RH validation should satisfy both RESPONSABLE + RH for RH dept special case.
                 append_role('RH')
@@ -131,13 +145,18 @@ def determiner_sequence_validation(
                 append_role('RH')
 
         if is_ecg:
+            # Règle métier : toute demande de frais d'un employé (quelle
+            # que soit l'entité, ECG incluse) passe par DFC puis DG avant
+            # le PCA/AG. Sans frais, le workflow ECG historique (sans DG
+            # ni DFC) est conservé.
             if a_des_frais:
                 append_role('DFC')
+                append_role('DG')
             append_role(dernier_validateur)
         else:
-            append_role('DG')
             if a_des_frais:
                 append_role('DFC')
+            append_role('DG')
             append_role(dernier_validateur)
 
     role_demandeur_normalise = _normaliser_role(role_demandeur)
@@ -175,15 +194,24 @@ def obtenir_validateur_pour_role(
                 return employe.n1
     
     elif role == 'DIRECTEUR':
-        # Chercher le directeur de la direction (priorité à la direction du département)
-        direction_id = employe.id_direction
+        # Chercher le directeur de la direction.
+        # PRIORITÉ 1 : direction du département de l'employé (structure org. officielle).
+        # Garantit qu'un employé du département "Projets" rattaché à la Direction
+        # "Organisation et Projet" va au directeur de CETTE direction, et non au
+        # directeur de l'Audit (même si employe.id_direction est incohérent/stale).
+        direction_id = None
 
-        if not direction_id and employe.dept_id:
+        if employe.dept_id:
             departement = db.query(Departement).filter(
                 Departement.dept_id == employe.dept_id
             ).first()
             if departement and departement.id_direction:
                 direction_id = departement.id_direction
+
+        # PRIORITÉ 2 : id_direction direct de l'employé (fallback uniquement si pas
+        # de département ou département sans direction rattachée).
+        if not direction_id:
+            direction_id = employe.id_direction
 
         if direction_id:
             direction = db.query(Direction).filter(
@@ -255,6 +283,36 @@ def obtenir_validateur_pour_role(
     return None
 
 
+def obtenir_tous_matricules_dg(db: Session) -> List[int]:
+    """
+    Retourne la liste ordonnée (par matricule) des matricules ayant le rôle DG,
+    toutes entités confondues. Règle métier : lorsque plusieurs DG existent, ils
+    doivent tous valider avant passage au PCA/AG.
+
+    On regarde à la fois Utilisateur.role_id et Employe.id_role pour être robuste
+    aux variations de seed.
+    """
+    role_dg = db.query(Role).filter(Role.name == 'DG').first()
+    if not role_dg:
+        return []
+
+    matricules: set = set()
+
+    # Via Utilisateur.role_id
+    users = db.query(Utilisateur).filter(Utilisateur.role_id == role_dg.id).all()
+    for u in users:
+        if u.matricule is not None:
+            matricules.add(u.matricule)
+
+    # Via Employe.id_role (fallback robuste)
+    emps = db.query(Employe).filter(Employe.id_role == role_dg.id).all()
+    for e in emps:
+        if e.matricule is not None:
+            matricules.add(e.matricule)
+
+    return sorted(matricules)
+
+
 def obtenir_prochain_validateur(
     id_operation: int,
     db: Session
@@ -286,25 +344,127 @@ def obtenir_prochain_validateur(
     # Obtenir la séquence complète (avec vérification des frais)
     sequence = determiner_sequence_validation(employe, db, id_operation)
     
-    # Obtenir les validations déjà effectuées
+    # Obtenir les validations déjà effectuées (par rôle et matricule)
     validations = db.query(Validation).filter(
         Validation.id_operation == id_operation,
         Validation.statut_validation == 'validé'
     ).all()
     
     roles_valides = set()
+    matricules_valides_par_role: dict = {}
     for val in validations:
-        # Utiliser le rôle stocké dans la validation
         if val.role_validateur:
             roles_valides.add(val.role_validateur)
+            matricules_valides_par_role.setdefault(val.role_validateur, set()).add(
+                val.matricule_validateur
+            )
     
     # Trouver le premier rôle non validé
     for role in sequence:
+        if role == 'DG':
+            # Multi-DG : tous les DG doivent valider. Le rôle n'est "terminé"
+            # que lorsque chaque DG a enregistré une validation.
+            matricules_dg = obtenir_tous_matricules_dg(db)
+            if not matricules_dg:
+                # Aucun DG configuré → on ignore silencieusement l'étape.
+                continue
+            deja_valides = matricules_valides_par_role.get('DG', set())
+            restants = [m for m in matricules_dg if m not in deja_valides]
+            if restants:
+                return 'DG', restants[0]
+            # Tous les DG ont validé → passer à l'étape suivante.
+            continue
+
         if role not in roles_valides:
             matricule = obtenir_validateur_pour_role(employe, role, db)
             return role, matricule
     
     return None, None  # Tous les validateurs ont validé
+
+
+def rerouter_notifications_validation_en_attente(db: Session) -> dict:
+    """
+    Ré-aligne les notifications VALIDATION pending avec le validateur calculé
+    par la logique courante (post-correction du bug de routing direction).
+
+    Pour chaque opération en statut 'en attente' :
+    - Calcule le bon prochain validateur (role, matricule).
+    - Trouve les notifications VALIDATION non lues liées à cette opération.
+    - Si `notif.matricule != bon_matricule` : marque l'ancienne comme lue + archivée
+      et crée une nouvelle notification pour le bon validateur (si pas déjà présente).
+
+    Idempotent : si toutes les notifications pointent déjà vers le bon validateur,
+    aucune modification n'est faite.
+
+    Returns:
+        Compteurs : {'operations_examinees', 'operations_corrigees', 'notifications_reassignees',
+                     'notifications_creees_pour_nouveau_validateur'}
+    """
+    stats = {
+        'operations_examinees': 0,
+        'operations_corrigees': 0,
+        'notifications_reassignees': 0,
+        'notifications_creees_pour_nouveau_validateur': 0,
+    }
+
+    operations_pending = db.query(Operation).filter(
+        Operation.statut.in_(['en attente', 'En attente', 'EN ATTENTE'])
+    ).all()
+
+    for op in operations_pending:
+        stats['operations_examinees'] += 1
+
+        role_correct, matricule_correct = obtenir_prochain_validateur(op.id_operation, db)
+        if not matricule_correct:
+            continue
+
+        # Notifications VALIDATION non lues liées à cette opération
+        notifs_pending = db.query(Notification).filter(
+            Notification.id_operation == op.id_operation,
+            Notification.type_notification == TypeNotificationEnum.VALIDATION,
+            Notification.lue == False,  # noqa: E712
+        ).all()
+
+        # Vérifier s'il existe déjà une notification pour le bon validateur
+        deja_ok = any(n.matricule == matricule_correct for n in notifs_pending)
+
+        # Réassigner les notifications mal routées
+        notifs_mal_routees = [n for n in notifs_pending if n.matricule != matricule_correct]
+
+        if not notifs_mal_routees:
+            continue
+
+        stats['operations_corrigees'] += 1
+
+        for notif in notifs_mal_routees:
+            # Archiver l'ancienne : marquée comme lue pour qu'elle disparaisse de la boîte
+            notif.lue = True
+            db.add(notif)
+            stats['notifications_reassignees'] += 1
+
+        if not deja_ok:
+            # Créer une nouvelle notification pour le bon validateur
+            demandeur = db.query(Employe).filter(Employe.matricule == op.matricule).first()
+            demandeur_label = (
+                f"{demandeur.prenom} {demandeur.nom}"
+                if demandeur else "un demandeur"
+            )
+            type_demande = op.type_demande if op.type_demande else 'opération'
+            nouvelle_notif = Notification(
+                matricule=matricule_correct,
+                type_notification=TypeNotificationEnum.VALIDATION,
+                titre="Demande à valider (reroutée)",
+                message=(
+                    f"Une {str(type_demande).lower()} de {demandeur_label} "
+                    f"est en attente de votre validation en tant que {role_correct}."
+                ),
+                id_operation=op.id_operation,
+            )
+            db.add(nouvelle_notif)
+            stats['notifications_creees_pour_nouveau_validateur'] += 1
+
+    db.commit()
+    return stats
 
 
 def obtenir_sequence_operation(id_operation: int, db: Session) -> List[str]:
@@ -397,6 +557,19 @@ def valider_operation(
     )
     if prochain_role and not role_ok:
         return False, f"Ce n'est pas votre tour de valider. En attente de: {prochain_role}"
+
+    # Multi-DG : un DG qui a déjà validé ne peut pas revalider. On ne bloque pas
+    # l'ordre entre DG (n'importe lequel des DG restants peut valider), mais on
+    # refuse une seconde validation par le même matricule.
+    if role_validateur == 'DG' and prochain_role == 'DG':
+        deja_valide = db.query(Validation).filter(
+            Validation.id_operation == id_operation,
+            Validation.role_validateur == 'DG',
+            Validation.matricule_validateur == matricule_validateur,
+            Validation.statut_validation == 'validé',
+        ).first()
+        if deja_valide:
+            return False, "Vous avez déjà validé cette demande en tant que DG"
 
     # Pour les rôles terminaux interchangeables, stocker le rôle attendu par la séquence
     # (ex: stocker 'AG' quand PCA valide pour un employé ECG, et 'PCA' pour ELCAM/EXCA)

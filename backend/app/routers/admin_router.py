@@ -108,3 +108,32 @@ def cleanup_audit_logs(
         'deleted_count': deleted_count,
         'cutoff_date': cutoff.isoformat(),
     }
+
+
+@router.post('/workflow/rerouter-notifications')
+def rerouter_workflow_notifications(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Ré-aligne les notifications VALIDATION pending avec le bon validateur calculé
+    par la logique courante. À utiliser ponctuellement après un changement de
+    structure organisationnelle ou un correctif de routing.
+
+    Exemple : Samuel Ngoula avait ses demandes chez Serge Tchoua (autre direction).
+    Après ce ré-alignement, les notifications pointent vers le bon directeur.
+
+    ADMIN uniquement.
+    """
+    actor_matricule, actor_role = access_control.get_actor_from_request(request)
+    if str(actor_role or '').upper() != 'ADMIN':
+        raise HTTPException(status_code=403, detail='Réservé aux administrateurs')
+
+    from ..utils.workflow import rerouter_notifications_validation_en_attente
+
+    stats = rerouter_notifications_validation_en_attente(db)
+    return {
+        'detail': 'Ré-alignement exécuté',
+        **stats,
+    }
+

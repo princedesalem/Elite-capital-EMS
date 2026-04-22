@@ -940,3 +940,28 @@
     font-size: 12px;
   }
 }
+
+/* ===== MULTI-VALIDATEURS PARALLÈLES (ex: multi-DG) ===== */
+/* Les bulles parallèles (ex: plusieurs DG) sont alignées côte à côte : une à
+   gauche, l'autre à droite. La timeline reprend ensuite verticalement vers
+   PCA/AG. */
+.timeline-parallel-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 28px;
+  position: relative;
+}
+
+/* Trait horizontal fin reliant les bulles parallèles entre elles */
+.timeline-parallel-row::before {
+  content: '';
+  position: absolute;
+  top: 26px;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: #d0d7e0;
+  z-index: 0;
+}

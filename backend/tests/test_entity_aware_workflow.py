@@ -226,17 +226,20 @@ def test_ecg_sequence_skips_dg_for_standard_requests(db_session, seed_entity_rol
     assert sequence[-1] in {'AG', 'PCA'}
 
 
-def test_ecg_frais_sequence_routes_rh_then_dfc_then_ag(db_session, seed_entity_roles):
+def test_ecg_frais_sequence_routes_rh_then_dfc_then_dg_then_ag(db_session, seed_entity_roles):
+    """Règle métier : toute opération avec des Frais doit passer par le DFC
+    puis la DG (la DG valide après le DFC) avant le validateur terminal
+    (PCA/AG), quelle que soit l'entité, y compris ECG."""
     refs = seed_entity_roles
     refs['employe'].id_entite = refs['ecg'].id_entite
     db_session.add(models.Frais(id_frais=90001, id_operation=refs['operation'].id_operation))
     db_session.commit()
 
     sequence = wf_utils.obtenir_sequence_operation(refs['operation'].id_operation, db_session)
-    assert 'DG' not in sequence
+    assert 'DG' in sequence
     assert 'RH' in sequence
     assert 'DFC' in sequence
-    assert sequence.index('RH') < sequence.index('DFC')
+    assert sequence.index('RH') < sequence.index('DFC') < sequence.index('DG')
     assert sequence[-1] in {'AG', 'PCA'}
 
     def test_progression_role_label_in_etapes_matches_entity(
