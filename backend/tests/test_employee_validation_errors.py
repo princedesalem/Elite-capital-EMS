@@ -77,3 +77,94 @@ def test_create_employee_success(client, auth_headers, data):
     assert resp.status_code in (200, 201)
     body = resp.json()
     assert body.get('matricule') is not None or body.get('detail') == 'Employé créé'
+
+
+# ---------------------------------------------------------------------------
+# Messages d'erreur — accents et grammaire
+# ---------------------------------------------------------------------------
+
+def test_creer_compte_role_inconnu_message(client, auth_headers, data):
+    """Créer un compte avec un rôle inexistant doit retourner 400 avec 'Rôle inconnu' (accent)."""
+    headers = _admin_headers(auth_headers, data)
+    emp = data['employe']
+    resp = client.post(
+        f'/employees/admin/utilisateurs/{emp.matricule}/creer-compte',
+        json={'role': 'ROLE_INEXISTANT_XYZ', 'password': 'Test@1234!'},
+        headers=headers,
+    )
+    # L'employé a déjà un compte (créé par conftest) → 409 ou rôle inconnu → 400
+    # On vérifie que si on obtient 400 (pas de compte existant), le message est correct
+    if resp.status_code == 400:
+        assert resp.json()['detail'] == 'Rôle inconnu', (
+            f"Message attendu 'Rôle inconnu', obtenu : '{resp.json()['detail']}'"
+        )
+    else:
+        # 409 = déjà un compte, message doit aussi être correct
+        assert resp.status_code == 409
+        assert resp.json()['detail'] == 'Cet employé a déjà un compte', (
+            f"Message 409 attendu 'Cet employé a déjà un compte', obtenu : '{resp.json()['detail']}'"
+        )
+
+
+def test_creer_compte_role_inconnu_nouvel_employe(client, auth_headers, data, db_session):
+    """Créer un compte pour un employé sans compte existant, avec rôle inconnu → 400, 'Rôle inconnu'."""
+    from app import models
+    from datetime import date as dt_date
+
+    headers = _admin_headers(auth_headers, data)
+
+    # Créer un employé sans compte
+    emp_sans_compte = models.Employe(
+        matricule=19999,
+        nom='SansCompte',
+        prenom='Test',
+        date_embauche=dt_date(2024, 1, 1),
+        dept_id=data['departement'].dept_id,
+        id_entite=data['entite'].id_entite,
+        statut_employe='ACTIF',
+        id_role=data['roles']['EMPLOYE'].id,
+        sexe='M',
+    )
+    db_session.add(emp_sans_compte)
+    db_session.commit()
+
+    resp = client.post(
+        '/employees/admin/utilisateurs/19999/creer-compte',
+        json={'role': 'ROLE_INEXISTANT_XYZ', 'password': 'Test@1234!Longue'},
+        headers=headers,
+    )
+    assert resp.status_code == 400, f"Statut attendu 400, obtenu {resp.status_code}: {resp.json()}"
+    assert resp.json()['detail'] == 'Rôle inconnu', (
+        f"Message attendu 'Rôle inconnu', obtenu : '{resp.json()['detail']}'"
+    )
+
+
+def test_suppression_fonction_employees_lies_message_accents(client, auth_headers, data, db_session):
+    """Supprimer une fonction utilisée par un employé doit retourner 400 avec 'employé(s)' accentué."""
+    from app import models
+
+    headers = _admin_headers(auth_headers, data)
+
+    # Créer une fonction référence avec le libellé exact de la fonction de l'employé seed
+    emp = data['employe']
+    fonction_libelle = emp.fonction or 'TestFonction'
+
+    # S'assurer que la fonction existe dans FONCTION_REFERENCE
+    existing = db_session.query(models.FonctionReference).filter(
+        models.FonctionReference.libelle == fonction_libelle
+    ).first()
+    if not existing:
+        fn = models.FonctionReference(libelle=fonction_libelle)
+        db_session.add(fn)
+        db_session.commit()
+        db_session.refresh(fn)
+        fn_id = fn.id_fonction
+    else:
+        fn_id = existing.id_fonction
+
+    resp = client.delete(f'/employees/admin/fonctions-reference/{fn_id}', headers=headers)
+    assert resp.status_code == 400, f"Statut attendu 400, obtenu {resp.status_code}: {resp.json()}"
+    detail = resp.json()['detail']
+    assert 'employé(s)' in detail, (
+        f"Message doit contenir 'employé(s)' (accentué), obtenu : '{detail}'"
+    )

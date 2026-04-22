@@ -271,17 +271,26 @@ def notifier_validation_operation(
     else:
         libelle = 'demande'
 
-    # Accord féminin/masculin pour le statut
+    # Accord féminin/masculin/pluriel pour le statut
     _feminins = {'mission', 'permission', 'sortie', 'demande'}
-    if libelle in _feminins:
+    _pluriels = {'frais de mission'}
+    if libelle in _pluriels:
+        statut_accorde = statut + 's' if statut.endswith('é') else statut
+        avoir = "ont été"
+        poss = "Vos"
+    elif libelle in _feminins:
         statut_accorde = statut.rstrip('é') + 'ée' if statut.endswith('é') else statut
+        avoir = "a été"
+        poss = "Votre"
     else:
         statut_accorde = statut
+        avoir = "a été"
+        poss = "Votre"
 
     titre_notif = f"{libelle.capitalize()} {statut_accorde}"
 
     # Message au demandeur
-    message_demandeur = f"Votre {libelle} a été {statut_accorde} par le {validateur_role}."
+    message_demandeur = f"{poss} {libelle} {avoir} {statut_accorde} par le {validateur_role}."
     if commentaire:
         message_demandeur += f"\nCommentaire : {commentaire}"
 
@@ -318,8 +327,13 @@ def notifier_validation_operation(
     from .activation_cloture import creer_notification_rh
     _emp = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
     _nom_employe = f"{_emp.prenom} {_emp.nom}" if _emp else f"Employé #{operation.matricule}"
-    _article_rh = "La" if libelle in ('mission', 'permission', 'sortie', 'demande') else "Le"
-    message_rh = f"{_article_rh} {libelle} de {_nom_employe} a été {statut_accorde} par le {validateur_role}."
+    if libelle in _pluriels:
+        _article_rh = "Les"
+    elif libelle in _feminins:
+        _article_rh = "La"
+    else:
+        _article_rh = "Le"
+    message_rh = f"{_article_rh} {libelle} de {_nom_employe} {avoir} {statut_accorde} par le {validateur_role}."
     if commentaire:
         message_rh += f"\nCommentaire : {commentaire}"
     creer_notification_rh(
@@ -336,9 +350,9 @@ def notifier_validation_operation(
         if statut == 'validé':
             body = (
                 f"Bonjour {_emp.prenom} {_emp.nom},\n\n"
-                f"Votre {libelle} du {operation.date_debut} au "
+                f"{poss} {libelle} du {operation.date_debut} au "
                 f"{operation.date_fin or operation.date_retour} "
-                f"({operation.duree_jours or ''} jour(s)) a été {statut_accorde} "
+                f"({operation.duree_jours or ''} jour(s)) {avoir} {statut_accorde} "
                 f"par le {validateur_role}.\n"
                 + (f"\nCommentaire : {commentaire}\n" if commentaire else "")
                 + f"\nCordialement,\nÉquipe EMS"
@@ -346,15 +360,15 @@ def notifier_validation_operation(
         else:
             body = (
                 f"Bonjour {_emp.prenom} {_emp.nom},\n\n"
-                f"Votre {libelle} du {operation.date_debut} au "
+                f"{poss} {libelle} du {operation.date_debut} au "
                 f"{operation.date_fin or operation.date_retour} "
-                f"a malheureusement été {statut_accorde} par le {validateur_role}.\n"
+                f"malheureusement {avoir} {statut_accorde} par le {validateur_role}.\n"
                 + (f"\nMotif : {commentaire}\n" if commentaire else "")
                 + f"\nCordialement,\nÉquipe EMS"
             )
         email_utils.send_email(
             _emp.email,
-            f"[EMS] Votre {libelle} a été {statut_accorde}",
+            f"[EMS] {poss} {libelle} {avoir} {statut_accorde}",
             body
         )
 

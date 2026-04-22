@@ -465,7 +465,7 @@ def _prepare_employee_payload(payload: schemas.EmployeBase, db: Session):
         elif raw in {'marie', 'marié', 'm'}:
             cleaned['statut_matrimonial'] = 'Marie'
         elif raw:
-            raise HTTPException(status_code=400, detail='Statut matrimonial invalide (Celibataire ou Marie).')
+            raise HTTPException(status_code=400, detail='Statut matrimonial invalide (Célibataire ou Marié).')
         else:
             cleaned['statut_matrimonial'] = None
 
@@ -1408,7 +1408,7 @@ def delete_fonction_reference(id_fonction: int, request: Request, db: Session = 
     if usage_count > 0:
         raise HTTPException(
             status_code=400,
-            detail=f'Suppression impossible: {usage_count} employe(s) utilisent encore cette fonction'
+            detail=f'Suppression impossible : {usage_count} employé(s) utilisent encore cette fonction'
         )
 
     db.delete(current)
@@ -1687,7 +1687,7 @@ def update_admin_utilisateur(
 
     utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.matricule == matricule).first()
     if not utilisateur:
-        raise HTTPException(status_code=404, detail='Utilisateur non trouve')
+        raise HTTPException(status_code=404, detail='Utilisateur non trouvé')
 
     previous_role_id = utilisateur.role_id
 
@@ -1695,7 +1695,7 @@ def update_admin_utilisateur(
         role_name = str(payload.role).strip().upper()
         role = db.query(models.Role).filter(func.upper(models.Role.name) == role_name).first()
         if not role:
-            raise HTTPException(status_code=400, detail='Role inconnu')
+            raise HTTPException(status_code=400, detail='Rôle inconnu')
         utilisateur.role_id = role.id
         # Synchroniser la table EMPLOYE pour cohérence
         emp = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
@@ -1758,7 +1758,7 @@ def reset_admin_utilisateur_password(
 
     utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.matricule == matricule).first()
     if not utilisateur:
-        raise HTTPException(status_code=404, detail='Utilisateur non trouve')
+        raise HTTPException(status_code=404, detail='Utilisateur non trouvé')
 
     mot_de_passe_temp = (payload.new_password or '').strip() or f"EMS@{matricule}!Reset1"
     ok, msg = security.validate_password_policy(mot_de_passe_temp)
@@ -1785,7 +1785,7 @@ def reset_admin_utilisateur_password(
         'ok': True,
         'matricule': matricule,
         'mot_de_passe_temporaire': mot_de_passe_temp,
-        'message': 'Mot de passe temporaire reinitialise',
+        'message': 'Mot de passe temporaire réinitialisé',
     }
 
 
@@ -1812,11 +1812,11 @@ def creer_compte_utilisateur(
 
     employe = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
     if not employe:
-        raise HTTPException(status_code=404, detail='Employe introuvable')
+        raise HTTPException(status_code=404, detail='Employé introuvable')
 
     existant = db.query(models.Utilisateur).filter(models.Utilisateur.matricule == matricule).first()
     if existant:
-        raise HTTPException(status_code=409, detail='Cet employe a deja un compte')
+        raise HTTPException(status_code=409, detail='Cet employé a déjà un compte')
 
     mot_de_passe = (payload.password or '').strip() or f"EMS@{matricule}!Compte1"
     ok, msg = security.validate_password_policy(mot_de_passe)
@@ -1828,7 +1828,7 @@ def creer_compte_utilisateur(
         role_name = str(payload.role).strip().upper()
         role_obj = db.query(models.Role).filter(func.upper(models.Role.name) == role_name).first()
         if not role_obj:
-            raise HTTPException(status_code=400, detail='Role inconnu')
+            raise HTTPException(status_code=400, detail='Rôle inconnu')
 
     email = (payload.email or '').strip() or (employe.email or None)
 

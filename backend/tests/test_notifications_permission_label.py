@@ -230,3 +230,85 @@ def test_permission_notif_rh_uses_permission_label(db_session):
     assert "la mission de" not in msg, (
         f"Message RH ne doit pas contenir 'la mission de', obtenu : '{rh_notifs[0].message}'"
     )
+
+
+# ---------------------------------------------------------------------------
+# Frais de mission — accord pluriel
+# ---------------------------------------------------------------------------
+
+def test_frais_notif_article_rh_les(db_session):
+    """La notif RH pour des frais de mission doit utiliser 'Les frais de mission', pas 'Le frais'."""
+    rh_role = models.Role(name="RH", description="RH")
+    db_session.add(rh_role)
+    db_session.flush()
+    rh_emp = _make_employe(db_session, 8002, "RH", "Agent2")
+    rh_user = models.Utilisateur(
+        matricule=8002,
+        role_id=rh_role.id,
+        mot_de_passe_hash="x",
+        mot_de_passe_temporaire=False,
+        mfa_enabled=False,
+        mfa_active=False,
+    )
+    db_session.add(rh_user)
+    emp = _make_employe(db_session, 5001)
+    op = _make_operation(db_session, 5001, "Frais de mission")
+    db_session.commit()
+
+    notifier_validation_operation(op.id_operation, "validé", "DG", None, db_session)
+
+    rh_notifs = db_session.query(models.Notification).filter(
+        models.Notification.matricule == 8002
+    ).all()
+    assert rh_notifs, "Aucune notification créée pour le RH"
+    msg = rh_notifs[0].message
+    assert msg.startswith("Les frais de mission"), (
+        f"Message RH doit commencer par 'Les frais de mission', obtenu : '{msg}'"
+    )
+    assert "Le frais" not in msg, f"'Le frais' incorrect dans : '{msg}'"
+
+
+def test_frais_notif_statut_accorde_pluriel(db_session):
+    """Le titre pour des frais validés doit être 'Frais de mission validés' (pluriel), pas 'validé'."""
+    _make_rh_role_and_user(db_session)
+    emp = _make_employe(db_session, 6001)
+    op = _make_operation(db_session, 6001, "Frais de mission")
+    db_session.commit()
+
+    notifier_validation_operation(op.id_operation, "validé", "DIRECTEUR", None, db_session)
+
+    notifs = db_session.query(models.Notification).filter(
+        models.Notification.matricule == 6001
+    ).all()
+    assert notifs, "Aucune notification créée pour le demandeur"
+    titre = notifs[0].titre
+    assert titre == "Frais de mission validés", (
+        f"Titre attendu 'Frais de mission validés', obtenu : '{titre}'"
+    )
+    msg = notifs[0].message
+    assert "vos frais" in msg.lower(), f"Message doit contenir 'Vos frais', obtenu : '{msg}'"
+    assert "ont été validés" in msg.lower(), (
+        f"Message doit contenir 'ont été validés', obtenu : '{msg}'"
+    )
+
+
+def test_frais_notif_demandeur_accord_pluriel(db_session):
+    """Le message demandeur pour des frais refusés doit utiliser 'ont été refusés', pas 'a été refusé'."""
+    _make_rh_role_and_user(db_session)
+    emp = _make_employe(db_session, 7001)
+    op = _make_operation(db_session, 7001, "Frais de mission")
+    db_session.commit()
+
+    notifier_validation_operation(op.id_operation, "refusé", "RESPONSABLE", None, db_session)
+
+    notifs = db_session.query(models.Notification).filter(
+        models.Notification.matricule == 7001
+    ).all()
+    assert notifs, "Aucune notification créée pour le demandeur (refus)"
+    msg = notifs[0].message.lower()
+    assert "ont été refusés" in msg, (
+        f"Message doit contenir 'ont été refusés', obtenu : '{notifs[0].message}'"
+    )
+    assert "a été refusé" not in msg, (
+        f"Message ne doit pas contenir 'a été refusé', obtenu : '{notifs[0].message}'"
+    )

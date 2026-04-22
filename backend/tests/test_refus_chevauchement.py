@@ -146,3 +146,63 @@ def test_chevauchement_partiel_refus_libre(db_session, employe):
         employe, date(2026, 9, 5), date(2026, 9, 15), db_session
     )
     assert not chevauchement, f"Chevauchement partiel avec refusée ne doit pas bloquer: {msg}"
+
+
+def test_chevauchement_conge_article_masculin(db_session, employe):
+    """Le message de chevauchement pour un congé doit utiliser 'un congé', pas 'une congé'."""
+    op = models.Operation(
+        matricule=7001,
+        type_demande="Congé",
+        statut="validé",
+        date_debut=date(2026, 10, 1),
+        date_fin=date(2026, 10, 15),
+    )
+    db_session.add(op)
+    db_session.commit()
+
+    chevauchement, msg = verifier_chevauchement_operations(
+        employe, date(2026, 10, 5), date(2026, 10, 10), db_session
+    )
+    assert chevauchement
+    assert "un congé" in msg.lower(), f"Article masculin attendu dans: {msg!r}"
+    assert "une congé" not in msg.lower(), f"Article féminin incorrect dans: {msg!r}"
+
+
+def test_chevauchement_permission_article_feminin(db_session, employe):
+    """Le message de chevauchement pour une permission doit utiliser 'une permission'."""
+    op = models.Operation(
+        matricule=7001,
+        type_demande="Permission",
+        statut="validé",
+        date_debut=date(2026, 11, 1),
+        date_fin=date(2026, 11, 10),
+    )
+    db_session.add(op)
+    db_session.commit()
+
+    chevauchement, msg = verifier_chevauchement_operations(
+        employe, date(2026, 11, 5), date(2026, 11, 8), db_session
+    )
+    assert chevauchement
+    assert "une permission" in msg.lower(), f"Article féminin attendu dans: {msg!r}"
+
+
+def test_chevauchement_message_accents(db_session, employe):
+    """Le message de chevauchement doit contenir les accents corrects: déjà, période, opération."""
+    op = models.Operation(
+        matricule=7001,
+        type_demande="Congé",
+        statut="en attente",
+        date_debut=date(2026, 12, 1),
+        date_fin=date(2026, 12, 20),
+    )
+    db_session.add(op)
+    db_session.commit()
+
+    chevauchement, msg = verifier_chevauchement_operations(
+        employe, date(2026, 12, 5), date(2026, 12, 10), db_session
+    )
+    assert chevauchement
+    assert "déjà" in msg, f"'déjà' attendu dans: {msg!r}"
+    assert "période" in msg, f"'période' attendu dans: {msg!r}"
+    assert "opération" in msg, f"'opération' attendu dans: {msg!r}"

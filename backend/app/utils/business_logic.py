@@ -305,12 +305,18 @@ def verifier_chevauchement_operations(employe: Employe, date_debut: date, date_f
 
         # Vérifier si les dates se chevauchent
         if not (date_fin < op_date_debut or date_debut > op_date_fin):
-            type_operation = op.type_demande or op.titre or "operation"
+            type_operation = op.type_demande or op.titre or "opération"
+            type_lower = type_operation.lower()
+            _articles = {
+                'congé': 'un', 'conge': 'un',
+                'frais de mission': 'des', 'frais': 'des',
+            }
+            article = _articles.get(type_lower, 'une')
             return True, (
-                f"Impossible: une {type_operation.lower()} est deja en cours sur cette periode "
-                f"(operation #{op.id_operation} du {op_date_debut.strftime('%d/%m/%Y')} "
+                f"Impossible : {article} {type_lower} est déjà en cours sur cette période "
+                f"(opération #{op.id_operation} du {op_date_debut.strftime('%d/%m/%Y')} "
                 f"au {op_date_fin.strftime('%d/%m/%Y')}). "
-                "Veuillez choisir d'autres dates ou annuler l'operation existante."
+                "Veuillez choisir d'autres dates ou annuler l'opération existante."
             )
     
     return False, "Aucun chevauchement détecté"
