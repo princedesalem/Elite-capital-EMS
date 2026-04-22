@@ -160,15 +160,25 @@ def determiner_sequence_validation(
             append_role(dernier_validateur)
 
     # Règle fonction : les employés dont la fonction contient "responsable" ou
-    # "directeur" (quelle que soit la casse, entité ECG ou non) doivent toujours
-    # avoir la DG dans leur chaîne de validation — couvre congés, permissions,
-    # missions et frais de mission, même sans frais sur l'opération.
+    # "directeur" (quelle que soit la casse) doivent toujours avoir la DG dans
+    # leur chaîne de validation — couvre congés, permissions, missions et frais
+    # de mission, même sans frais sur l'opération.
+    # Exception ECG : les demandes de sortie (type_demande == 'Sortie') pour les
+    # employés ECG ne passent pas par la DG, conformément au workflow ECG historique.
     _fonction = (employe.fonction or '').lower()
     if ('responsable' in _fonction or 'directeur' in _fonction) and 'DG' not in sequence:
-        if dernier_validateur in sequence:
-            sequence.insert(sequence.index(dernier_validateur), 'DG')
-        else:
-            sequence.append('DG')
+        _exclure_dg = False
+        if is_ecg and id_operation is not None:
+            _op = db.query(Operation).filter(
+                Operation.id_operation == id_operation
+            ).first()
+            if _op and str(_op.type_demande or '').strip().lower() == 'sortie':
+                _exclure_dg = True
+        if not _exclure_dg:
+            if dernier_validateur in sequence:
+                sequence.insert(sequence.index(dernier_validateur), 'DG')
+            else:
+                sequence.append('DG')
 
     role_demandeur_normalise = _normaliser_role(role_demandeur)
     return [role for role in sequence if _normaliser_role(role) != role_demandeur_normalise]

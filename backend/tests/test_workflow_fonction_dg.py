@@ -3,6 +3,9 @@ Tests de la règle : tout employé dont la fonction contient "responsable" ou
 "directeur" doit avoir la DG dans sa séquence de validation, quelle que soit
 son entité (ECG incluse) et même sans frais associés.
 
+Exception : les demandes de sortie (type_demande == 'Sortie') pour les
+employés ECG ne passent pas par la DG.
+
 Couvre : congés, permissions, missions, frais de mission (tous passent par
 determiner_sequence_validation).
 """
@@ -229,3 +232,83 @@ class TestFonctionRoleDGInchange:
         # La séquence doit contenir RH et PCA
         assert 'RH' in seq
         assert 'PCA' in seq
+
+
+# ---------------------------------------------------------------------------
+# Exception ECG : sorties
+# ---------------------------------------------------------------------------
+
+def _add_operation(db_session, matricule, type_demande):
+    op = models.Operation(
+        matricule=matricule,
+        type_demande=type_demande,
+        statut='en attente',
+        motif='test',
+    )
+    db_session.add(op)
+    db_session.flush()
+    return op
+
+
+class TestFonctionECGSortieExclue:
+    """ECG : demande de sortie → DG NON ajouté, même si fonction contient 'responsable'."""
+
+    def test_ecg_responsable_sortie_pas_de_dg(self, db_session, org_fonction_dg):
+        """
+        Employé ECG, fonction 'Responsable Trésorerie(ALM)', demande de type 'Sortie'.
+        Exception ECG → DG absent de la séquence.
+        """
+        o = org_fonction_dg
+        emp = _add_emp(
+            db_session, 1501, 'EcgRespSortie', o['roles']['EMPLOYE'], o['entite_ecg'],
+            dept_id=o['dept_ecg'].dept_id,
+            fonction='Responsable Trésorerie(ALM)',
+        )
+        op = _add_operation(db_session, emp.matricule, 'Sortie')
+        seq = determiner_sequence_validation(emp, db_session, op.id_operation)
+        assert 'DG' not in seq, f"DG ne doit pas figurer pour une sortie ECG : {seq}"
+
+    def test_ecg_directeur_sortie_pas_de_dg(self, db_session, org_fonction_dg):
+        """
+        Employé ECG, fonction 'Directeur Commercial', demande de type 'Sortie'.
+        Exception ECG → DG absent.
+        """
+        o = org_fonction_dg
+        emp = _add_emp(
+            db_session, 1502, 'EcgDirSortie', o['roles']['EMPLOYE'], o['entite_ecg'],
+            dept_id=o['dept_ecg'].dept_id,
+            fonction='Directeur Commercial',
+        )
+        op = _add_operation(db_session, emp.matricule, 'Sortie')
+        seq = determiner_sequence_validation(emp, db_session, op.id_operation)
+        assert 'DG' not in seq, f"DG ne doit pas figurer pour une sortie ECG : {seq}"
+
+    def test_ecg_responsable_conge_toujours_dg(self, db_session, org_fonction_dg):
+        """
+        Même employé ECG, fonction 'Responsable X', mais demande de type 'Congé'.
+        DG doit être présent (l'exception ne s'applique qu'aux sorties).
+        """
+        o = org_fonction_dg
+        emp = _add_emp(
+            db_session, 1503, 'EcgRespConge', o['roles']['EMPLOYE'], o['entite_ecg'],
+            dept_id=o['dept_ecg'].dept_id,
+            fonction='Responsable Trésorerie(ALM)',
+        )
+        op = _add_operation(db_session, emp.matricule, 'Congé')
+        seq = determiner_sequence_validation(emp, db_session, op.id_operation)
+        assert 'DG' in seq, f"DG doit figurer pour un congé ECG avec fonction responsable : {seq}"
+
+    def test_elcam_responsable_sortie_dg_toujours_present(self, db_session, org_fonction_dg):
+        """
+        Employé ELCAM (non ECG), fonction 'Responsable X', demande de type 'Sortie'.
+        L'exception ne s'applique qu'à ECG → DG présent.
+        """
+        o = org_fonction_dg
+        emp = _add_emp(
+            db_session, 1504, 'ElcamRespSortie', o['roles']['EMPLOYE'], o['entite_elcam'],
+            dept_id=o['dept_elcam'].dept_id,
+            fonction='Responsable Middle & Back Office',
+        )
+        op = _add_operation(db_session, emp.matricule, 'Sortie')
+        seq = determiner_sequence_validation(emp, db_session, op.id_operation)
+        assert 'DG' in seq, f"DG doit figurer pour une sortie ELCAM avec fonction responsable : {seq}"
