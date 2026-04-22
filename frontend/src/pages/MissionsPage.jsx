@@ -557,6 +557,21 @@ export default function MissionsPage() {
       if (missionEditMode && missionEditId) {
         const premierSegment = missionSegments[0]
         await api.put(`/api/missions/${missionEditId}/modifier`, null, { params: { pays: premierSegment.pays, country_code: premierSegment.country_code || null, ville: premierSegment.ville, date_debut: premierSegment.date_debut, date_fin: premierSegment.date_fin, heure_depart: premierSegment.heure_depart, heure_arrivee: premierSegment.heure_arrivee, heure_retour: premierSegment.heure_depart, email: missionForm.email_contact, motif: missionForm.motif || null } })
+        // Remplacer l'ensemble des segments si la mission est multi-destinations
+        // (sinon le legacy /modifier ne couvre que le premier segment).
+        if (missionSegments.length > 1) {
+          await api.put(`/api/missions/${missionEditId}/segments`, missionSegments.map(seg => ({
+            pays: seg.pays,
+            country_code: seg.country_code || null,
+            ville: seg.ville,
+            date_debut: seg.date_debut,
+            date_fin: seg.date_fin,
+            heure_depart: seg.heure_depart || null,
+            heure_arrivee: seg.heure_arrivee || null,
+            heure_retour: seg.heure_retour || null,
+            moyen_transport: seg.moyen_transport || 'aerien',
+          })))
+        }
         setFormSuccess('Mission modifiée avec succès!')
       } else {
         await api.post('/api/missions/creer-multi-segments', { matricule, matricules_missionnaires: matriculesMissionnaires, email_contact: missionForm.email_contact || null, motif: missionForm.motif || null, mission_comment: missionForm.mission_comment || null, segments: missionSegments.map(seg => ({ pays: seg.pays, country_code: seg.country_code || null, ville: seg.ville, date_debut: seg.date_debut, date_fin: seg.date_fin, heure_depart: seg.heure_depart, heure_arrivee: seg.heure_arrivee, heure_retour: seg.heure_retour, moyen_transport: seg.moyen_transport || 'aerien' })) })

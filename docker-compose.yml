@@ -78,7 +78,7 @@ services:
     command: ["sh", "-c", "npm install --silent --no-audit --no-fund && npm run test"]
 
   frontend-e2e-test:
-    image: mcr.microsoft/playwright:v1.53.0-jammy
+    image: mcr.microsoft.com/playwright:v1.53.0-jammy
     profiles: ['test']
     working_dir: /app
     volumes:

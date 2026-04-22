@@ -25,6 +25,20 @@ class SegmentMission(BaseModel):
     heure_retour: Optional[time] = None
     moyen_transport: Optional[str] = 'aerien'  # Transport spécifique pour ce segment
 
+
+class SegmentMissionUpdate(BaseModel):
+    """Champs modifiables d'un segment (PATCH). Tous optionnels."""
+    pays: Optional[str] = None
+    country_code: Optional[str] = None
+    ville: Optional[str] = None
+    date_debut: Optional[date] = None
+    date_fin: Optional[date] = None
+    heure_depart: Optional[time] = None
+    heure_arrivee: Optional[time] = None
+    heure_retour: Optional[time] = None
+    moyen_transport: Optional[str] = None
+    frais_hotel_unitaire: Optional[float] = None
+
 class MissionMultiSegments(BaseModel):
     matricule: int  # Matricule de l'initiateur (créateur de la mission)
     matricules_missionnaires: List[int]  # Liste de tous les missionnaires (incluant l'initiateur)
@@ -701,6 +715,221 @@ def modifier_segments_mission(
     }
 
 
+# ── Édition granulaire d'un segment (ajout / modification / suppression) ────
+
+def _check_mission_editable(id_mission: int, request: Request, db: Session):
+    """Guard partagé : existence mission + permission + statut + pré-validation.
+
+    Retourne le tuple (mission, operation, actor_matricule).
+    """
+    mission = db.query(models.Mission).filter(models.Mission.id_mission == id_mission).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission introuvable")
+
+    operation = db.query(models.Operation).filter(models.Operation.id_operation == id_mission).first()
+    if not operation:
+        raise HTTPException(status_code=404, detail="Opération introuvable")
+
+    actor_matricule, actor_role = access_control.get_actor_from_request(request)
+    if operation.matricule != actor_matricule and not access_control.can_access_globally(str(actor_role or '').upper()):
+        raise HTTPException(status_code=403, detail="Vous n'êtes pas autorisé à modifier cette mission")
+
+    if operation.statut and str(operation.statut).lower() != 'en attente':
+        raise HTTPException(status_code=400, detail="Seules les demandes en attente peuvent être modifiées")
+
+    if workflow.operation_a_deja_ete_validee(id_mission, db):
+        raise HTTPException(status_code=400, detail="Impossible de modifier les segments après la première validation")
+
+    return mission, operation, actor_matricule
+
+
+def _serialize_segment(seg: 'models.MissionSegment') -> dict:
+    return {
+        "id_segment": seg.id_segment,
+        "id_mission": seg.id_mission,
+        "pays": seg.pays,
+        "ville": seg.ville,
+        "date_debut": str(seg.date_debut) if seg.date_debut else None,
+        "date_fin": str(seg.date_fin) if seg.date_fin else None,
+        "heure_depart": str(seg.heure_depart) if seg.heure_depart else None,
+        "heure_arrivee": str(seg.heure_arrivee) if seg.heure_arrivee else None,
+        "heure_retour": str(seg.heure_retour) if seg.heure_retour else None,
+        "frais_hotel_unitaire": float(seg.frais_hotel_unitaire) if seg.frais_hotel_unitaire else 0,
+        "frais_hotel_total": float(seg.frais_hotel_total) if seg.frais_hotel_total else 0,
+        "nombre_nuits": seg.nombre_nuits,
+        "ordre": seg.ordre,
+        "moyen_transport": seg.moyen_transport,
+    }
+
+
+def _refresh_operation_dates(operation: 'models.Operation', id_mission: int, db: Session):
+    """Recalcule date_debut/date_fin de l'opération depuis les segments restants."""
+    segs = db.query(models.MissionSegment).filter(
+        models.MissionSegment.id_mission == id_mission
+    ).all()
+    debuts = [s.date_debut for s in segs if s.date_debut]
+    fins = [s.date_fin for s in segs if s.date_fin]
+    if debuts:
+        operation.date_debut = min(debuts)
+    if fins:
+        operation.date_fin = max(fins)
+    operation.est_modifie = True
+    operation.date_modification = datetime.utcnow()
+
+
+@router.post('/{id_mission}/segments')
+def ajouter_segment(
+    id_mission: int,
+    segment: SegmentMission,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Ajouter un seul segment à une mission existante (avant validation)."""
+    _, operation, actor_matricule = _check_mission_editable(id_mission, request, db)
+
+    from ..utils.world_geo_service import validate_country_city
+    geo_ok, geo_message, geo_data = validate_country_city(
+        country_name=segment.pays, city_name=segment.ville, country_code=segment.country_code,
+    )
+    if not geo_ok:
+        raise HTTPException(status_code=400, detail=geo_message)
+
+    max_ordre = db.query(models.MissionSegment.ordre).filter(
+        models.MissionSegment.id_mission == id_mission
+    ).order_by(models.MissionSegment.ordre.desc()).first()
+    next_ordre = (max_ordre[0] or 0) + 1 if max_ordre else 1
+
+    nombre_nuits = (segment.date_fin - segment.date_debut).days if segment.date_fin and segment.date_debut else 0
+    new_seg = models.MissionSegment(
+        id_mission=id_mission,
+        pays=geo_data['country_name'],
+        ville=geo_data['city_name'],
+        date_debut=segment.date_debut,
+        date_fin=segment.date_fin,
+        heure_depart=segment.heure_depart,
+        heure_arrivee=segment.heure_arrivee,
+        heure_retour=segment.heure_retour,
+        moyen_transport=segment.moyen_transport or 'aerien',
+        nombre_nuits=nombre_nuits,
+        ordre=next_ordre,
+    )
+    db.add(new_seg)
+    db.flush()
+    _refresh_operation_dates(operation, id_mission, db)
+    db.commit()
+    db.refresh(new_seg)
+
+    log_action(db, actor_matricule, 'ADD_MISSION_SEGMENT', 'operation', id_mission,
+               {'id_segment': new_seg.id_segment, 'ordre': new_seg.ordre},
+               ip_address=request.client.host if request.client else None)
+
+    return _serialize_segment(new_seg)
+
+
+@router.patch('/{id_mission}/segments/{id_segment}')
+def modifier_segment(
+    id_mission: int,
+    id_segment: int,
+    updates: SegmentMissionUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Modifier partiellement un segment précis (avant validation)."""
+    _, operation, actor_matricule = _check_mission_editable(id_mission, request, db)
+
+    seg = db.query(models.MissionSegment).filter(
+        models.MissionSegment.id_segment == id_segment,
+        models.MissionSegment.id_mission == id_mission,
+    ).first()
+    if not seg:
+        raise HTTPException(status_code=404, detail="Segment introuvable pour cette mission")
+
+    data = updates.model_dump(exclude_unset=True)
+
+    # Si pays/ville présents → revalider géo
+    if 'pays' in data or 'ville' in data or 'country_code' in data:
+        from ..utils.world_geo_service import validate_country_city
+        geo_ok, geo_message, geo_data = validate_country_city(
+            country_name=data.get('pays', seg.pays),
+            city_name=data.get('ville', seg.ville),
+            country_code=data.get('country_code'),
+        )
+        if not geo_ok:
+            raise HTTPException(status_code=400, detail=geo_message)
+        seg.pays = geo_data['country_name']
+        seg.ville = geo_data['city_name']
+
+    for field in ('date_debut', 'date_fin', 'heure_depart', 'heure_arrivee',
+                  'heure_retour', 'moyen_transport', 'frais_hotel_unitaire'):
+        if field in data:
+            setattr(seg, field, data[field])
+
+    # Recalcul nombre_nuits + frais_hotel_total si dates ou tarif touchés
+    if 'date_debut' in data or 'date_fin' in data:
+        if seg.date_debut and seg.date_fin:
+            seg.nombre_nuits = (seg.date_fin - seg.date_debut).days
+    if seg.frais_hotel_unitaire and seg.nombre_nuits:
+        seg.frais_hotel_total = float(seg.frais_hotel_unitaire) * int(seg.nombre_nuits)
+
+    _refresh_operation_dates(operation, id_mission, db)
+    db.commit()
+    db.refresh(seg)
+
+    log_action(db, actor_matricule, 'UPDATE_MISSION_SEGMENT', 'operation', id_mission,
+               {'id_segment': id_segment, 'fields': list(data.keys())},
+               ip_address=request.client.host if request.client else None)
+
+    return _serialize_segment(seg)
+
+
+@router.delete('/{id_mission}/segments/{id_segment}')
+def supprimer_segment(
+    id_mission: int,
+    id_segment: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Supprimer un segment précis. Refusé si c'est le dernier restant."""
+    _, operation, actor_matricule = _check_mission_editable(id_mission, request, db)
+
+    seg = db.query(models.MissionSegment).filter(
+        models.MissionSegment.id_segment == id_segment,
+        models.MissionSegment.id_mission == id_mission,
+    ).first()
+    if not seg:
+        raise HTTPException(status_code=404, detail="Segment introuvable pour cette mission")
+
+    remaining = db.query(models.MissionSegment).filter(
+        models.MissionSegment.id_mission == id_mission
+    ).count()
+    if remaining <= 1:
+        raise HTTPException(status_code=400, detail="Impossible de supprimer le dernier segment d'une mission")
+
+    # Détacher les frais liés (ON DELETE SET NULL côté DB, mais explicite pour SQLite tests)
+    db.query(models.FraisMissionnaire).filter(
+        models.FraisMissionnaire.id_segment == id_segment
+    ).update({'id_segment': None})
+
+    db.delete(seg)
+    db.flush()
+
+    # Recompacter les ordres pour éviter les trous
+    remaining_segs = db.query(models.MissionSegment).filter(
+        models.MissionSegment.id_mission == id_mission
+    ).order_by(models.MissionSegment.ordre).all()
+    for i, s in enumerate(remaining_segs, start=1):
+        s.ordre = i
+
+    _refresh_operation_dates(operation, id_mission, db)
+    db.commit()
+
+    log_action(db, actor_matricule, 'DELETE_MISSION_SEGMENT', 'operation', id_mission,
+               {'id_segment': id_segment},
+               ip_address=request.client.host if request.client else None)
+
+    return {"message": "Segment supprimé", "id_segment": id_segment, "segments_restants": len(remaining_segs)}
+
+
 @router.post('/{id_mission}/missionnaires/{matricule}')
 def ajouter_missionnaire(
     id_mission: int,
@@ -850,6 +1079,8 @@ class FraisMissionnaireSchema(BaseModel):
     frais_deplacement: float = 0
     frais_nutrition: float = 0
     justificatif: Optional[str] = None
+    # Segment ciblé (optionnel) — doit appartenir à la mission
+    id_segment: Optional[int] = None
 
 
 @router.post('/{id_mission}/frais-missionnaire')
@@ -881,10 +1112,20 @@ def creer_frais_missionnaire(
     if existing:
         raise HTTPException(status_code=400, detail="Des frais existent déjà pour ce missionnaire. Utilisez PUT pour modifier.")
 
+    # Valider que le segment (si fourni) appartient bien à la mission
+    if data.id_segment is not None:
+        seg = db.query(models.MissionSegment).filter(
+            models.MissionSegment.id_segment == data.id_segment,
+            models.MissionSegment.id_mission == id_mission,
+        ).first()
+        if not seg:
+            raise HTTPException(status_code=400, detail="Segment invalide pour cette mission")
+
     total = data.frais_transport + data.frais_hotel + data.frais_deplacement + data.frais_nutrition
     frais = models.FraisMissionnaire(
         id_mission=id_mission,
         matricule=matricule,
+        id_segment=data.id_segment,
         frais_transport=data.frais_transport,
         frais_hotel=data.frais_hotel,
         frais_deplacement=data.frais_deplacement,
@@ -914,9 +1155,19 @@ def obtenir_frais_missionnaires(
     result = []
     for f in frais_list:
         emp = db.query(models.Employe).filter(models.Employe.matricule == f.matricule).first()
+        seg_info = None
+        if f.id_segment:
+            seg = db.query(models.MissionSegment).filter(
+                models.MissionSegment.id_segment == f.id_segment
+            ).first()
+            if seg:
+                seg_info = {"id_segment": seg.id_segment, "ordre": seg.ordre,
+                            "pays": seg.pays, "ville": seg.ville}
         result.append({
             "id": f.id,
             "matricule": f.matricule,
+            "id_segment": f.id_segment,
+            "segment": seg_info,
             "nom_complet": f"{emp.prenom} {emp.nom}" if emp else str(f.matricule),
             "frais_transport": float(f.frais_transport or 0),
             "frais_hotel": float(f.frais_hotel or 0),
@@ -949,6 +1200,7 @@ def obtenir_frais_missionnaire_par_matricule(
     return {
         "id": frais.id,
         "matricule": frais.matricule,
+        "id_segment": frais.id_segment,
         "nom_complet": f"{emp.prenom} {emp.nom}" if emp else str(mat),
         "frais_transport": float(frais.frais_transport or 0),
         "frais_hotel": float(frais.frais_hotel or 0),
@@ -977,6 +1229,16 @@ def modifier_frais_missionnaire(
     if not frais:
         raise HTTPException(status_code=404, detail="Aucun frais trouvé pour ce missionnaire")
 
+    # Valider le segment (si fourni ou changé)
+    if data.id_segment is not None:
+        seg = db.query(models.MissionSegment).filter(
+            models.MissionSegment.id_segment == data.id_segment,
+            models.MissionSegment.id_mission == id_mission,
+        ).first()
+        if not seg:
+            raise HTTPException(status_code=400, detail="Segment invalide pour cette mission")
+
+    frais.id_segment = data.id_segment
     frais.frais_transport = data.frais_transport
     frais.frais_hotel = data.frais_hotel
     frais.frais_deplacement = data.frais_deplacement

@@ -427,6 +427,10 @@ class FraisMissionnaire(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     id_mission = Column(Integer, ForeignKey('Mission.id_mission', name='fk_frais_miss_mission', ondelete='CASCADE'), nullable=False)
     matricule = Column(Integer, ForeignKey('EMPLOYE.matricule', name='fk_frais_miss_employe', ondelete='CASCADE'), nullable=False)
+    # Lien optionnel vers un segment précis de la mission (multi-destinations).
+    # NULL = frais globaux non attribués. ON DELETE SET NULL : la suppression
+    # d'un segment ne purge pas ses frais, ils retombent en « non assignés ».
+    id_segment = Column(Integer, ForeignKey('MissionSegment.id_segment', name='fk_frais_miss_segment', ondelete='SET NULL'), nullable=True)
     frais_transport = Column(DECIMAL(12,2), default=0)
     frais_hotel = Column(DECIMAL(12,2), default=0)
     frais_deplacement = Column(DECIMAL(12,2), default=0)

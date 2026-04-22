@@ -1,0 +1,58 @@
+name: Backup DB (scheduled)
+
+on:
+  schedule:
+    # Tous les jours à 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  mysqldump:
+    name: mysqldump → artifact
+    runs-on: ubuntu-latest
+    # Les secrets suivants doivent être créés dans Settings → Secrets and variables → Actions :
+    #   PROD_DB_HOST, PROD_DB_PORT (optionnel, défaut 3306),
+    #   PROD_DB_USER, PROD_DB_PASS, PROD_DB_NAME
+    # Tant qu'aucun secret n'est configuré, le job reste no-op (guarded).
+    if: ${{ vars.BACKUP_ENABLED == 'true' }}
+    steps:
+      - name: Install mysql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mysql-client
+      - name: Run mysqldump
+        env:
+          HOST: ${{ secrets.PROD_DB_HOST }}
+          PORT: ${{ secrets.PROD_DB_PORT || '3306' }}
+          USER: ${{ secrets.PROD_DB_USER }}
+          PASS: ${{ secrets.PROD_DB_PASS }}
+          NAME: ${{ secrets.PROD_DB_NAME }}
+        run: |
+          set -e
+          STAMP=$(date -u +%Y%m%d-%H%M%S)
+          OUT="ems-db-${STAMP}.sql.gz"
+          mysqldump \
+            --single-transaction --quick --lock-tables=false \
+            --default-character-set=utf8mb4 \
+            -h "$HOST" -P "$PORT" -u "$USER" -p"$PASS" \
+            "$NAME" | gzip -9 > "$OUT"
+          ls -lh "$OUT"
+          echo "BACKUP_FILE=$OUT" >> $GITHUB_ENV
+      - name: Upload artifact (30j retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ems-db-backup-${{ github.run_id }}
+          path: ems-db-*.sql.gz
+          retention-days: 30
+      - name: Open issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Backup DB échoué (run #${context.runId})`,
+              body: `Le workflow de sauvegarde planifiée a échoué. Voir : ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['backup', 'urgent'],
+            });
