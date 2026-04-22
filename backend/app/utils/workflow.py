@@ -159,6 +159,17 @@ def determiner_sequence_validation(
             append_role('DG')
             append_role(dernier_validateur)
 
+    # Règle fonction : les employés dont la fonction contient "responsable" ou
+    # "directeur" (quelle que soit la casse, entité ECG ou non) doivent toujours
+    # avoir la DG dans leur chaîne de validation — couvre congés, permissions,
+    # missions et frais de mission, même sans frais sur l'opération.
+    _fonction = (employe.fonction or '').lower()
+    if ('responsable' in _fonction or 'directeur' in _fonction) and 'DG' not in sequence:
+        if dernier_validateur in sequence:
+            sequence.insert(sequence.index(dernier_validateur), 'DG')
+        else:
+            sequence.append('DG')
+
     role_demandeur_normalise = _normaliser_role(role_demandeur)
     return [role for role in sequence if _normaliser_role(role) != role_demandeur_normalise]
 
