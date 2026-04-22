@@ -798,7 +798,7 @@ export default function MissionsPage() {
     setDetailMissionId(id)
     setDetailData(null)
     try {
-      const res = await api.get(`/api/missions/${id}`)
+      const res = await api.get(`/api/missions/${id}`, { params: { matricule: user?.matricule } })
       setDetailData(res.data)
     } catch {
       setDetailData({ error: true })
@@ -1302,7 +1302,7 @@ export default function MissionsPage() {
                         ? <>
                             <span style={{ color: '#10b981', fontWeight: 700 }}>Téléversé ✓</span>
                             {detailData.rapport_chemin && (
-                              <a href={`${(api.defaults.baseURL||'').replace(/\/$/,'')}/${detailData.rapport_chemin}`} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: '#3b82f6', fontSize: '0.78rem', textDecoration: 'underline' }}>Voir le rapport</a>
+                              <a href={encodeURI(`${(api.defaults.baseURL||'').replace(/\/$/,'')}/${(detailData.rapport_chemin||'').replace(/^\//, '').replace(/^api\//, '')}`)} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: '#3b82f6', fontSize: '0.78rem', textDecoration: 'underline' }}>Voir le rapport</a>
                             )}
                           </>
                         : <span style={{ color: '#9ca3af' }}>Non téléversé</span>}
@@ -1311,6 +1311,9 @@ export default function MissionsPage() {
                       {detailData.frais_payes
                         ? <span style={{ color: '#10b981', fontWeight: 700 }}>Payé</span>
                         : <span style={{ color: '#ef4444', fontWeight: 700 }}>Impayé</span>}
+                      {detailData.frais_applicable === false && (
+                        <span style={{ marginLeft: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #6ee7b7', borderRadius: 999, padding: '1px 8px', fontSize: '0.72rem', fontWeight: 700 }}>Mission locale — frais à 0</span>
+                      )}
                     </div>
                     {detailData.initiateur_nom && <div><span style={{ color: '#64748b', fontWeight: 600 }}>Initié par: </span>{detailData.initiateur_nom}</div>}
                   </div>

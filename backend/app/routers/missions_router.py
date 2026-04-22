@@ -12,6 +12,7 @@ from ..utils import missions as mission_utils, workflow, notifications, activati
 from ..utils.audit import log_action
 import os
 import json
+import re
 
 # Schémas Pydantic pour les missions multi-segments
 class SegmentMission(BaseModel):
@@ -1073,6 +1074,36 @@ def retirer_missionnaire(
 
 # ── Frais individuels par missionnaire ──────────────────────────────────────
 
+def _ville_employe(matricule: int, db) -> Optional[str]:
+    """Retourne la ville de l'employé (en minuscules) via sa localisation, ou None."""
+    emp = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
+    if not emp or not emp.id_localisation:
+        return None
+    loc = db.query(models.Localisation).filter(
+        models.Localisation.id_localisation == emp.id_localisation
+    ).first()
+    if not loc or not loc.ville:
+        return None
+    return loc.ville.strip().lower()
+
+
+def _tous_segments_locaux(id_mission: int, ville_employe: Optional[str], db) -> bool:
+    """Retourne True si la ville de l'employé est connue, qu'il existe des segments
+    et que TOUS les segments ont la même ville que l'employé (comparaison insensible
+    à la casse). Si un segment a une ville NULL/vide, il est considéré non-local."""
+    if not ville_employe:
+        return False
+    segments = db.query(models.MissionSegment).filter(
+        models.MissionSegment.id_mission == id_mission
+    ).all()
+    if not segments:
+        return False
+    return all(
+        (s.ville or '').strip().lower() == ville_employe
+        for s in segments
+    )
+
+
 class FraisMissionnaireSchema(BaseModel):
     frais_transport: float = 0
     frais_hotel: float = 0
@@ -1120,6 +1151,14 @@ def creer_frais_missionnaire(
         ).first()
         if not seg:
             raise HTTPException(status_code=400, detail="Segment invalide pour cette mission")
+
+    # Si tous les segments sont dans la ville de l'employé → frais forcés à 0
+    _ve = _ville_employe(matricule, db)
+    if _tous_segments_locaux(id_mission, _ve, db):
+        data.frais_transport = 0
+        data.frais_hotel = 0
+        data.frais_deplacement = 0
+        data.frais_nutrition = 0
 
     total = data.frais_transport + data.frais_hotel + data.frais_deplacement + data.frais_nutrition
     frais = models.FraisMissionnaire(
@@ -1237,6 +1276,14 @@ def modifier_frais_missionnaire(
         ).first()
         if not seg:
             raise HTTPException(status_code=400, detail="Segment invalide pour cette mission")
+
+    # Si tous les segments sont dans la ville du missionnaire → frais forcés à 0
+    _ve = _ville_employe(mat, db)
+    if _tous_segments_locaux(id_mission, _ve, db):
+        data.frais_transport = 0
+        data.frais_hotel = 0
+        data.frais_deplacement = 0
+        data.frais_nutrition = 0
 
     frais.id_segment = data.id_segment
     frais.frais_transport = data.frais_transport
@@ -1387,20 +1434,27 @@ async def televerser_rapport(
     if not is_missionnaire:
         raise HTTPException(status_code=403, detail="Seuls les missionnaires assignés peuvent téléverser le rapport")
     
-    # Créer le dossier uploads
-    upload_dir = "uploads/rapports_missions"
+    # Créer le dossier uploads (chemin absolu pour correspondre au StaticFiles)
+    upload_dir = "/app/uploads/rapports_missions"
     os.makedirs(upload_dir, exist_ok=True)
-    
+
+    # Assainir le nom de fichier : remplacer les caractères non-alphanumériques
+    # (espaces, accents, etc.) par des underscores pour éviter les bugs d'URL
+    safe_name = re.sub(r'[^\w.\-]', '_', fichier.filename or 'rapport')
+    if not safe_name:
+        safe_name = 'rapport'
+
     # Sauvegarder le fichier
-    file_path = os.path.join(upload_dir, fichier.filename)
-    
+    file_path = os.path.join(upload_dir, safe_name)
+    rapport_db_path = f'uploads/rapports_missions/{safe_name}'
+
     with open(file_path, "wb") as f:
         content = await fichier.read()
         f.write(content)
     
-    # Enregistrer dans la BDD
+    # Enregistrer dans la BDD (stocker le chemin relatif, sans leading slash)
     success, message = mission_utils.televerser_rapport_mission(
-        id_operation, file_path, matricule, db
+        id_operation, rapport_db_path, matricule, db
     )
     
     if not success:
@@ -1436,7 +1490,7 @@ async def televerser_rapport(
 
     return {
         "message": "Rapport téléversé avec succès",
-        "chemin_fichier": file_path
+        "chemin_fichier": rapport_db_path
     }
 
 
@@ -1541,6 +1595,14 @@ def creer_demande_frais(
                 detail="Seuls RH et ADMIN peuvent initier des frais pour autrui"
             )
     
+    # Si tous les segments sont dans la ville de l'employé → frais forcés à 0
+    _ve = _ville_employe(matricule, db)
+    if _tous_segments_locaux(id_operation, _ve, db):
+        frais_transport = 0.0
+        frais_hotel = 0.0
+        frais_deplacement = 0.0
+        frais_nutrition = 0.0
+
     # Créer la demande de frais
     success, message, frais = mission_utils.creer_demande_frais(
         id_operation=id_operation,
@@ -2235,7 +2297,7 @@ def obtenir_rapport_mission(id_operation: int, db: Session = Depends(get_db)):
         "fichier": {
             "chemin": chemin,
             "nom_fichier": nom_fichier,
-            "url": f"/api/{chemin.lstrip('/')}",
+            "url": f"/{chemin.lstrip('/')}",
         },
         "date": mission.date_telechargement_rapport.isoformat() if mission.date_telechargement_rapport else None,
     }
@@ -2394,7 +2456,11 @@ def obtenir_missions_en_tant_que_missionnaire(matricule: int, db: Session = Depe
 
 
 @router.get('/{id_mission}')
-def obtenir_detail_mission(id_mission: int, db: Session = Depends(get_db)):
+def obtenir_detail_mission(
+    id_mission: int,
+    matricule: Optional[int] = Query(None),
+    db: Session = Depends(get_db)
+):
     """
     Retourne le détail complet d'une mission: infos de base, segments, missionnaires.
     Cet endpoint doit rester en DERNIER dans le router car son paramètre dynamique
@@ -2442,6 +2508,10 @@ def obtenir_detail_mission(id_mission: int, db: Session = Depends(get_db)):
         "frais_payes": mission.frais_payes or False,
         "frais_valides_missionnaire": mission.frais_valides_missionnaire or False,
         "frais_valides_rh": mission.frais_valides_rh or False,
+        "frais_applicable": (
+            not _tous_segments_locaux(id_mission, _ville_employe(matricule, db), db)
+            if matricule is not None else None
+        ),
         "segments": [
             {
                 "id_segment": s.id_segment,

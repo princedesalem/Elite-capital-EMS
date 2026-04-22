@@ -300,6 +300,28 @@ export default function FraisPage() {
   const [showUploadSection, setShowUploadSection] = useState(false)
   const [preuveUpload, setPreuveUpload] = useState({ id_frais: '', type_preuve: 'facture', file: null })
   const [preuvesFraisEnCours, setPreuvesFraisEnCours] = useState([])
+  // null = inconnu, true = frais applicables (segments externes), false = mission locale (tout à 0)
+  const [fraisMissionLocale, setFraisMissionLocale] = useState(null)
+
+  // Quand l'employé sélectionne une mission, vérifier si elle est locale
+  useEffect(() => {
+    if (!fraisForm.id_operation || !user?.matricule) { setFraisMissionLocale(null); return }
+    api.get(`/api/missions/${fraisForm.id_operation}`, { params: { matricule: user.matricule } })
+      .then(res => {
+        const applicable = res.data?.frais_applicable
+        setFraisMissionLocale(applicable === false ? false : null)
+        if (applicable === false) {
+          setFraisForm(prev => ({
+            ...prev,
+            frais_transport_unitaire: 0,
+            frais_hotel_unitaire: 0,
+            frais_deplacement_unitaire: 0,
+            frais_mission_unitaire: 0,
+          }))
+        }
+      })
+      .catch(() => setFraisMissionLocale(null))
+  }, [fraisForm.id_operation, user?.matricule])
 
   const fraisMissionCalculs = useMemo(() => {
     if (!fraisForm.id_operation || missions.length === 0) return { durationDays: 0, nuits: 0, frais_transport_total: 0, frais_hotel_total: 0, frais_deplacement_total: 0, frais_mission_total: 0, total_general: 0 }
@@ -328,6 +350,7 @@ export default function FraisPage() {
     setFraisForm(initialFraisForm)
     setFraisEditMode(false)
     setFraisEditId(null)
+    setFraisMissionLocale(null)
   }
 
   async function loadData() {
@@ -837,27 +860,36 @@ export default function FraisPage() {
               </select>
               {missions.filter(m => missionStatuts[m.id_operation]?.validation_complete).length === 0 && <p style={{ fontSize: '0.85em', color: '#666', marginTop: '8px' }}>Aucune mission validée disponible</p>}
             </div>
+            {fraisMissionLocale === false && (
+              <div style={{ background: '#ecfdf5', border: '1px solid #6ee7b7', borderRadius: 8, padding: '12px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: '1.1rem' }}>🏠</span>
+                <div>
+                  <strong style={{ color: '#065f46', fontSize: '0.88rem' }}>Mission locale — frais automatiquement à 0</strong>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#047857' }}>Tous les segments de cette mission sont dans votre ville. Vous pouvez soumettre la demande avec des frais à 0.</p>
+                </div>
+              </div>
+            )}
             <div className="form-row">
               <div className="form-group">
                 <label>Frais transport (prix unitaire en FCFA)</label>
-                <input type="number" step="0.01" value={fraisForm.frais_transport_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_transport_unitaire: e.target.value })} placeholder="Entrez le montant" />
+                <input type="number" step="0.01" value={fraisForm.frais_transport_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_transport_unitaire: e.target.value })} placeholder="Entrez le montant" disabled={fraisMissionLocale === false} />
                 <p style={{fontSize: '0.85rem', color: '#666', margin: '5px 0 0 0'}}><strong>Total:</strong> {fraisMissionCalculs.frais_transport_total.toFixed(2)} FCFA (payé une fois)</p>
               </div>
               <div className="form-group">
                 <label>Frais hôtel (prix unitaire/nuit en FCFA)</label>
-                <input type="number" step="0.01" value={fraisForm.frais_hotel_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_hotel_unitaire: e.target.value })} placeholder="Entrez le montant" />
+                <input type="number" step="0.01" value={fraisForm.frais_hotel_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_hotel_unitaire: e.target.value })} placeholder="Entrez le montant" disabled={fraisMissionLocale === false} />
                 <p style={{fontSize: '0.85rem', color: '#666', margin: '5px 0 0 0'}}><strong>Total:</strong> {fraisMissionCalculs.frais_hotel_total.toFixed(2)} FCFA pour {fraisMissionCalculs.nuits} nuit{fraisMissionCalculs.nuits > 1 ? 's' : ''}</p>
               </div>
             </div>
             <div className="form-row">
               <div className="form-group">
                 <label>Frais déplacement (prix unitaire/jour en FCFA)</label>
-                <input type="number" step="0.01" value={fraisForm.frais_deplacement_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_deplacement_unitaire: e.target.value })} placeholder="Entrez le montant" />
+                <input type="number" step="0.01" value={fraisForm.frais_deplacement_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_deplacement_unitaire: e.target.value })} placeholder="Entrez le montant" disabled={fraisMissionLocale === false} />
                 <p style={{fontSize: '0.85rem', color: '#666', margin: '5px 0 0 0'}}><strong>Total:</strong> {fraisMissionCalculs.frais_deplacement_total.toFixed(2)} FCFA pour {fraisMissionCalculs.durationDays} jour{fraisMissionCalculs.durationDays > 1 ? 's' : ''}</p>
               </div>
               <div className="form-group">
                 <label>Frais mission (prix unitaire/jour en FCFA)</label>
-                <input type="number" step="0.01" value={fraisForm.frais_mission_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_mission_unitaire: e.target.value })} placeholder="Entrez le montant" />
+                <input type="number" step="0.01" value={fraisForm.frais_mission_unitaire} onChange={(e) => setFraisForm({ ...fraisForm, frais_mission_unitaire: e.target.value })} placeholder="Entrez le montant" disabled={fraisMissionLocale === false} />
                 <p style={{fontSize: '0.85rem', color: '#666', margin: '5px 0 0 0'}}><strong>Total:</strong> {fraisMissionCalculs.frais_mission_total.toFixed(2)} FCFA pour {fraisMissionCalculs.durationDays} jour{fraisMissionCalculs.durationDays > 1 ? 's' : ''}</p>
               </div>
             </div>
