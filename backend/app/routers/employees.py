@@ -175,6 +175,89 @@ def _notify_admin_employee_creation(
         email_utils.send_email(to_admin, subject, body, False, cc_emails, reply_to)
 
 
+def _notify_admin_employee_update(
+    db: Session,
+    before_data: dict,
+    after: models.Employe,
+    actor_role: str,
+    actor_matricule: Optional[int],
+):
+    """Notifie tous les admins quand le RH modifie le dossier d'un employé.
+    before_data doit être un snapshot dict capturé AVANT crud.update_employe
+    (car SQLAlchemy met à jour l'objet en mémoire via l'identity map).
+    """
+    if str(actor_role or '').upper() != 'RH':
+        return
+
+    changes = []
+
+    for field, label in [
+        ('nom', 'Nom'),
+        ('prenom', 'Prénom'),
+        ('fonction', 'Fonction'),
+        ('email', 'Email'),
+        ('telephone', 'Téléphone'),
+        ('statut_employe', 'Statut'),
+        ('n1_fonction', 'Superviseur N+1'),
+        ('diplome', 'Diplôme'),
+        ('solde_conges', 'Solde congés'),
+    ]:
+        v_before = before_data.get(field)
+        v_after = getattr(after, field, None)
+        if str(v_before or '') != str(v_after or ''):
+            changes.append(f"• {label} : {v_before or '–'} → {v_after or '–'}")
+
+    if before_data.get('dept_id') != getattr(after, 'dept_id', None):
+        dept_b = db.query(models.Departement).filter(models.Departement.dept_id == before_data.get('dept_id')).first() if before_data.get('dept_id') else None
+        dept_a = db.query(models.Departement).filter(models.Departement.dept_id == after.dept_id).first() if after.dept_id else None
+        changes.append(f"• Département : {dept_b.nom if dept_b else '–'} → {dept_a.nom if dept_a else '–'}")
+
+    if before_data.get('id_role') != getattr(after, 'id_role', None):
+        role_b = db.query(models.Role).filter(models.Role.id == before_data.get('id_role')).first() if before_data.get('id_role') else None
+        role_a = db.query(models.Role).filter(models.Role.id == after.id_role).first() if after.id_role else None
+        changes.append(f"• Rôle : {role_b.name if role_b else '–'} → {role_a.name if role_a else '–'}")
+
+    if before_data.get('id_entite') != getattr(after, 'id_entite', None):
+        ent_b = db.query(models.Entite).filter(models.Entite.id_entite == before_data.get('id_entite')).first() if before_data.get('id_entite') else None
+        ent_a = db.query(models.Entite).filter(models.Entite.id_entite == after.id_entite).first() if after.id_entite else None
+        changes.append(f"• Entité : {ent_b.nom if ent_b else '–'} → {ent_a.nom if ent_a else '–'}")
+
+    if not changes:
+        return
+
+    admin_role_ids = [
+        role.id
+        for role in db.query(models.Role).all()
+        if str(role.name or '').strip().upper() in {'ADMIN', 'ADMINISTRATEUR'}
+    ]
+    if not admin_role_ids:
+        return
+    admin_users = db.query(models.Utilisateur).filter(
+        models.Utilisateur.role_id.in_(admin_role_ids)
+    ).all()
+    if not admin_users:
+        return
+
+    actor_emp = db.query(models.Employe).filter(
+        models.Employe.matricule == actor_matricule
+    ).first() if actor_matricule else None
+    actor_label = (
+        f"{actor_emp.prenom} {actor_emp.nom}" if actor_emp else f"RH {actor_matricule or ''}"
+    ).strip()
+    emp_label = f"{after.prenom} {after.nom} (matricule {after.matricule})"
+    changes_text = '\n'.join(changes)
+
+    for admin in admin_users:
+        notifications_utils.creer_notification(
+            matricule=admin.matricule,
+            type_notification=models.TypeNotificationEnum.AUTRE,
+            titre='Dossier employé modifié par le RH',
+            message=f"{actor_label} (RH) a modifié le dossier de {emp_label} :\n{changes_text}",
+            id_operation=None,
+            db=db,
+        )
+
+
 def _role_names_set(db: Session):
     return {
         str(r.name or '').strip().lower()
@@ -939,10 +1022,27 @@ def update_employee(matricule: str, payload: schemas.EmployeBase, request: Reque
         'id_entite': getattr(before, 'id_entite', None) if before else None,
         'id_localisation': getattr(before, 'id_localisation', None) if before else None,
     } if before else {}
+    # Snapshot complet pour la notification admin (capturé avant crud.update_employe
+    # car SQLAlchemy met à jour l'objet en mémoire via l'identity map).
+    before_notif_snapshot = {
+        'nom': getattr(before, 'nom', None),
+        'prenom': getattr(before, 'prenom', None),
+        'fonction': getattr(before, 'fonction', None),
+        'email': getattr(before, 'email', None),
+        'telephone': getattr(before, 'telephone', None),
+        'statut_employe': getattr(before, 'statut_employe', None),
+        'n1_fonction': getattr(before, 'n1_fonction', None),
+        'diplome': getattr(before, 'diplome', None),
+        'solde_conges': getattr(before, 'solde_conges', None),
+        'dept_id': getattr(before, 'dept_id', None),
+        'id_role': getattr(before, 'id_role', None),
+        'id_entite': getattr(before, 'id_entite', None),
+    } if before else {}
     e = crud.update_employe(db, matricule, data)
     if not e:
         raise HTTPException(status_code=404, detail='Non trouvé')
     actor_matricule = None
+    actor_role = ''
     auth = request.headers.get('authorization')
     if auth and auth.lower().startswith('bearer '):
         try:
@@ -950,6 +1050,7 @@ def update_employee(matricule: str, payload: schemas.EmployeBase, request: Reque
             token_payload = security.jwt.decode(auth.split(None, 1)[1], security.SECRET_KEY, algorithms=[security.ALGORITHM])
             actor_matricule = token_payload.get('matricule') or token_payload.get('sub')
             actor_matricule = int(actor_matricule) if actor_matricule is not None else None
+            actor_role = str(token_payload.get('role') or '').strip().upper()
         except Exception:
             actor_matricule = None
     log_action(db, actor_matricule, 'EMPLOYEE_UPDATED', 'employe', matricule, {'nom': data.get('nom'), 'prenom': data.get('prenom')}, ip_address=request.client.host if request.client else None)
@@ -968,6 +1069,7 @@ def update_employee(matricule: str, payload: schemas.EmployeBase, request: Reque
         except Exception:
             # Ne jamais bloquer la mise à jour employé en cas d'échec d'historisation
             db.rollback()
+    _notify_admin_employee_update(db, before_notif_snapshot, e, actor_role, actor_matricule)
     return _serialize_employee(e, db)
 
 
