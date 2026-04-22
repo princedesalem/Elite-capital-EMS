@@ -255,15 +255,17 @@ def notifier_validation_operation(
     type_notif = TypeNotificationEnum.VALIDATION if statut == 'validé' else TypeNotificationEnum.REFUS
 
     # Libellé spécifique selon le type de demande
+    # IMPORTANT: 'permission' doit être vérifié AVANT 'mission' car 'mission' est
+    # une sous-chaîne de 'permission' (per-MISSION-), ce qui causerait un mauvais libellé.
     raw_type = (operation.type_demande or '').lower()
     if 'conge' in raw_type or 'congé' in raw_type:
         libelle = 'congé'
     elif 'frais' in raw_type:
         libelle = 'frais de mission'
-    elif 'mission' in raw_type:
-        libelle = 'mission'
     elif 'permission' in raw_type:
         libelle = 'permission'
+    elif 'mission' in raw_type:
+        libelle = 'mission'
     elif 'sortie' in raw_type:
         libelle = 'sortie'
     else:
@@ -316,7 +318,8 @@ def notifier_validation_operation(
     from .activation_cloture import creer_notification_rh
     _emp = db.query(Employe).filter(Employe.matricule == operation.matricule).first()
     _nom_employe = f"{_emp.prenom} {_emp.nom}" if _emp else f"Employé #{operation.matricule}"
-    message_rh = f"Le {libelle} de {_nom_employe} a été {statut_accorde} par le {validateur_role}."
+    _article_rh = "La" if libelle in ('mission', 'permission', 'sortie', 'demande') else "Le"
+    message_rh = f"{_article_rh} {libelle} de {_nom_employe} a été {statut_accorde} par le {validateur_role}."
     if commentaire:
         message_rh += f"\nCommentaire : {commentaire}"
     creer_notification_rh(
