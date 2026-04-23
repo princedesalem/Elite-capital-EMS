@@ -1,6 +1,7 @@
 """
 Router pour les fonctions d'administration (audit logs, etc.)
 """
+import os
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -10,6 +11,68 @@ from .. import models
 from ..utils import access_control
 
 router = APIRouter(prefix='/api/admin', tags=['admin'])
+
+
+@router.get('/ci-status')
+def get_ci_status(request: Request):
+    """
+    Proxy vers l'API GitHub Actions : renvoie le statut du dernier run du workflow ci.yml.
+    Nécessite les variables d'environnement : GITHUB_OWNER, GITHUB_REPO, GITHUB_PAT.
+    ADMIN uniquement.
+    """
+    actor_matricule, actor_role = access_control.get_actor_from_request(request)
+    if str(actor_role or '').upper() != 'ADMIN':
+        raise HTTPException(status_code=403, detail='Réservé aux administrateurs')
+
+    owner = os.getenv('GITHUB_OWNER', '').strip()
+    repo = os.getenv('GITHUB_REPO', '').strip()
+    pat = os.getenv('GITHUB_PAT', '').strip()
+
+    if not (owner and repo and pat):
+        return {
+            'configured': False,
+            'message': "Configurer GITHUB_OWNER, GITHUB_REPO, GITHUB_PAT dans l'environnement backend",
+        }
+
+    import httpx
+    url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/ci.yml/runs'
+    headers = {
+        'Authorization': f'Bearer {pat}',
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+    }
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(url, headers=headers, params={'per_page': 1})
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f'GitHub API error: {e.response.status_code}')
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f'GitHub API unreachable: {str(e)[:100]}')
+
+    runs = data.get('workflow_runs', [])
+    if not runs:
+        return {
+            'configured': True,
+            'has_run': False,
+            'actions_url': f'https://github.com/{owner}/{repo}/actions',
+        }
+
+    run = runs[0]
+    return {
+        'configured': True,
+        'has_run': True,
+        'status': run.get('status'),
+        'conclusion': run.get('conclusion'),
+        'name': run.get('name'),
+        'head_branch': run.get('head_branch'),
+        'actor': (run.get('actor') or {}).get('login'),
+        'created_at': run.get('created_at'),
+        'updated_at': run.get('updated_at'),
+        'html_url': run.get('html_url'),
+        'actions_url': f'https://github.com/{owner}/{repo}/actions',
+    }
 
 
 @router.get('/audit-logs')

@@ -402,7 +402,7 @@ export default function CongesPage() {
           {estRh && isValid && etat === 'AttenteRH' && (
             <button onClick={(e) => { e.stopPropagation(); handleActiverRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer'}</button>
           )}
-          {estRh && isValid && etat === 'Active' && (
+          {estRh && isValid && (etat === 'Active' || etat === 'ClotureDemandee') && (
             <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : "Clôturer le congé"}</button>
           )}
           {pdfBtn}{eyeBtn}{remplacantBtn}

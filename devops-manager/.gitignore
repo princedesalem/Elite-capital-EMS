@@ -1,0 +1,6 @@
+# DevOps Manager — fichiers locaux sensibles
+.venv/
+__pycache__/
+*.pyc
+config.json
+history.json

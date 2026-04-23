@@ -1,0 +1,1438 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EMS DevOps Manager</title>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @font-face {
+      font-family: 'Century Gothic';
+      src: local('Century Gothic'), local('CenturyGothic');
+    }
+    :root {
+      --font: 'Century Gothic', 'Trebuchet MS', 'Gill Sans', Arial, sans-serif;
+      --bg: #0b1120;
+      --panel: #111827;
+      --panel2: #1f2937;
+      --panel3: #374151;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #ce2b2b;
+      --accent2: #021630;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --err: #ef4444;
+      --info: #3b82f6;
+      --purple: #8b5cf6;
+      --border: #1f2937;
+      --border2: #374151;
+      --sidebar-w: 248px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; }
+    a { color: #60a5fa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      font-family: 'Consolas', 'Courier New', monospace;
+      background: rgba(255,255,255,0.07);
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      color: #93c5fd;
+    }
+    button { font-family: var(--font); cursor: pointer; }
+    input, select, textarea { font-family: var(--font); }
+
+    /* ─── Layout ─────────────────────────────────── */
+    .layout { display: flex; height: 100vh; overflow: hidden; }
+
+    /* ─── Sidebar ────────────────────────────────── */
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--panel);
+      border-right: 1px solid var(--border2);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .brand {
+      padding: 20px 18px 16px;
+      border-bottom: 1px solid var(--border2);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      width: 36px; height: 36px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .brand-icon svg { color: white; }
+    .brand-texts {}
+    .brand-title { font-weight: 700; font-size: 0.95rem; color: white; letter-spacing: 0.3px; }
+    .brand-sub { font-size: 0.68rem; color: var(--muted); margin-top: 2px; }
+
+    .nav-section { padding: 14px 14px 4px; }
+    .nav-section-label { font-size: 0.62rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1.2px; }
+    .nav { flex: 1; overflow-y: auto; padding-bottom: 8px; }
+    .nav::-webkit-scrollbar { width: 4px; }
+    .nav::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 11px;
+      padding: 9px 18px;
+      color: var(--muted);
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      font-size: 0.86rem;
+      font-weight: 500;
+      transition: background 0.12s, color 0.12s;
+      user-select: none;
+    }
+    .nav-item:hover { background: var(--panel2); color: var(--text); }
+    .nav-item.active { background: var(--panel2); color: white; border-left-color: var(--accent); }
+    .nav-item .nav-icon { width: 16px; height: 16px; flex-shrink: 0; }
+    .nav-item .nav-badge {
+      margin-left: auto;
+      background: var(--accent);
+      color: white;
+      font-size: 0.6rem;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+
+    .sidebar-footer {
+      padding: 12px 18px;
+      border-top: 1px solid var(--border2);
+      font-size: 0.72rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .status-dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+    .status-dot.ok { background: var(--ok); box-shadow: 0 0 4px var(--ok); }
+    .status-dot.err { background: var(--err); }
+
+    /* ─── Main ───────────────────────────────────── */
+    .main { flex: 1; overflow-y: auto; padding: 28px 32px; }
+    .main::-webkit-scrollbar { width: 6px; }
+    .main::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    /* ─── Page header ────────────────────────────── */
+    .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+    .page-header-left {}
+    .page-title { font-size: 1.45rem; font-weight: 700; color: white; letter-spacing: -0.3px; display: flex; align-items: center; gap: 10px; }
+    .page-title svg { color: var(--accent); }
+    .page-subtitle { font-size: 0.8rem; color: var(--muted); margin-top: 5px; line-height: 1.5; max-width: 620px; }
+    .page-actions { display: flex; gap: 8px; align-items: center; }
+
+    /* ─── Cards ──────────────────────────────────── */
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+    }
+    .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+    .card-title { font-size: 0.9rem; font-weight: 700; color: white; display: flex; align-items: center; gap: 8px; }
+    .card-title svg { color: var(--muted); width: 16px; height: 16px; }
+    .card-hint {
+      font-size: 0.75rem;
+      color: var(--muted);
+      background: var(--panel2);
+      border: 1px solid var(--border2);
+      border-left: 3px solid var(--info);
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 14px;
+      line-height: 1.6;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .card-hint svg { flex-shrink: 0; color: var(--info); margin-top: 1px; }
+
+    /* ─── Grid ───────────────────────────────────── */
+    .row { display: flex; gap: 14px; flex-wrap: wrap; }
+    .col { flex: 1; min-width: 200px; }
+
+    /* ─── KPI ────────────────────────────────────── */
+    .kpi {
+      background: var(--panel2);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .kpi-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+    .kpi-icon.red { background: rgba(206,43,43,0.15); color: var(--accent); }
+    .kpi-icon.green { background: rgba(34,197,94,0.12); color: var(--ok); }
+    .kpi-icon.blue { background: rgba(59,130,246,0.12); color: var(--info); }
+    .kpi-icon.purple { background: rgba(139,92,246,0.12); color: var(--purple); }
+    .kpi-icon.yellow { background: rgba(245,158,11,0.12); color: var(--warn); }
+    .kpi-label { font-size: 0.72rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; }
+    .kpi-value { font-size: 1.4rem; font-weight: 700; color: white; line-height: 1.2; }
+    .kpi-sub { font-size: 0.72rem; color: var(--muted); }
+
+    /* ─── Buttons ────────────────────────────────── */
+    .btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 7px;
+      font-weight: 600;
+      font-size: 0.82rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      transition: filter 0.1s;
+      white-space: nowrap;
+    }
+    .btn svg { width: 14px; height: 14px; }
+    .btn:hover:not(:disabled) { filter: brightness(1.12); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn.secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--border2); }
+    .btn.secondary:hover:not(:disabled) { background: var(--panel3); filter: none; }
+    .btn.dark { background: var(--accent2); color: white; }
+    .btn.green { background: rgba(34,197,94,0.15); color: var(--ok); border: 1px solid rgba(34,197,94,0.3); }
+    .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--border2); }
+    .icon-btn {
+      background: var(--panel2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--font);
+      cursor: pointer;
+    }
+    .icon-btn:hover { background: var(--panel3); }
+    .icon-btn.danger { color: var(--err); border-color: rgba(239,68,68,0.35); }
+    .icon-btn svg { width: 12px; height: 12px; }
+
+    /* ─── Badges ─────────────────────────────────── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+    .badge svg { width: 10px; height: 10px; }
+    .badge.ok  { background: rgba(34,197,94,0.12);  color: var(--ok); }
+    .badge.err { background: rgba(239,68,68,0.12);  color: var(--err); }
+    .badge.warn{ background: rgba(245,158,11,0.12); color: var(--warn); }
+    .badge.info{ background: rgba(59,130,246,0.12); color: var(--info); }
+    .badge.muted{ background: rgba(148,163,184,0.1);color: var(--muted); }
+    .badge.purple{ background: rgba(139,92,246,0.12);color: var(--purple); }
+
+    /* ─── Tables ─────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+    th { color: var(--muted); font-weight: 600; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.6px; padding: 7px 10px; border-bottom: 1px solid var(--border2); }
+    td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* ─── Forms ──────────────────────────────────── */
+    .field { margin-bottom: 12px; }
+    label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 5px; font-weight: 600; letter-spacing: 0.3px; }
+    input[type=text], input[type=password], input[type=number], select, textarea {
+      background: var(--panel2);
+      color: var(--text);
+      border: 1px solid var(--border2);
+      border-radius: 7px;
+      padding: 8px 12px;
+      font-size: 0.83rem;
+      font-family: var(--font);
+      transition: border-color 0.15s;
+    }
+    input[type=text]:focus, input[type=password]:focus, input[type=number]:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--info);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+    }
+    input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; }
+    .checkbox-label { display: flex; align-items: center; gap: 7px; color: var(--text); font-size: 0.83rem; cursor: pointer; }
+
+    /* ─── Terminal ───────────────────────────────── */
+    .terminal {
+      background: #060e1a;
+      color: #86efac;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 0.78rem;
+      padding: 14px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border2);
+      height: 320px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      line-height: 1.6;
+    }
+    .terminal::-webkit-scrollbar { width: 5px; }
+    .terminal::-webkit-scrollbar-thumb { background: var(--panel3); border-radius: 3px; }
+
+    /* ─── Helpers ────────────────────────────────── */
+    .flex-between { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .flex-center { display: flex; align-items: center; gap: 8px; }
+    .small { font-size: 0.75rem; color: var(--muted); }
+    .divider { height: 1px; background: var(--border2); margin: 16px 0; }
+    .mt-8 { margin-top: 8px; }
+    .mt-12 { margin-top: 12px; }
+    .mt-16 { margin-top: 16px; }
+    .gap-8 { gap: 8px; }
+
+    /* ─── Alert boxes ────────────────────────────── */
+    .alert {
+      border-radius: 7px;
+      padding: 10px 14px;
+      font-size: 0.8rem;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      line-height: 1.6;
+    }
+    .alert svg { flex-shrink: 0; margin-top: 1px; width: 15px; height: 15px; }
+    .alert.warn { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); color: #fcd34d; }
+    .alert.err  { background: rgba(239,68,68,0.08);  border: 1px solid rgba(239,68,68,0.25);  color: #fca5a5; }
+    .alert.ok   { background: rgba(34,197,94,0.08);  border: 1px solid rgba(34,197,94,0.25);  color: #86efac; }
+    .alert.info { background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25); color: #93c5fd; }
+
+    /* ─── Spinner ────────────────────────────────── */
+    .spin { animation: spin 0.9s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Progress step ──────────────────────────── */
+    .steps { display: flex; flex-direction: column; gap: 8px; }
+    .step { display: flex; align-items: flex-start; gap: 10px; font-size: 0.82rem; }
+    .step-num {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--panel3); color: var(--muted);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.68rem; font-weight: 700; flex-shrink: 0;
+    }
+    .step-num.done { background: rgba(34,197,94,0.2); color: var(--ok); }
+    .step-num.active { background: var(--info); color: white; }
+    .step-text { padding-top: 2px; line-height: 1.5; color: var(--muted); }
+    .step-text.active { color: var(--text); }
+
+    /* ─── Toast ──────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 22px; right: 22px;
+      background: var(--panel2);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 11px 16px;
+      font-size: 0.83rem;
+      z-index: 9999;
+      max-width: 380px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    #toast.ok  { border-left: 3px solid var(--ok); }
+    #toast.err { border-left: 3px solid var(--err); }
+    #toast svg { width: 15px; height: 15px; flex-shrink: 0; }
+    #toast.ok svg  { color: var(--ok); }
+    #toast.err svg { color: var(--err); }
+    .hidden { display: none !important; }
+
+    /* ─── Workflow run card ───────────────────────── */
+    .run-card {
+      background: var(--panel2);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .run-card + .run-card { margin-top: 10px; }
+
+    /* ─── Separator label ────────────────────────── */
+    .sep-label {
+      display: flex; align-items: center; gap: 10px;
+      color: var(--muted); font-size: 0.72rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.8px;
+      margin: 18px 0 10px;
+    }
+    .sep-label::before, .sep-label::after { content: ''; flex: 1; height: 1px; background: var(--border2); }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ═══════════════ SIDEBAR ═══════════════ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">
+        <i data-lucide="terminal" style="width:18px;height:18px"></i>
+      </div>
+      <div class="brand-texts">
+        <div class="brand-title">DevOps Manager</div>
+        <div class="brand-sub">EMS — Elite Capital</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-section"><span class="nav-section-label">Principal</span></div>
+      <div class="nav-item active" data-tab="dashboard">
+        <i data-lucide="layout-dashboard" class="nav-icon"></i> Tableau de bord
+      </div>
+
+      <div class="nav-section"><span class="nav-section-label">Automatisation</span></div>
+      <div class="nav-item" data-tab="ci">
+        <i data-lucide="git-branch" class="nav-icon"></i> Pipelines CI/CD
+      </div>
+      <div class="nav-item" data-tab="backup">
+        <i data-lucide="database" class="nav-icon"></i> Sauvegardes
+      </div>
+      <div class="nav-item" data-tab="e2e">
+        <i data-lucide="flask-conical" class="nav-icon"></i> Tests E2E
+      </div>
+
+      <div class="nav-section"><span class="nav-section-label">Déploiement</span></div>
+      <div class="nav-item" data-tab="versioning">
+        <i data-lucide="tag" class="nav-icon"></i> Versioning
+      </div>
+      <div class="nav-item" data-tab="deploy">
+        <i data-lucide="rocket" class="nav-icon"></i> Déploiements
+      </div>
+      <div class="nav-item" data-tab="health">
+        <i data-lucide="activity" class="nav-icon"></i> Santé Système
+      </div>
+
+      <div class="nav-section"><span class="nav-section-label">Configuration</span></div>
+      <div class="nav-item" data-tab="settings">
+        <i data-lucide="settings-2" class="nav-icon"></i> Paramètres
+      </div>
+    </nav>
+
+    <div class="sidebar-footer" id="sidebar-footer">
+      <div><span class="status-dot" id="dot-git"></span>Git</div>
+      <div><span class="status-dot" id="dot-docker"></span>Docker</div>
+      <div><span class="status-dot" id="dot-pat"></span>GitHub PAT</div>
+    </div>
+  </aside>
+
+  <!-- ═══════════════ MAIN ═══════════════ -->
+  <main class="main" id="main"></main>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<script>
+// ──────────────────────────────────────────────────────────
+// Globals
+// ──────────────────────────────────────────────────────────
+const API = '';
+let state = { tab: 'dashboard', jobInterval: null, jobCursor: 0 };
+
+// ──────────────────────────────────────────────────────────
+// Lucide icons — init after each render
+// ──────────────────────────────────────────────────────────
+function icons() { if (window.lucide) lucide.createIcons(); }
+
+// ──────────────────────────────────────────────────────────
+// Utilities
+// ──────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function relTime(iso) {
+  if (!iso) return '—';
+  const s = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return `il y a ${s}s`;
+  if (s < 3600) return `il y a ${Math.floor(s/60)} min`;
+  if (s < 86400) return `il y a ${Math.floor(s/3600)} h`;
+  return new Date(iso).toLocaleString('fr-FR');
+}
+function fmtBytes(bytes) {
+  if (!bytes) return '0 o';
+  if (bytes < 1024) return bytes + ' o';
+  if (bytes < 1024**2) return (bytes/1024).toFixed(1) + ' Ko';
+  return (bytes/1024**2).toFixed(2) + ' Mo';
+}
+function runBadge(run) {
+  const s = run.status, c = run.conclusion;
+  if (s === 'in_progress' || s === 'queued' || s === 'waiting')
+    return `<span class="badge warn"><i data-lucide="loader" class="spin"></i> En cours</span>`;
+  if (c === 'success')
+    return `<span class="badge ok"><i data-lucide="check"></i> Succès</span>`;
+  if (c === 'failure' || c === 'timed_out')
+    return `<span class="badge err"><i data-lucide="x"></i> Échec</span>`;
+  if (c === 'cancelled')
+    return `<span class="badge muted"><i data-lucide="ban"></i> Annulé</span>`;
+  return `<span class="badge muted">${esc(c || s || '—')}</span>`;
+}
+function hint(text) {
+  return `<div class="card-hint"><i data-lucide="info"></i><span>${text}</span></div>`;
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  });
+  const txt = await res.text();
+  let data = null;
+  try { data = txt ? JSON.parse(txt) : null; } catch { data = { raw: txt }; }
+  if (!res.ok) throw new Error((data && data.detail) || `HTTP ${res.status}`);
+  return data;
+}
+
+function toast(msg, kind = 'ok') {
+  const t = document.getElementById('toast');
+  const iconName = kind === 'ok' ? 'check-circle-2' : 'alert-circle';
+  t.className = 'toast ' + kind;
+  t.innerHTML = `<i data-lucide="${iconName}"></i><span>${esc(msg)}</span>`;
+  t.classList.remove('hidden');
+  icons();
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.add('hidden'), 4500);
+}
+
+// ──────────────────────────────────────────────────────────
+// Job streaming
+// ──────────────────────────────────────────────────────────
+function stopJob() {
+  if (state.jobInterval) { clearInterval(state.jobInterval); state.jobInterval = null; }
+}
+function startJob(jobId, outElId, onDone) {
+  stopJob();
+  state.jobCursor = 0;
+  const el = () => document.getElementById(outElId);
+  if (el()) el().textContent = '';
+  const poll = async () => {
+    try {
+      const data = await api(`/api/jobs/${jobId}?tail=${state.jobCursor}`);
+      if (data.output?.length) {
+        if (el()) { el().textContent += data.output.join('\n') + '\n'; el().scrollTop = el().scrollHeight; }
+        state.jobCursor = data.total_lines;
+      }
+      if (data.status !== 'running') {
+        stopJob();
+        const statusLine = data.status === 'success'
+          ? '\n✔ Terminé avec succès.\n'
+          : `\n✘ Terminé avec erreur (code ${data.exit_code}).\n`;
+        if (el()) el().textContent += statusLine;
+        if (onDone) onDone(data);
+      }
+    } catch(e) { stopJob(); if (el()) el().textContent += `\n[ERREUR] ${e.message}\n`; }
+  };
+  poll();
+  state.jobInterval = setInterval(poll, 900);
+}
+
+// ──────────────────────────────────────────────────────────
+// Sidebar footer status
+// ──────────────────────────────────────────────────────────
+async function updateSidebarStatus() {
+  try {
+    const [info, cfg] = await Promise.all([api('/api/system/info'), api('/api/config')]);
+    const set = (id, ok) => { const d = document.getElementById(id); if (d) { d.className = 'status-dot ' + (ok ? 'ok' : 'err'); } };
+    set('dot-git', info.has_git);
+    set('dot-docker', info.has_docker);
+    set('dot-pat', cfg.github.pat_set);
+  } catch {}
+}
+
+// ──────────────────────────────────────────────────────────
+// Navigation
+// ──────────────────────────────────────────────────────────
+const root = document.getElementById('main');
+document.querySelector('.nav').addEventListener('click', e => {
+  const item = e.target.closest('.nav-item');
+  if (!item) return;
+  stopJob();
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  item.classList.add('active');
+  state.tab = item.dataset.tab;
+  render();
+});
+
+async function render() {
+  try {
+    const tab = state.tab;
+    if (tab === 'dashboard')   await renderDashboard();
+    else if (tab === 'ci')     await renderCI();
+    else if (tab === 'backup') await renderBackup();
+    else if (tab === 'e2e')    await renderE2E();
+    else if (tab === 'versioning') await renderVersioning();
+    else if (tab === 'deploy') await renderDeploy();
+    else if (tab === 'health') await renderHealth();
+    else if (tab === 'settings') await renderSettings();
+    icons();
+    updateSidebarStatus();
+  } catch(e) {
+    root.innerHTML = `<div class="card"><div class="alert err"><i data-lucide="alert-circle"></i><span>${esc(e.message)}</span></div></div>`;
+    icons();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════════════════
+async function renderDashboard() {
+  root.innerHTML = `
+    <div class="page-header">
+      <div class="page-header-left">
+        <div class="page-title"><i data-lucide="layout-dashboard"></i> Tableau de bord</div>
+        <div class="page-subtitle">Vue d'ensemble de votre infrastructure EMS — pipelines, backups, version et santé des services.</div>
+      </div>
+      <div class="page-actions">
+        <button class="btn secondary" id="refresh-dash"><i data-lucide="refresh-cw"></i> Actualiser</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col"><div class="kpi" id="kpi-ci">
+        <div class="kpi-icon red"><i data-lucide="git-branch"></i></div>
+        <div class="kpi-label">Dernier pipeline CI</div>
+        <div class="kpi-value">…</div>
+        <div class="kpi-sub" id="kpi-ci-sub"></div>
+      </div></div>
+      <div class="col"><div class="kpi" id="kpi-bk">
+        <div class="kpi-icon blue"><i data-lucide="database"></i></div>
+        <div class="kpi-label">Sauvegardes</div>
+        <div class="kpi-value">…</div>
+        <div class="kpi-sub" id="kpi-bk-sub"></div>
+      </div></div>
+      <div class="col"><div class="kpi" id="kpi-ver">
+        <div class="kpi-icon purple"><i data-lucide="tag"></i></div>
+        <div class="kpi-label">Version actuelle</div>
+        <div class="kpi-value">…</div>
+        <div class="kpi-sub" id="kpi-ver-sub"></div>
+      </div></div>
+      <div class="col"><div class="kpi" id="kpi-svc">
+        <div class="kpi-icon green"><i data-lucide="activity"></i></div>
+        <div class="kpi-label">Services en ligne</div>
+        <div class="kpi-value">…</div>
+        <div class="kpi-sub" id="kpi-svc-sub"></div>
+      </div></div>
+    </div>
+
+    <div class="row mt-16">
+      <div class="col" style="min-width:340px">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="clock"></i> Dernières actions</div>
+          </div>
+          <div id="history-list"></div>
+        </div>
+      </div>
+      <div class="col" style="min-width:280px">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="cpu"></i> Environnement</div>
+          </div>
+          <div id="sys-info"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('refresh-dash').onclick = renderDashboard;
+
+  // KPI — CI
+  try {
+    const r = await api('/api/github/runs?workflow=ci&per_page=1');
+    const run = (r.workflow_runs || [])[0];
+    const el = document.querySelector('#kpi-ci .kpi-value');
+    if (run) { el.innerHTML = runBadge(run); document.getElementById('kpi-ci-sub').textContent = relTime(run.created_at); }
+    else el.innerHTML = '<span class="badge muted">Aucun run</span>';
+  } catch { document.querySelector('#kpi-ci .kpi-value').innerHTML = '<span class="badge warn">Non configuré</span>'; }
+
+  // KPI — Backups
+  try {
+    const b = await api('/api/backups');
+    document.querySelector('#kpi-bk .kpi-value').textContent = b.count;
+    document.getElementById('kpi-bk-sub').textContent = b.count ? `Dernier : ${relTime(b.files[0].modified_at)}` : 'Aucune sauvegarde';
+  } catch { document.querySelector('#kpi-bk .kpi-value').textContent = '—'; }
+
+  // KPI — Version
+  try {
+    const g = await api('/api/git/status');
+    document.querySelector('#kpi-ver .kpi-value').textContent = g.describe || g.head_short || '—';
+    document.getElementById('kpi-ver-sub').textContent = g.branch || '';
+  } catch { document.querySelector('#kpi-ver .kpi-value').textContent = '—'; }
+
+  // KPI — Services
+  try {
+    const h = await api('/api/health');
+    const ok = ['backend','frontend'].filter(k => h[k]?.ok).length;
+    document.querySelector('#kpi-svc .kpi-value').textContent = `${ok} / 2`;
+    document.getElementById('kpi-svc-sub').textContent = ok === 2 ? 'Tous opérationnels' : 'Service(s) hors ligne';
+  } catch { document.querySelector('#kpi-svc .kpi-value').textContent = '—'; }
+
+  // History
+  try {
+    const hist = await api('/api/history');
+    const el = document.getElementById('history-list');
+    if (!hist.history.length) { el.innerHTML = '<div class="small" style="padding:8px 0">Aucune action enregistrée.</div>'; }
+    else el.innerHTML = `<table>
+      <thead><tr><th>Date</th><th>Action</th><th>Détails</th></tr></thead>
+      <tbody>${hist.history.slice(0,8).map(h => `<tr>
+        <td class="small">${new Date(h.timestamp).toLocaleString('fr-FR')}</td>
+        <td><span class="badge info">${esc(h.type)}</span></td>
+        <td class="small">${esc(Object.entries(h).filter(([k])=>!['timestamp','type'].includes(k)).map(([k,v])=>`${k}: ${v}`).join(' · '))}</td>
+      </tr>`).join('')}</tbody></table>`;
+  } catch {}
+
+  // Sys info
+  try {
+    const info = await api('/api/system/info');
+    const yes = ok => ok ? `<span class="badge ok">Oui</span>` : `<span class="badge err">Non</span>`;
+    document.getElementById('sys-info').innerHTML = `
+      <table>
+        <tr><td class="small">Python</td><td>${esc(info.python)}</td></tr>
+        <tr><td class="small">Git installé</td><td>${yes(info.has_git)}</td></tr>
+        <tr><td class="small">Docker installé</td><td>${yes(info.has_docker)}</td></tr>
+        <tr><td class="small">npx installé</td><td>${yes(info.has_npx)}</td></tr>
+        <tr><td class="small">backup-db.ps1</td><td>${yes(info.has_backup_script)}</td></tr>
+        <tr><td class="small">docker-compose.yml</td><td>${yes(info.has_docker_compose)}</td></tr>
+      </table>`;
+  } catch {}
+}
+
+// ══════════════════════════════════════════════════════════
+// CI/CD
+// ══════════════════════════════════════════════════════════
+async function renderCI() {
+  root.innerHTML = `
+    <div class="page-header">
+      <div class="page-header-left">
+        <div class="page-title"><i data-lucide="git-branch"></i> Pipelines CI/CD</div>
+        <div class="page-subtitle">Consultez et déclenchez vos workflows GitHub Actions. Le pipeline CI tourne automatiquement à chaque push sur <code>main</code> ou <code>develop</code>.</div>
+      </div>
+    </div>
+
+    ${hint('Les workflows sont hébergés sur GitHub. Un <strong>Personal Access Token (PAT)</strong> avec les scopes <code>repo</code> + <code>workflow</code> est nécessaire — configurez-le dans l\'onglet <strong>Paramètres</strong>.')}
+
+    <div class="row">
+      <div class="col">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="play-circle"></i> CI — Tests &amp; Lint</div>
+            <div class="flex-center">
+              <button class="btn" id="trigger-ci"><i data-lucide="play"></i> Déclencher</button>
+              <button class="icon-btn" id="refresh-ci"><i data-lucide="refresh-cw"></i></button>
+            </div>
+          </div>
+          <div class="small" style="margin-bottom:10px">Fichier : <code>.github/workflows/ci.yml</code> — exécute pytest, ruff, vitest, ESLint et les tests E2E Playwright.</div>
+          <div id="ci-runs">…</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="hard-drive"></i> Backup automatique</div>
+            <div class="flex-center">
+              <button class="btn" id="trigger-bk"><i data-lucide="play"></i> Déclencher</button>
+              <button class="icon-btn" id="refresh-bk"><i data-lucide="refresh-cw"></i></button>
+            </div>
+          </div>
+          <div class="small" style="margin-bottom:10px">Fichier : <code>.github/workflows/backup-db.yml</code> — mysqldump compressé quotidien à 02:00 UTC. Actif uniquement si <code>BACKUP_ENABLED=true</code>.</div>
+          <div id="bk-runs">…</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  async function loadRuns(workflow, elId) {
+    const el = document.getElementById(elId);
+    try {
+      const data = await api(`/api/github/runs?workflow=${workflow}&per_page=8`);
+      const runs = data.workflow_runs || [];
+      if (!runs.length) { el.innerHTML = '<div class="small">Aucun run trouvé.</div>'; return; }
+      el.innerHTML = `<table>
+        <thead><tr><th>#</th><th>Statut</th><th>Branche</th><th>Acteur</th><th>Date</th><th></th></tr></thead>
+        <tbody>${runs.map(r => `<tr>
+          <td class="small">#${r.run_number}</td>
+          <td>${runBadge(r)}</td>
+          <td><code>${esc(r.head_branch)}</code></td>
+          <td class="small">${esc(r.actor?.login || '—')}</td>
+          <td class="small">${relTime(r.created_at)}</td>
+          <td><a href="${esc(r.html_url)}" target="_blank" class="icon-btn"><i data-lucide="external-link"></i></a></td>
+        </tr>`).join('')}</tbody></table>`;
+      icons();
+    } catch(e) { el.innerHTML = `<div class="alert err"><i data-lucide="alert-circle"></i><span>${esc(e.message)}</span></div>`; icons(); }
+  }
+
+  loadRuns('ci', 'ci-runs');
+  loadRuns('backup', 'bk-runs');
+  document.getElementById('refresh-ci').onclick = () => loadRuns('ci', 'ci-runs');
+  document.getElementById('refresh-bk').onclick = () => loadRuns('backup', 'bk-runs');
+  document.getElementById('trigger-ci').onclick = async () => {
+    if (!confirm('Déclencher manuellement le pipeline CI ?')) return;
+    try { await api('/api/github/trigger/ci', { method:'POST', body:{} }); toast('Pipeline CI déclenché'); setTimeout(()=>loadRuns('ci','ci-runs'), 3500); }
+    catch(e) { toast(e.message,'err'); }
+  };
+  document.getElementById('trigger-bk').onclick = async () => {
+    if (!confirm('Déclencher manuellement le workflow de backup ?')) return;
+    try { await api('/api/github/trigger/backup', { method:'POST', body:{} }); toast('Backup déclenché'); setTimeout(()=>loadRuns('backup','bk-runs'), 3500); }
+    catch(e) { toast(e.message,'err'); }
+  };
+}
+
+// ══════════════════════════════════════════════════════════
+// BACKUP
+// ══════════════════════════════════════════════════════════
+async function renderBackup() {
+  root.innerHTML = `
+    <div class="page-header">
+      <div class="page-header-left">
+        <div class="page-title"><i data-lucide="database"></i> Sauvegardes de la base de données</div>
+        <div class="page-subtitle">Lancez une sauvegarde locale immédiate via <code>backup-db.ps1</code>, consultez les fichiers existants et le journal de sauvegarde.</div>
+      </div>
+    </div>
+
+    ${hint('Le script <code>backup-db.ps1</code> se connecte à la base via Docker et effectue un <code>mysqldump</code>. Les fichiers sont stockés dans <code>extranet/backups/</code>. La rotation garde les N fichiers les plus récents.')}
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i data-lucide="play-circle"></i> Lancer une sauvegarde</div>
+      </div>
+      <div class="row" style="align-items:flex-end; gap:12px">
+        <div>
+          <label>Conserver les N derniers fichiers</label>
+          <input type="number" id="keep-last" value="30" min="1" max="365" style="width:90px"/>
+        </div>
+        <div style="padding-bottom:2px">
+          <label class="checkbox-label"><input type="checkbox" id="compress" checked/> Compresser (.zip)</label>
+        </div>
+        <div style="padding-bottom:1px">
+          <button class="btn" id="start-backup"><i data-lucide="play"></i> Lancer maintenant</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i data-lucide="terminal"></i> Progression</div>
+      </div>
+      <div class="terminal" id="backup-output">En attente du lancement…</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i data-lucide="folder-open"></i> Fichiers de sauvegarde</div>
+        <button class="icon-btn" id="refresh-files"><i data-lucide="refresh-cw"></i> Actualiser</button>
+      </div>
+      <div id="backup-files">…</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i data-lucide="scroll-text"></i> Journal <code>backup.log</code></div>
+      </div>
+      <div class="terminal" id="backup-log" style="height:200px">…</div>
+    </div>
+  `;
+
+  async function loadFiles() {
+    try {
+      const d = await api('/api/backups');
+      if (!d.count) { document.getElementById('backup-files').innerHTML = '<div class="small">Aucun fichier de sauvegarde trouvé dans <code>backups/</code>.</div>'; icons(); return; }
+      document.getElementById('backup-files').innerHTML = `
+        <div class="small" style="margin-bottom:8px"><strong>${d.count}</strong> fichier(s) — <strong>${d.total_mb} Mo</strong> au total</div>
+        <table>
+          <thead><tr><th>Fichier</th><th>Taille</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody>${d.files.map(f=>`<tr>
+            <td><code>${esc(f.name)}</code></td>
+            <td class="small">${fmtBytes(f.size_bytes)}</td>
+            <td class="small">${new Date(f.modified_at).toLocaleString('fr-FR')}</td>
+            <td>
+              <a class="icon-btn" href="/api/backups/${encodeURIComponent(f.name)}/download"><i data-lucide="download"></i> Télécharger</a>
+              <button class="icon-btn danger" data-del="${esc(f.name)}"><i data-lucide="trash-2"></i></button>
+            </td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+      document.querySelectorAll('[data-del]').forEach(b => {
+        b.onclick = async () => {
+          if (!confirm('Supprimer ' + b.dataset.del + ' ?')) return;
+          try { await api('/api/backups/'+encodeURIComponent(b.dataset.del), {method:'DELETE'}); toast('Fichier supprimé'); loadFiles(); }
+          catch(e) { toast(e.message,'err'); }
+        };
+      });
+      icons();
+    } catch(e) { document.getElementById('backup-files').innerHTML = `<div class="alert err"><i data-lucide="alert-circle"></i><span>${esc(e.message)}</span></div>`; icons(); }
+  }
+  async function loadLog() {
+    try {
+      const d = await api('/api/backups/log?lines=80');
+      document.getElementById('backup-log').textContent = d.lines.length ? d.lines.join('\n') : '(journal vide)';
+    } catch(e) { document.getElementById('backup-log').textContent = e.message; }
+  }
+
+  loadFiles(); loadLog();
+  document.getElementById('refresh-files').onclick = () => { loadFiles(); loadLog(); };
+  document.getElementById('start-backup').onclick = async () => {
+    const kl = document.getElementById('keep-last').value;
+    const cp = document.getElementById('compress').checked;
+    try {
+      const { job_id } = await api(`/api/backups/trigger?keep_last=${kl}&compress=${cp}`, {method:'POST'});
+      startJob(job_id, 'backup-output', () => { loadFiles(); loadLog(); });
+    } catch(e) { toast(e.message,'err'); }
+  };
+}
+
+// ══════════════════════════════════════════════════════════
+// E2E
+// ══════════════════════════════════════════════════════════
+async function renderE2E() {
+  root.innerHTML = `
+    <div class="page-header">
+      <div class="page-header-left">
+        <div class="page-title"><i data-lucide="flask-conical"></i> Tests E2E Playwright</div>
+        <div class="page-subtitle">Tests de bout en bout qui simulent de vrais utilisateurs dans le navigateur. Ils vérifient que l'authentification, les congés et les missions fonctionnent ensemble.</div>
+      </div>
+    </div>
+
+    ${hint('<strong>Étape 1 :</strong> Exécutez le seed pour créer les comptes de test (matricules 90001/90002/90003, mot de passe <code>Test1234!@#</code>). <strong>Étape 2 :</strong> Lancez les tests Playwright. Les tests se passent dans un vrai navigateur Chrome/Firefox — assurez-vous que le stack Docker est démarré.')}
+
+    <div class="row">
+      <div class="col">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="database"></i> Étape 1 — Préparer les données</div>
+          </div>
+          <div class="small" style="margin-bottom:12px">Le script <code>e2e_seed.py</code> est idempotent : vous pouvez le relancer autant de fois que nécessaire sans risque. Il crée les comptes de test s'ils n'existent pas.</div>
+          <button class="btn" id="run-seed"><i data-lucide="database"></i> Exécuter e2e_seed.py</button>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="play-circle"></i> Étape 2 — Lancer les tests</div>
+          </div>
+          <div class="field">
+            <label>Sélectionner le spec à exécuter</label>
+            <select id="spec-select" style="width:100%">
+              <option value="all">Tous les specs (auth + leave + mission)</option>
+              <option value="auth">auth.spec.js — Connexion, déconnexion, mauvais mot de passe</option>
+              <option value="leave-request">leave-request.spec.js — Création et envoi d'une demande de congé</option>
+              <option value="mission-multi-segments">mission-multi-segments.spec.js — Mission multi-segments et frais</option>
+            </select>
+          </div>
+          <button class="btn" id="run-e2e"><i data-lucide="play"></i> Lancer</button>
+          <button class="icon-btn" id="view-report" style="margin-left:6px"><i data-lucide="file-text"></i> Rapport HTML</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i data-lucide="terminal"></i> Output en temps réel</div>
+      </div>
+      <div class="terminal" id="e2e-output">En attente…</div>
+    </div>
+  `;
+
+  document.getElementById('run-seed').onclick = async () => {
+    try { const {job_id} = await api('/api/e2e/seed',{method:'POST'}); startJob(job_id,'e2e-output'); }
+    catch(e) { toast(e.message,'err'); }
+  };
+  document.getElementById('run-e2e').onclick = async () => {
+    const spec = document.getElementById('spec-select').value;
+    try { const {job_id} = await api(`/api/e2e/run?spec=${spec}`,{method:'POST'}); startJob(job_id,'e2e-output'); }
+    catch(e) { toast(e.message,'err'); }
+  };
+  document.getElementById('view-report').onclick = async () => {
+    try {
+      const r = await api('/api/e2e/report');
+      if (r.report_exists) toast('Rapport : ' + r.report_path);
+      else toast('Aucun rapport — lancez les tests d\'abord.','err');
+    } catch(e) { toast(e.message,'err'); }
+  };
+}
+
+// ══════════════════════════════════════════════════════════
+// VERSIONING
+// ══════════════════════════════════════════════════════════
+async function renderVersioning() {
+  root.innerHTML = `
+    <div class="page-header">
+      <div class="page-header-left">
+        <div class="page-title"><i data-lucide="tag"></i> Versioning & Release Pipeline</div>
+        <div class="page-subtitle">Créez une nouvelle version de l'application en un clic. Le pipeline incrémente le numéro de version, crée un tag git, pousse sur GitHub et génère la Release automatiquement.</div>
+      </div>
+    </div>
+
+    ${hint('<strong>SemVer</strong> : <code>v1.2.3</code> = <code>MAJOR.MINOR.PATCH</code>. Cliquez sur <strong>Analyser les changements</strong> — l\'outil lit vos commits git et détermine automatiquement le type de bump et génère le message de commit + changelog.')}
+
+    <div class="row">
+      <div class="col" style="min-width:260px">
+        <div class="card">
+          <div class="card-header"><div class="card-title"><i data-lucide="git-commit-horizontal"></i> État git actuel</div></div>
+          <div id="git-status-block">…</div>
+        </div>
+      </div>
+      <div class="col" style="min-width:340px">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="rocket"></i> Nouvelle release</div>
+            <button class="btn green" id="analyze-btn"><i data-lucide="scan-search"></i> Analyser les changements</button>
+          </div>
+
+          <div id="analysis-result" class="hidden" style="margin-bottom:14px"></div>
+
+          <div class="row gap-8" style="margin-bottom:12px">
+            <div class="col">
+              <label>Type de bump <span id="bump-auto-label" class="badge info hidden" style="margin-left:6px;vertical-align:middle"><i data-lucide="sparkles"></i> auto</span></label>
+              <select id="bump-kind" style="width:100%">
+                <option value="patch">patch — Bugfix (x.x.X)</option>
+                <option value="minor">minor — Nouvelle fonctionnalité (x.X.0)</option>
+                <option value="major">major — Changement cassant (X.0.0)</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Message de commit <span id="msg-auto-label" class="badge info hidden" style="margin-left:6px;vertical-align:middle"><i data-lucide="sparkles"></i> auto</span></label>
+            <input type="text" id="bump-msg" placeholder="Cliquez sur Analyser pour le générer automatiquement" style="width:100%"/>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+            <label class="checkbox-label"><input type="checkbox" id="bump-push" checked/> Pousser sur GitHub (<code>git push --tags</code>)</label>
+            <label class="checkbox-label"><input type="checkbox" id="bump-release" checked/> Créer la GitHub Release (changelog auto)</label>
+          </div>
+          <div id="next-ver-preview" class="small" style="margin-bottom:14px;padding:8px 12px;background:var(--panel2);border-radius:6px;border:1px solid var(--border2)">…</div>
+          <button class="btn" id="do-release"><i data-lucide="rocket"></i> Lancer le pipeline de release</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="changelog-preview-card" style="display:none">
+      <div class="card-header">
+        <div class="card-title"><i data-lucide="scroll-text"></i> Aperçu du changelog généré</div>
+        <span class="badge info"><i data-lucide="sparkles"></i> Généré automatiquement</span>
+      </div>
+      <pre id="changelog-preview" style="font-size:0.82rem;line-height:1.8;color:var(--text);white-space:pre-wrap;margin:0"></pre>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i data-lucide="git-commit-horizontal"></i> Commits depuis le dernier tag</div></div>
+      <div id="commits-since">…</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i data-lucide="history"></i> Historique des versions</div></div>
+      <div id="tags-list">…</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i data-lucide="terminal"></i> Progression du pipeline</div></div>
+      <div class="terminal" id="release-output">En attente du lancement…</div>
+    </div>
+  `;
+
+  // Load git status
+  let gitStatus = null;
+  try {
+    gitStatus = await api('/api/git/status');
+    document.getElementById('git-status-block').innerHTML = `
+      <table>
+        <tr><td class="small">Branche</td><td><code>${esc(gitStatus.branch || '—')}</code></td></tr>
+        <tr><td class="small">Commit HEAD</td><td><code>${esc(gitStatus.head_short || '—')}</code></td></tr>
+        <tr><td class="small">Dernier message</td><td class="small">${esc(gitStatus.last_commit_message || '—')}</td></tr>
+        <tr><td class="small">Auteur</td><td class="small">${esc(gitStatus.last_commit_author || '—')}</td></tr>
+        <tr><td class="small">Version (tag)</td><td><strong>${esc(gitStatus.describe || 'aucun tag')}</strong></td></tr>
+        ${gitStatus.dirty ? `<tr><td colspan="2"><span class="badge warn"><i data-lucide="alert-triangle"></i> Modifications non commitées</span></td></tr>` : ''}
+      </table>`;
+  } catch(e) { document.getElementById('git-status-block').innerHTML = `<div class="alert err"><i data-lucide="alert-circle"></i><span>${esc(e.message)}</span></div>`; }
+
+  // Preview next version
+  function updatePreview() {
+    const current = (gitStatus && gitStatus.describe) || 'v0.0.0';
+    const kind = document.getElementById('bump-kind').value;
+    const m = current.match(/v?(\d+)\.(\d+)\.(\d+)/);
+    let [,ma,mi,pa] = m ? [,+m[1],+m[2],+m[3]] : [,0,0,0];
+    if (kind==='major') { ma++; mi=0; pa=0; }
+    else if (kind==='minor') { mi++; pa=0; }
+    else pa++;
+    const next = `v${ma}.${mi}.${pa}`;
+    const bk = kind === 'major' ? 'err' : kind === 'minor' ? 'info' : 'ok';
+    document.getElementById('next-ver-preview').innerHTML =
+      `<i data-lucide="arrow-right"></i> <strong>${esc(current)}</strong> → <strong style="color:var(--ok)">${esc(next)}</strong> &nbsp; <span class="badge ${bk}">${kind}</span>`;
+    icons();
+  }
+  document.getElementById('bump-kind').onchange = updatePreview;
+  updatePreview();
+
+  // ── Bouton Analyser ──────────────────────────────────────────────
+  document.getElementById('analyze-btn').onclick = async () => {
+    const btn = document.getElementById('analyze-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader" class="spin"></i> Analyse…';
+    icons();
+    try {
+      const s = await api('/api/git/suggest-bump');
+
+      // Sélectionner le type suggéré
+      document.getElementById('bump-kind').value = s.suggested_kind;
+      document.getElementById('bump-auto-label').classList.remove('hidden');
+
+      // Remplir le message de commit
+      document.getElementById('bump-msg').value = s.commit_message;
+      document.getElementById('msg-auto-label').classList.remove('hidden');
+
+      // Mettre à jour le preview
+      updatePreview();
+
+      // Afficher le résumé de l'analyse
+      const kindColors = { major: 'err', minor: 'info', patch: 'ok' };
+      const kindColor = kindColors[s.suggested_kind] || 'ok';
+      const breakingHtml = s.breaking
+        ? `<span class="badge err" style="margin-left:8px"><i data-lucide="alert-triangle"></i> BREAKING CHANGE</span>`
+        : '';
+
+      const iconMap = {
+        'Nouvelles fonctionnalités': 'sparkles',
+        'Correctifs': 'wrench',
+        'Performances': 'zap',
+        'Tests': 'flask-conical',
+        'CI/CD': 'git-branch',
+        'Documentation': 'book-open',
+        'Refactorisation': 'layers',
+        'Tâches techniques': 'settings-2',
+        'Style / Formatage': 'paintbrush',
+        'Build': 'package',
+        'Reverts': 'rotate-ccw',
+        'Autres': 'git-commit-horizontal',
+      };
+
+      let groupsHtml = '';
+      for (const [label, items] of Object.entries(s.groups || {})) {
+        const ic = iconMap[label] || 'git-commit-horizontal';
+        groupsHtml += `<div style="margin-top:8px">
+          <strong style="font-size:0.78rem;color:var(--muted);display:flex;align-items:center;gap:5px">
+            <i data-lucide="${ic}" style="width:12px;height:12px"></i>${esc(label)}
+          </strong>
+          <ul style="margin:4px 0 0 16px;font-size:0.8rem;color:var(--text);line-height:1.8">
+            ${items.map(i => `<li>${esc(i)}</li>`).join('')}
+          </ul>
+        </div>`;
+      }
+
+      const noCommitsHtml = !s.commits.length
+        ? `<div class="alert warn" style="margin-top:8px"><i data-lucide="alert-triangle"></i><span>Aucun nouveau commit depuis le dernier tag.</span></div>`
+        : '';
+
+      document.getElementById('analysis-result').innerHTML = `
+        <div style="background:var(--panel2);border:1px solid var(--border2);border-radius:8px;padding:12px 16px">
+          <div class="flex-between" style="margin-bottom:8px">
+            <span style="font-size:0.82rem;font-weight:700;color:white;display:flex;align-items:center;gap:6px">
+              <i data-lucide="scan-search" style="color:var(--info)"></i>
+              ${esc(s.commits.length)} commit(s) analysé(s) — <code>${esc(s.range)}</code>
+            </span>
+            <span>${breakingHtml}<span class="badge ${kindColor}" style="font-size:0.75rem"><i data-lucide="tag"></i> ${esc(s.suggested_kind)} recommandé</span></span>
+          </div>
+          ${groupsHtml || '<div class="small">Aucune catégorie détectée.</div>'}
+          ${noCommitsHtml}
+        </div>`;
+      document.getElementById('analysis-result').classList.remove('hidden');
+
+      // Afficher le changelog
+      if (s.changelog) {
+        document.getElementById('changelog-preview').textContent = s.changelog;
+        document.getElementById('changelog-preview-card').style.display = '';
+      }
+
+      icons();
+      toast(`Analyse terminée — bump ${s.suggested_kind} recommandé (${s.commits.length} commit(s))`);
+    } catch(e) {
+      toast(e.message, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="scan-search"></i> Analyser les changements';
+      icons();
+    }
+  };
+
+  // Commits since last tag
+  try {
+    const c = await api('/api/git/commits-since');
+    const el = document.getElementById('commits-since');
+    if (!c.commits.length) { el.innerHTML = '<div class="small">Aucun nouveau commit depuis le dernier tag.</div>'; }
+    else el.innerHTML = `<div class="small" style="margin-bottom:8px">Range : <code>${esc(c.range)}</code> — <strong>${c.commits.length}</strong> commit(s)</div>
+      <table><thead><tr><th>Hash</th><th>Message</th><th>Auteur</th></tr></thead>
+      <tbody>${c.commits.map(x=>`<tr><td><code>${esc(x.hash)}</code></td><td>${esc(x.message)}</td><td class="small">${esc(x.author)}</td></tr>`).join('')}</tbody></table>`;
+  } catch(e) { document.getElementById('commits-since').innerHTML = `<div class="alert err"><i data-lucide="alert-circle"></i><span>${esc(e.message)}</span></div>`; }
+
+  // Tags
+  try {
+    const t = await api('/api/git/tags');
+    const el = document.getElementById('tags-list');
+    if (!t.tags.length) { el.innerHTML = '<div class="small">Aucun tag git trouvé.</div>'; }
+    else el.innerHTML = `<table>
+      <thead><tr><th>Version</th><th>Hash</th><th>Date</th><th>Message</th><th>Action</th></tr></thead>
+      <tbody>${t.tags.map(x=>`<tr>
+        <td><strong>${esc(x.name)}</strong></td>
+        <td><code>${esc(x.hash)}</code></td>
+        <td class="small">${esc(x.date)}</td>
+        <td class="small">${esc(x.message)}</td>
+        <td><button class="icon-btn" data-rb="${esc(x.name)}"><i data-lucide="rotate-ccw"></i> Rollback</button></td>
+      </tr>`).join('')}</tbody></table>`;
+    document.querySelectorAll('[data-rb]').forEach(b => {
+      b.onclick = async () => {
+        if (!confirm(`Rollback sur ${b.dataset.rb} ?\n\nCela va : git checkout ${b.dataset.rb}, puis docker compose up --build.\nVous pouvez annuler avec git checkout main ensuite.`)) return;
+        try {
+          const {job_id} = await api('/api/pipeline/rollback',{method:'POST',body:{ref:b.dataset.rb,rebuild:true}});
+          startJob(job_id,'release-output');
+          toast(`Rollback vers ${b.dataset.rb} démarré`);
+        } catch(e) { toast(e.message,'err'); }
+      };
+    });
+  } catch(e) { document.getElementById('tags-list').innerHTML = `<div class="alert err"><i data-lucide="alert-circle"></i><span>${esc(e.message)}</span></div>`; }
+
+  document.getElementById('do-release').onclick = async () => {
+    const kind = document.getElementById('bump-kind').value;
+    const msg = document.getElementById('bump-msg').value.trim();
+    if (!confirm(`Confirmer le pipeline de release ?\n\nType : ${kind}\nMessage : ${msg || '(automatique)'}\nActions : git pull → écrit VERSION → commit → tag → push → GitHub Release\n\nContinuer ?`)) return;
+    try {
+      const res = await api('/api/pipeline/release',{method:'POST',body:{
+        kind,
+        message: msg || null,
+        push: document.getElementById('bump-push').checked,
+        create_release: document.getElementById('bump-release').checked,
+      }});
+      toast(`Pipeline ${res.from} → ${res.to} démarré`);
+      startJob(res.job_id,'release-output', ()=>renderVersioning());
+    } catch(e) { toast(e.message,'err'); }
+  };
+}
+
+// ══════════════════════════════════════════════════════════
+// DEPLOY
+// ══════════════════════════════════════════════════════════
+async function renderDeploy() {
+  root.innerHTML = `
+    <div class="page-header">
+      <div class="page-header-left">
+        <div class="page-title"><i data-lucide="rocket"></i> Déploiements locaux</div>
+        <div class="page-subtitle">Mettez à jour l'application en local : récupérez le dernier code et reconstruisez les containers Docker. Pour un rollback, indiquez un tag ou un commit hash.</div>
+      </div>
+    </div>
+
+    ${hint('<strong>Mise à jour :</strong> <code>git pull</code> récupère les derniers commits, <code>docker compose up --build</code> reconstruit et relance les containers avec le nouveau code. <strong>Rollback :</strong> <code>git checkout v1.2.3</code> revient à une version précise. Vous pouvez annuler en faisant <code>git checkout main</code> depuis votre terminal.')}
+
+    <div class="row">
+      <div class="col">
+        <div class="card">
+          <div class="card-header"><div class="card-title"><i data-lucide="arrow-up-circle"></i> Mise à jour</div></div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+            <label class="checkbox-label"><input type="checkbox" id="do-pull" checked/> <code>git pull</code> — récupérer le dernier code</label>
+            <label class="checkbox-label"><input type="checkbox" id="do-build" checked/> <code>docker compose up -d --build</code> — reconstruire et relancer</label>
+          </div>
+          <button class="btn" id="do-deploy"><i data-lucide="rocket"></i> Mettre à jour</button>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card">
+          <div class="card-header"><div class="card-title"><i data-lucide="rotate-ccw"></i> Rollback vers une version précédente</div></div>
+          <div class="field">
+            <label>Référence git — tag (ex: <code>v1.2.3</code>) ou hash court (ex: <code>a1b2c3d</code>)</label>
+            <input type="text" id="rollback-ref" placeholder="v1.2.3" style="width:100%"/>
+          </div>
+          <div class="small" style="margin-bottom:12px">⚠ Après un rollback, relancez <code>git checkout main</code> depuis votre terminal pour revenir sur la branche principale.</div>
+          <button class="btn dark" id="do-rollback"><i data-lucide="rotate-ccw"></i> Rollback</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i data-lucide="terminal"></i> Progression</div></div>
+      <div class="terminal" id="deploy-output">En attente du lancement…</div>
+    </div>
+  `;
+
+  document.getElementById('do-deploy').onclick = async () => {
+    if (!confirm('Lancer la mise à jour ?\n\ngit pull + docker compose up -d --build\n\nL\'application sera brièvement interrompue pendant le rebuild.')) return;
+    try {
+      const {job_id} = await api('/api/pipeline/deploy',{method:'POST',body:{
+        pull: document.getElementById('do-pull').checked,
+        rebuild: document.getElementById('do-build').checked,
+      }});
+      startJob(job_id,'deploy-output');
+    } catch(e) { toast(e.message,'err'); }
+  };
+  document.getElementById('do-rollback').onclick = async () => {
+    const ref = document.getElementById('rollback-ref').value.trim();
+    if (!ref) { toast('Saisissez une référence git.','err'); return; }
+    if (!confirm(`Rollback vers : ${ref}\n\nActions : git fetch + git checkout ${ref} + docker compose up --build\n\nContinuer ?`)) return;
+    try {
+      const {job_id} = await api('/api/pipeline/rollback',{method:'POST',body:{ref,rebuild:true}});
+      startJob(job_id,'deploy-output');
+    } catch(e) { toast(e.message,'err'); }
+  };
+}
+
+// ══════════════════════════════════════════════════════════
+// HEALTH
+// ══════════════════════════════════════════════════════════
+async function renderHealth() {
+  root.innerHTML = `
+    <div class="page-header">
+      <div class="page-header-left">
+        <div class="page-title"><i data-lucide="activity"></i> Santé des services</div>
+        <div class="page-subtitle">Vérification en temps réel que le backend, le frontend et Docker sont opérationnels. Rafraîchissement automatique toutes les 20 secondes.</div>
+      </div>
+      <div class="page-actions">
+        <button class="btn secondary" id="refresh-health"><i data-lucide="refresh-cw"></i> Actualiser</button>
+      </div>
+    </div>
+    <div class="row" id="svc-cards">…</div>
+    <div class="card mt-16">
+      <div class="card-header"><div class="card-title"><i data-lucide="container"></i> Containers Docker</div></div>
+      <div id="docker-ps">…</div>
+    </div>
+  `;
+
+  async function load() {
+    try {
+      const h = await api('/api/health');
+      const svcCard = (name, r) => `
+        <div class="col">
+          <div class="kpi">
+            <div class="kpi-icon ${r?.ok ? 'green' : 'red'}"><i data-lucide="${name==='backend'?'server':name==='frontend'?'monitor':'database'}"></i></div>
+            <div class="kpi-label">${name.charAt(0).toUpperCase()+name.slice(1)}</div>
+            <div class="kpi-value">${r?.ok ? `<span class="badge ok"><i data-lucide="check"></i> En ligne</span>` : `<span class="badge err"><i data-lucide="x"></i> Hors ligne</span>`}</div>
+            <div class="kpi-sub">${r?.url ? esc(r.url) : ''}</div>
+            <div class="kpi-sub">${r?.latency_ms != null ? r.latency_ms + ' ms' : ''} ${r?.status_code ? '• HTTP ' + r.status_code : ''}</div>
+            ${r?.error ? `<div class="small" style="color:var(--err);margin-top:4px">${esc(r.error)}</div>` : ''}
+          </div>
+        </div>`;
+      document.getElementById('svc-cards').innerHTML = svcCard('backend',h.backend) + svcCard('frontend',h.frontend);
+      const dc = h.docker;
+      if (dc?.ok && dc.containers?.length) {
+        document.getElementById('docker-ps').innerHTML = `<table>
+          <thead><tr><th>Container</th><th>État</th><th>Statut</th></tr></thead>
+          <tbody>${dc.containers.map(c=>`<tr>
+            <td><code>${esc(c.name)}</code></td>
+            <td>${c.state==='running'?`<span class="badge ok"><i data-lucide="check"></i> Running</span>`:`<span class="badge err">${esc(c.state)}</span>`}</td>
+            <td class="small">${esc(c.status)}</td>
+          </tr>`).join('')}</tbody></table>`;
+      } else {
+        document.getElementById('docker-ps').innerHTML = `<div class="small">${dc?.error ? esc(dc.error) : 'Aucun container actif ou Docker non disponible.'}</div>`;
+      }
+      icons();
+    } catch(e) {
+      document.getElementById('svc-cards').innerHTML = `<div class="alert err"><i data-lucide="alert-circle"></i><span>${esc(e.message)}</span></div>`;
+      icons();
+    }
+  }
+
+  load();
+  document.getElementById('refresh-health').onclick = load;
+  state.jobInterval = setInterval(load, 20000);
+}
+
+// ══════════════════════════════════════════════════════════
+// SETTINGS
+// ══════════════════════════════════════════════════════════
+async function renderSettings() {
+  const cfg = await api('/api/config');
+  root.innerHTML = `
+    <div class="page-header">
+      <div class="page-header-left">
+        <div class="page-title"><i data-lucide="settings-2"></i> Paramètres</div>
+        <div class="page-subtitle">Configuration de la connexion GitHub et des URLs des services locaux. Les paramètres sont stockés dans <code>config.json</code> (non versionné).</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i data-lucide="github"></i> Connexion GitHub</div></div>
+      ${hint('Pour un repo <strong>privé</strong>, créez un Personal Access Token sur <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a> avec les scopes <code>repo</code> (accès complet) et <code>workflow</code> (lecture/écriture des Actions). Le token commence par <code>ghp_</code>.')}
+      <div class="row gap-8">
+        <div class="col field">
+          <label>Propriétaire (owner)</label>
+          <input type="text" id="s-owner" value="${esc(cfg.github.owner)}" placeholder="ex: elitecapital" style="width:100%"/>
+          <div class="small mt-8">Votre nom d'utilisateur GitHub ou le nom de l'organisation.</div>
+        </div>
+        <div class="col field">
+          <label>Nom du dépôt (repo)</label>
+          <input type="text" id="s-repo" value="${esc(cfg.github.repo)}" placeholder="ex: ems-extranet" style="width:100%"/>
+        </div>
+        <div class="col field">
+          <label>Branche principale</label>
+          <input type="text" id="s-branch" value="${esc(cfg.github.branch)}" placeholder="main" style="width:100%"/>
+        </div>
+      </div>
+      <div class="field">
+        <label>Personal Access Token (PAT)</label>
+        <input type="password" id="s-pat" value="${esc(cfg.github.pat)}" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" style="width:100%; max-width:500px"/>
+        <div class="small mt-8">${cfg.github.pat_set ? `<span class="badge ok"><i data-lucide="check"></i> PAT configuré (${esc(cfg.github.pat)})</span>` : `<span class="badge err"><i data-lucide="x"></i> Aucun PAT défini — les fonctionnalités GitHub seront désactivées</span>`}. Laissez le champ masqué pour conserver la valeur actuelle.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i data-lucide="globe"></i> Services (health check)</div></div>
+      <div class="row gap-8">
+        <div class="col field">
+          <label>URL du backend</label>
+          <input type="text" id="s-backend" value="${esc(cfg.services.backend_url)}" style="width:100%"/>
+          <div class="small mt-8">Port par défaut : 8000</div>
+        </div>
+        <div class="col field">
+          <label>URL du frontend</label>
+          <input type="text" id="s-frontend" value="${esc(cfg.services.frontend_url)}" style="width:100%"/>
+          <div class="small mt-8">Port par défaut : 5173 (Vite dev)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title"><i data-lucide="folder"></i> Chemins détectés</div></div>
+      <table>
+        <tr><td class="small">Racine du projet</td><td><code>${esc(cfg.paths.project_root)}</code></td></tr>
+        <tr><td class="small">Dossier backups</td><td><code>${esc(cfg.paths.backups_dir)}</code></td></tr>
+      </table>
+    </div>
+
+    <button class="btn" id="save-cfg"><i data-lucide="save"></i> Enregistrer les paramètres</button>
+  `;
+
+  document.getElementById('save-cfg').onclick = async () => {
+    try {
+      await api('/api/config',{method:'PUT',body:{
+        github:{
+          owner: document.getElementById('s-owner').value.trim(),
+          repo: document.getElementById('s-repo').value.trim(),
+          branch: document.getElementById('s-branch').value.trim()||'main',
+          pat: document.getElementById('s-pat').value,
+        },
+        services:{
+          backend_url: document.getElementById('s-backend').value.trim(),
+          frontend_url: document.getElementById('s-frontend').value.trim(),
+        },
+      }});
+      toast('Paramètres enregistrés');
+      renderSettings();
+    } catch(e) { toast(e.message,'err'); }
+  };
+}
+
+// ──────────────────────────────────────────────────────────
+// Init
+// ──────────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>

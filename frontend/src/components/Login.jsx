@@ -52,8 +52,8 @@ export default function Login(){
       {!showEmail ? (
         <div className="card" style={{maxWidth:480,margin:'0 auto',marginBottom:24}}>
           <h2>Connexion par matricule</h2>
-          <form onSubmit={submit} style={{display:'grid',gap:8}}>
-            <input className="input" placeholder="Matricule" value={matricule} onChange={e=>setMatricule(e.target.value)} />
+          <form onSubmit={submit} style={{display:'grid',gap:8}} autoComplete="off">
+            <input className="input" placeholder="Matricule" value={matricule} onChange={e=>setMatricule(e.target.value)} autoComplete="off" />
             <div style={{position:'relative'}}>
               <input
                 className="input"
@@ -62,6 +62,7 @@ export default function Login(){
                 onChange={e=>setPassword(e.target.value)}
                 type={showPassword ? "text" : "password"}
                 style={{paddingRight:32}}
+                autoComplete="new-password"
               />
               <button
                 type="button"

@@ -8,4 +8,4 @@ if ($running -notmatch "frontend") {
         try { $r=Invoke-WebRequest -Uri "http://localhost:5173" -TimeoutSec 2 -UseBasicParsing -EA Stop; if ($r.StatusCode -eq 200){break} } catch {}
     }
 }
-Start-Process "http://localhost:5173"
+Start-Process "http://localhost:5173/login"

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import api from '../services/api'
-import { Settings, Building2, GitBranch, LayoutGrid, Briefcase, Plus, Pencil, Trash2, X, Users } from 'lucide-react'
+import { Settings, Building2, GitBranch, LayoutGrid, Briefcase, Plus, Pencil, Trash2, X, Users, Activity, ExternalLink, RefreshCw } from 'lucide-react'
 import OrgChart from './OrgChart'
 import { useAuth } from '../contexts/AuthContext'
 import { confirmDialog } from '../components/ui/bridge'
@@ -28,6 +28,28 @@ export default function Administration() {
   const [openDirectionDepartements, setOpenDirectionDepartements] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const isAdmin = role === 'ADMIN'
+  const [ciStatus, setCiStatus] = useState(null)
+  const [ciLoading, setCiLoading] = useState(false)
+
+  const loadCiStatus = async () => {
+    setCiLoading(true)
+    try {
+      const { data } = await api.get('/api/admin/ci-status')
+      setCiStatus(data)
+    } catch (e) {
+      setCiStatus({ error: e?.response?.data?.detail || 'Erreur lors du chargement du statut CI' })
+    } finally {
+      setCiLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (isAdmin && activeTab === 'ci' && !ciStatus) {
+      loadCiStatus()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, activeTab])
   const [success, setSuccess] = useState('')
   const [rolesData, setRolesData] = useState([])
 
@@ -512,6 +534,14 @@ export default function Administration() {
         >
           <Users size={15}/> {"Organigramme"}
         </button>
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab('ci')}
+            style={{ background: activeTab === 'ci' ? '#ce2b2b' : 'white', color: activeTab === 'ci' ? 'white' : '#021630', padding: '7px 12px', borderRadius: '6px 6px 0px 0px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '0.82rem', display:'inline-flex', alignItems:'center', gap:6 }}
+          >
+            <Activity size={15}/> {"CI/CD"}
+          </button>
+        )}
       </div>
 
       {loading && <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>{"Chargement..."}</div>}
@@ -896,6 +926,93 @@ export default function Administration() {
       {activeTab === 'organigramme' && !loading && (
         <div>
           <OrgChart />
+        </div>
+      )}
+
+      {/* CI/CD Tab (ADMIN uniquement) */}
+      {activeTab === 'ci' && isAdmin && (
+        <div>
+          <div className="card" style={{ padding: 16, marginBottom: 12 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#021630', display:'flex', alignItems:'center', gap: 8 }}>
+                <Activity size={18}/> {"Statut du pipeline CI/CD"}
+              </div>
+              <button
+                onClick={loadCiStatus}
+                disabled={ciLoading}
+                style={{ background:'white', border:'1px solid #ccc', borderRadius: 6, padding:'6px 10px', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:6, fontSize:'0.8rem' }}
+              >
+                <RefreshCw size={13} className={ciLoading ? 'spin' : ''}/> {"Actualiser"}
+              </button>
+            </div>
+
+            {ciLoading && <div style={{ color:'#666', padding: 12 }}>{"Chargement..."}</div>}
+
+            {!ciLoading && ciStatus?.error && (
+              <div style={{ background:'#fef2f2', border:'1px solid #fecaca', color:'#991b1b', padding: 12, borderRadius: 6, fontSize:'0.85rem' }}>
+                {ciStatus.error}
+              </div>
+            )}
+
+            {!ciLoading && ciStatus && !ciStatus.error && !ciStatus.configured && (
+              <div style={{ background:'#fffbeb', border:'1px solid #fde68a', color:'#92400e', padding: 12, borderRadius: 6, fontSize:'0.85rem' }}>
+                {ciStatus.message || "Configuration GitHub manquante."}
+                <div style={{ marginTop: 6, fontSize:'0.78rem', color:'#78350f' }}>
+                  {"Variables à définir côté backend : GITHUB_OWNER, GITHUB_REPO, GITHUB_PAT"}
+                </div>
+              </div>
+            )}
+
+            {!ciLoading && ciStatus?.configured && !ciStatus.has_run && (
+              <div style={{ color:'#666', fontSize:'0.85rem' }}>{"Aucune exécution du workflow CI pour le moment."}</div>
+            )}
+
+            {!ciLoading && ciStatus?.configured && ciStatus.has_run && (() => {
+              const conc = ciStatus.conclusion || ciStatus.status
+              const isSuccess = conc === 'success'
+              const isFailure = conc === 'failure' || conc === 'cancelled' || conc === 'timed_out'
+              const isRunning = ciStatus.status === 'in_progress' || ciStatus.status === 'queued' || ciStatus.status === 'waiting'
+              const bg = isSuccess ? '#dcfce7' : isFailure ? '#fee2e2' : isRunning ? '#fef3c7' : '#f1f5f9'
+              const fg = isSuccess ? '#166534' : isFailure ? '#991b1b' : isRunning ? '#92400e' : '#334155'
+              const label = isSuccess ? 'Succès' : isFailure ? 'Échec' : isRunning ? 'En cours' : (conc || '—')
+              return (
+                <div>
+                  <div style={{ display:'flex', gap: 12, flexWrap:'wrap', alignItems:'center' }}>
+                    <span style={{ background: bg, color: fg, padding:'6px 12px', borderRadius: 999, fontWeight: 700, fontSize:'0.82rem' }}>
+                      {label}
+                    </span>
+                    <span style={{ fontSize:'0.85rem', color:'#021630' }}>
+                      <strong>{ciStatus.name || 'CI'}</strong>{" sur "}<code style={{ background:'#f1f5f9', padding:'2px 6px', borderRadius: 4 }}>{ciStatus.head_branch || '—'}</code>
+                    </span>
+                    <span style={{ fontSize:'0.82rem', color:'#64748b' }}>
+                      {"par "}{ciStatus.actor || '—'}
+                    </span>
+                    <span style={{ fontSize:'0.82rem', color:'#64748b' }}>
+                      {ciStatus.created_at ? new Date(ciStatus.created_at).toLocaleString('fr-FR') : '—'}
+                    </span>
+                  </div>
+                </div>
+              )
+            })()}
+
+            <div style={{ display:'flex', gap: 8, marginTop: 14, flexWrap:'wrap' }}>
+              {ciStatus?.html_url && (
+                <a href={ciStatus.html_url} target="_blank" rel="noopener noreferrer" style={{ background:'#021630', color:'white', padding:'8px 12px', borderRadius: 6, textDecoration:'none', fontSize:'0.82rem', display:'inline-flex', alignItems:'center', gap:6 }}>
+                  <ExternalLink size={13}/> {"Voir ce run"}
+                </a>
+              )}
+              {ciStatus?.actions_url && (
+                <a href={ciStatus.actions_url} target="_blank" rel="noopener noreferrer" style={{ background:'white', color:'#021630', border:'1px solid #021630', padding:'8px 12px', borderRadius: 6, textDecoration:'none', fontSize:'0.82rem', display:'inline-flex', alignItems:'center', gap:6 }}>
+                  <ExternalLink size={13}/> {"GitHub Actions"}
+                </a>
+              )}
+            </div>
+          </div>
+
+          <div className="card" style={{ padding: 14, fontSize:'0.85rem', color:'#334155' }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>{"Gestion avancée CI/CD, backups et déploiements"}</div>
+            <div>{"Pour le pipeline complet (versioning, releases, backups manuels, tests E2E, rollback), utilisez l'application locale "}<strong>{"DevOps Manager"}</strong>{" située dans "}<code>{"extranet/devops-manager/"}</code>{". Lancez "}<code>{"start.bat"}</code>{" puis ouvrez "}<code>{"http://localhost:9000"}</code>{"."}</div>
+          </div>
         </div>
       )}
     </div>
