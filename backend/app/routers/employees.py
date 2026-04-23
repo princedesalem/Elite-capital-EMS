@@ -299,6 +299,31 @@ def _check_authenticated(request: Request):
         raise HTTPException(status_code=401, detail='Token invalide')
 
 
+def _auto_fill_org_head(db: Session, employe: models.Employe) -> None:
+    """Quand un employé est créé ou mis à jour avec le rôle DIRECTEUR ou RESPONSABLE,
+    remplir automatiquement DIRECTION.id_directeur ou DEPARTEMENT.id_responsable."""
+    if not employe.id_role:
+        return
+    role = db.query(models.Role).filter(models.Role.id == employe.id_role).first()
+    if not role:
+        return
+    role_name = (role.name or '').strip().upper()
+    if role_name == 'DIRECTEUR' and employe.id_direction:
+        direction = db.query(models.Direction).filter(
+            models.Direction.id_direction == employe.id_direction
+        ).first()
+        if direction:
+            direction.id_directeur = employe.matricule
+            db.commit()
+    elif role_name == 'RESPONSABLE' and employe.dept_id:
+        dept = db.query(models.Departement).filter(
+            models.Departement.dept_id == employe.dept_id
+        ).first()
+        if dept:
+            dept.id_responsable = employe.matricule
+            db.commit()
+
+
 def _check_admin_role(request: Request, allowed_roles=['RH', 'DG', 'PCA', 'ADMIN', 'AG']):
     """Vérifier que l'utilisateur a un rôle administrateur autorisé"""
     auth = request.headers.get('authorization')
@@ -791,6 +816,7 @@ def create_employee(
         if 'email' in msg.lower():
             raise HTTPException(status_code=400, detail='Email existe déjà')
         raise HTTPException(status_code=400, detail='Erreur de sauvegarde')
+    _auto_fill_org_head(db, created)
     _notify_admin_employee_creation(db, created, creator_role, creator_matricule, background_tasks)
     log_action(db, creator_matricule, 'EMPLOYEE_CREATED', 'employe', created.matricule, {'nom': data.get('nom'), 'prenom': data.get('prenom')}, ip_address=request.client.host if request.client else None)
     return _serialize_employee(created, db)
@@ -828,7 +854,8 @@ def import_employees(
             if crud.get_employe(db, data.get('matricule')):
                 raise HTTPException(status_code=400, detail='Matricule existe')
 
-            crud.create_employe(db, data)
+            created_import = crud.create_employe(db, data)
+            _auto_fill_org_head(db, created_import)
             imported += 1
         except Exception as exc:
             db.rollback()
@@ -1069,6 +1096,7 @@ def update_employee(matricule: str, payload: schemas.EmployeBase, request: Reque
         except Exception:
             # Ne jamais bloquer la mise à jour employé en cas d'échec d'historisation
             db.rollback()
+    _auto_fill_org_head(db, e)
     _notify_admin_employee_update(db, before_notif_snapshot, e, actor_role, actor_matricule)
     return _serialize_employee(e, db)
 
