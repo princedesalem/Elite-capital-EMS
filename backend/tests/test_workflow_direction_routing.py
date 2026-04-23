@@ -360,3 +360,124 @@ def test_dept_avec_direction_sequence_contient_directeur_regression(db_session, 
     # Vérifier l'ordre : DIRECTEUR avant RH avant DG
     assert sequence.index('DIRECTEUR') < sequence.index('RH')
     assert sequence.index('RH') < sequence.index('DG')
+
+
+# ---------------------------------------------------------------------------
+# Tests — Bug 3 : direction.id_directeur NULL → utiliser n1 si DIRECTEUR
+# ---------------------------------------------------------------------------
+
+def test_direction_sans_id_directeur_utilise_n1_si_directeur(db_session, org_two_directions):
+    """Scénario Samuel Ngoula / Ivan Rudie :
+    La Direction du département n'a pas d'id_directeur configuré. L'employé a un
+    n1 qui est un DIRECTEUR → le routage doit utiliser le n1 plutôt qu'un
+    directeur arbitraire de la même entité.
+    """
+    data = org_two_directions
+
+    # Direction C sans id_directeur
+    direction_C = models.Direction(
+        nom='Direction Sans Directeur',
+        id_entite=data['entite'].id_entite,
+        id_directeur=None,
+    )
+    db_session.add(direction_C)
+    db_session.flush()
+
+    # Responsable de dept_D
+    resp_D = _add_employe(
+        db_session, 2050, data['roles']['RESPONSABLE'].id,
+        dept_id=None, id_direction=direction_C.id_direction,
+        id_entite=data['entite'].id_entite,
+    )
+
+    # Le "vrai" directeur de l'équipe (mais pas configuré sur Direction.id_directeur)
+    vrai_directeur = _add_employe(
+        db_session, 3030, data['roles']['DIRECTEUR'].id,
+        dept_id=None, id_direction=direction_C.id_direction,
+        id_entite=data['entite'].id_entite,
+    )
+
+    dept_D = models.Departement(
+        nom='Projets Sans Directeur',
+        id_entite=data['entite'].id_entite,
+        id_direction=direction_C.id_direction,
+        id_responsable=resp_D.matricule,
+    )
+    db_session.add(dept_D)
+    db_session.flush()
+
+    # Employé avec n1 = vrai_directeur (3030)
+    emp = _add_employe(
+        db_session, 1060, data['roles']['EMPLOYE'].id,
+        dept_id=dept_D.dept_id,
+        id_direction=direction_C.id_direction,
+        id_entite=data['entite'].id_entite,
+    )
+    emp.n1 = vrai_directeur.matricule
+    db_session.commit()
+
+    validateur = obtenir_validateur_pour_role(emp, 'DIRECTEUR', db_session)
+
+    assert validateur == vrai_directeur.matricule, (
+        f"Quand direction.id_directeur est NULL, on doit utiliser employe.n1 "
+        f"(matricule {vrai_directeur.matricule}) et non un autre DIRECTEUR aléatoire "
+        f"de l'entité. Reçu: {validateur}"
+    )
+    # Explicitement : ne pas retomber sur directeur_A ou directeur_B
+    assert validateur != data['directeur_A'].matricule
+    assert validateur != data['directeur_B'].matricule
+
+
+def test_direction_id_directeur_prioritaire_sur_n1(db_session, org_two_directions):
+    """Non-régression : si direction.id_directeur est configuré, il est prioritaire
+    sur le n1 de l'employé (même si les deux diffèrent).
+    """
+    data = org_two_directions
+
+    # Employé avec n1 = directeur_B mais dept rattaché à direction_A
+    emp = _add_employe(
+        db_session, 1070, data['roles']['EMPLOYE'].id,
+        dept_id=data['dept_A'].dept_id,
+        id_direction=data['direction_A'].id_direction,
+        id_entite=data['entite'].id_entite,
+    )
+    emp.n1 = data['directeur_B'].matricule
+    db_session.commit()
+
+    validateur = obtenir_validateur_pour_role(emp, 'DIRECTEUR', db_session)
+
+    # direction_A.id_directeur est configuré → prioritaire
+    assert validateur == data['directeur_A'].matricule, (
+        f"direction.id_directeur doit primer sur employe.n1. Reçu: {validateur}"
+    )
+
+
+def test_direction_sans_id_directeur_n1_non_directeur_fallback_entite(db_session, org_two_directions):
+    """Si direction.id_directeur est NULL ET que le n1 n'est pas DIRECTEUR,
+    tomber sur le fallback 'n'importe quel directeur de l'entité'.
+    """
+    data = org_two_directions
+
+    direction_E = models.Direction(
+        nom='Direction E',
+        id_entite=data['entite'].id_entite,
+        id_directeur=None,
+    )
+    db_session.add(direction_E)
+    db_session.flush()
+
+    # n1 = un RESPONSABLE (pas un DIRECTEUR)
+    emp = _add_employe(
+        db_session, 1080, data['roles']['EMPLOYE'].id,
+        dept_id=None,
+        id_direction=direction_E.id_direction,
+        id_entite=data['entite'].id_entite,
+    )
+    emp.n1 = data['responsable_A'].matricule  # n1 est RESPONSABLE, pas DIRECTEUR
+    db_session.commit()
+
+    validateur = obtenir_validateur_pour_role(emp, 'DIRECTEUR', db_session)
+
+    # Fallback → un directeur de l'entité (directeur_A ou directeur_B)
+    assert validateur in (data['directeur_A'].matricule, data['directeur_B'].matricule)
+    assert validateur != data['responsable_A'].matricule  # pas un responsable

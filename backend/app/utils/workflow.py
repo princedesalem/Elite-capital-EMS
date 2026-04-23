@@ -242,6 +242,16 @@ def obtenir_validateur_pour_role(
             if direction and direction.id_directeur:
                 return direction.id_directeur
 
+        # PRIORITÉ 3 : si la direction n'a pas d'id_directeur configuré,
+        # essayer le N+1 de l'employé s'il a lui-même le rôle DIRECTEUR.
+        # Garantit qu'un employé rattaché hiérarchiquement à son directeur via
+        # n1 va bien voir ses demandes routées vers ce directeur, même quand
+        # DIRECTION.id_directeur n'a pas encore été renseigné.
+        if employe.n1:
+            n1_role = obtenir_role_validateur(employe.n1, db)
+            if n1_role == 'DIRECTEUR':
+                return employe.n1
+
         # Fallback: un directeur de la même entité
         role_obj = db.query(Role).filter(Role.name == 'DIRECTEUR').first()
         if role_obj and employe.id_entite:
