@@ -154,8 +154,17 @@ export function AuthProvider({children}){
     navigate('/login')
   }
 
+  function silentLogout(){
+    localStorage.removeItem('ec_token')
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('session_id')
+    localStorage.removeItem('session_date')
+    setUser(null)
+    setSessionId(null)
+  }
+
   return (
-    <AuthContext.Provider value={{user,login,loginWithToken,logout,sessionId}}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{user,login,loginWithToken,logout,silentLogout,sessionId}}>{children}</AuthContext.Provider>
   )
 }
 

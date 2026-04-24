@@ -2499,7 +2499,8 @@ export default function Operations() {
                     <div style={{background: '#e0f2fe', padding: '10px', borderRadius: '6px', marginBottom: '15px', border: '1px solid #0ea5e9', fontSize: '0.9rem'}}>
                       ℹ️ Vous pouvez modifier vos missions tant qu'elles ne sont pas clôturées
                     </div>
-                    <table style={{width: '100%', borderCollapse: 'collapse'}}>
+                    <div style={{width:'100%', overflowX:'auto', WebkitOverflowScrolling:'touch'}}>
+                    <table style={{width: '100%', borderCollapse: 'collapse', minWidth: '760px'}}>
                       <thead>
                         <tr style={{borderBottom: '2px solid #e5e7eb'}}>
                           <th style={{padding: '10px', textAlign: 'left'}}>ID</th>
@@ -2513,7 +2514,7 @@ export default function Operations() {
                       <tbody>
                         {missions.filter(m => m.matricule === matricule && !missionStatuts[m.id_operation]?.statut_cloture).map(mission => {
                           const statutPaiement = statutsPaiementFrais[mission.id_operation] || {}
-                          const estRH = employe && employe.fonction && employe.fonction.toUpperCase().includes('RH')
+                          const estRH = ['RH', 'ADMIN'].includes(roleUtilisateur) || (employe && employe.fonction && employe.fonction.toUpperCase().includes('RH'))
                           
                           return (
                           <tr key={mission.id_operation} style={{borderBottom: '1px solid var(--border)'}}>
@@ -2631,6 +2632,7 @@ export default function Operations() {
                         )})}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 )}
                 {renderListesDemandes('Mission', 'mission')}
@@ -3312,7 +3314,8 @@ function PaginatedEnvoyeList({ items, typeFiltre, typeLabel, setSelectedOperatio
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              gap: '10px'
+              gap: '10px',
+              flexWrap: 'wrap'
             }}
           >
             <div style={{ display: 'grid', gap: '4px' }}>
@@ -3357,7 +3360,8 @@ function PaginatedRecuList({ items, typeFiltre, typeLabel, roleUtilisateur, setS
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                gap: '10px'
+                gap: '10px',
+                flexWrap: 'wrap'
               }}
             >
               <div style={{ display: 'grid', gap: '4px' }}>

@@ -830,7 +830,10 @@ export default function MissionsPage() {
           {isMissionnaire && isValid && etat === 'AttenteRH' && <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente RH</span>}
           {isMissionnaire && isValid && etat === 'Active' && <button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer'}</button>}
           {estRh && isValid && etat === 'AttenteRH' && <button onClick={(e) => { e.stopPropagation(); handleActiverRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer (RH)'}</button>}
-          {estRh && isValid && etat === 'Active' && <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer (RH)'}</button>}
+          {estRh && isValid && (etat === 'Active' || etat === 'ClotureDemandee') && <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer (RH)'}</button>}
+          {estRh && isValid && (() => { const p = statutsPaiementFrais[id]; return p && p.frais_valides_missionnaire && !p.frais_payes })() && (
+            <button onClick={(e) => { e.stopPropagation(); validerPaiementRH(id) }} style={btnStyle({ ...okBtn, background: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)', border: '1.5px solid #1d4ed8' })} disabled={isLoading} title="Confirmer le paiement des frais">{isLoading ? '…' : 'Confirmer paiement'}</button>
+          )}
           {pdfBtn}{eyeBtn}{remplacantBtn}
         </div>
       )
@@ -861,7 +864,9 @@ export default function MissionsPage() {
     }
 
     if (etat === 'ClotureDemandee') {
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente confirmation RH</span>{pdfBtn}{eyeBtn}{remplacantBtn}</div>
+      const p = statutsPaiementFrais[id]
+      const besoinPaiement = p && p.frais_valides_missionnaire && !p.frais_payes
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{estRh && besoinPaiement && <button onClick={(e) => { e.stopPropagation(); validerPaiementRH(id) }} style={btnStyle({ ...okBtn, background: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)', border: '1.5px solid #1d4ed8' })} disabled={isLoading} title="Confirmer le paiement des frais">{isLoading ? '…' : 'Confirmer paiement'}</button>}<span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente confirmation RH</span>{pdfBtn}{eyeBtn}{remplacantBtn}</div>
     }
 
     return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{pdfBtn}{eyeBtn}{remplacantBtn}</div>

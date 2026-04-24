@@ -1,9 +1,25 @@
+// Bumped: 2026-04-23 — force clients to take the latest assets and purge any
+// stale Cache Storage entries (mobile PWA install).
+const SW_VERSION = '2026-04-23-mobile-ui'
+
 self.addEventListener('install', (event) => {
   self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim())
+  event.waitUntil((async () => {
+    try {
+      const keys = await caches.keys()
+      await Promise.all(keys.map((k) => caches.delete(k)))
+    } catch {}
+    await self.clients.claim()
+    try {
+      const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      clientsList.forEach((client) => {
+        try { client.postMessage({ type: 'SW_UPDATED', version: SW_VERSION }) } catch {}
+      })
+    } catch {}
+  })())
 })
 
 self.addEventListener('push', (event) => {

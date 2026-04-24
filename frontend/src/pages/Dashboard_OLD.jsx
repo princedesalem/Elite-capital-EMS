@@ -103,7 +103,7 @@ export default function Dashboard(){
         <>
           {/* CARTE IDENTITÉ EN HAUT */}
           <div className="card" style={{
-            background: 'linear-gradient(135deg, #021630 0%, #ce2b2b 100%)',
+            background: 'linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%)',
             color: 'white',
             marginBottom: '30px',
             padding: '30px'

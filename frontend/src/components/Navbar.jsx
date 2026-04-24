@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import {Link, NavLink, useLocation} from 'react-router-dom'
-import { Bell } from 'lucide-react'
+import { Bell, LogOut } from 'lucide-react'
 import {useAuth} from '../contexts/AuthContext'
 import api from '../services/api'
 import AvatarCircle from './AvatarCircle'
@@ -225,13 +225,22 @@ export default function Navbar(){
     }
   }, [user?.matricule, user?.sub, location.pathname])
 
+  if (location.pathname === '/login') return null
+
   return (
     <>
     <div className="nav">
-      <div style={{display:'flex',alignItems:'center',gap:16}}>
-        <div style={{fontSize:'1rem',fontWeight:'800',letterSpacing:'0.02em'}}>ELITE CAPITAL EMS</div>
+      <div style={{display:'flex',alignItems:'center',gap:16,minWidth:0,flex:'1 1 auto'}}>
+        {/* Mobile: leave space for hamburger (36px) rendered by RHLayout */}
+        <div
+          className="nav-brand"
+          style={{fontSize:'1rem',fontWeight:'800',letterSpacing:'0.02em',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}
+        >
+          <span className="hide-on-mobile">ELITE CAPITAL EMS</span>
+          <span className="show-on-mobile">EMS</span>
+        </div>
         {user && (
-          <div style={{display:'flex', alignItems:'center', gap:8}}>
+          <div className="hide-on-mobile" style={{display:'flex', alignItems:'center', gap:8}}>
             <NavLink to="/rh/home" style={topNavLinkStyle}>Accueil</NavLink>
             <NavLink to="/rh/dashboard" style={topNavLinkStyle}>Dashboard</NavLink>
             <NavLink to="/rh/organisation" style={topNavLinkStyle}>Organisation</NavLink>
@@ -250,9 +259,9 @@ export default function Navbar(){
                 width: 34,
                 height: 34,
                 borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.22)',
-                background: 'rgba(255,255,255,0.08)',
-                color: '#fff',
+                  border: '1px solid rgba(2,22,46,0.18)',
+                  background: 'rgba(255,255,255,0.7)',
+                  color: '#02162e',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -270,7 +279,7 @@ export default function Navbar(){
                     height: 18,
                     padding: '0 5px',
                     borderRadius: 999,
-                    background: '#f97316',
+                    background: '#d0202b',
                     color: '#fff',
                     fontSize: '0.64rem',
                     fontWeight: 800,
@@ -284,19 +293,30 @@ export default function Navbar(){
                 </span>
               )}
             </Link>
-            <Link to="/rh/profile" style={{color:'rgba(255,255,255,0.75)',fontSize:'0.8rem',textDecoration:'none',display:'flex',alignItems:'center',gap:6}}>
+            <Link to="/rh/profile" style={{color:'#02162e',fontSize:'0.8rem',textDecoration:'none',display:'flex',alignItems:'center',gap:6,minWidth:0,fontWeight:600,minWidth:0}}>
               <AvatarCircle
                 photoUrl={employee?.photo_url}
                 letter={(() => { try { return String(user?.matricule || user?.sub || '?')[0].toUpperCase() } catch { return '?' } })()}
                 size={26}
                 borderWidth={1}
-                borderColor='rgba(255,255,255,0.45)'
-                textColor='rgba(255,255,255,0.95)'
-                fallbackBackground='rgba(255,255,255,0.2)'
+                borderColor='rgba(2,22,46,0.2)'
+                textColor='#02162e'
+                fallbackBackground='rgba(255,255,255,0.78)'
               />
-              {employee ? `${employee.prenom || ''} ${employee.nom || ''}`.trim() : (user?.matricule || user?.sub)} · <span style={{opacity:0.8}}>{user?.role || 'Utilisateur'}</span>
+              <span className="hide-on-mobile" style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:180}}>
+                {employee ? `${employee.prenom || ''} ${employee.nom || ''}`.trim() : (user?.matricule || user?.sub)} · <span style={{color:'rgba(2,22,46,0.78)'}}>{user?.role || 'Utilisateur'}</span>
+              </span>
             </Link>
-            <button className="button" onClick={logout} style={{padding:'5px 12px',fontSize:'0.78rem'}}>Déconnexion</button>
+            <button className="button hide-on-mobile" onClick={logout} style={{padding:'5px 12px',fontSize:'0.78rem'}}>Déconnexion</button>
+            <button
+              className="button show-on-mobile"
+              onClick={logout}
+              aria-label="Déconnexion"
+              title="Déconnexion"
+              style={{padding:'6px 8px',fontSize:'0.78rem',alignItems:'center',justifyContent:'center',minHeight:32}}
+            >
+              <LogOut size={16} />
+            </button>
           </>
         ) : (
           <Link to="/login" style={{color:'rgba(255,255,255,0.9)',textDecoration:'none',fontSize:'0.82rem'}}>Se connecter</Link>

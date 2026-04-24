@@ -49,12 +49,13 @@
   --section-header-bg:#1e2d42;
 }
 *{box-sizing:border-box;font-family:inherit}
-html,body,#root{height:100%;margin:0;font-family:'Century Gothic';background:var(--bg);color:var(--text)}
+html{background:#02162e}
+body,#root{height:100%;margin:0;font-family:'Century Gothic','Avant Garde',Avantgarde,AppleGothic,'URW Gothic L',sans-serif;background:var(--bg);color:var(--text)}
 input,button,select,textarea,option{font-family:inherit}
 body{padding-top:50px}
 .container{max-width:1100px;margin:20px auto;padding:16px}
 .card{background:var(--card);border-radius:6px;box-shadow:0 1px 2px rgba(16,24,40,0.06);padding:14px;border:1px solid var(--border)}
-.nav{position:fixed;top:0;left:0;right:0;z-index:9999;display:flex;justify-content:space-between;align-items:center;padding:6px 16px;height:50px;background:linear-gradient(90deg,var(--bleu),var(--rouge));color:white;box-shadow:0 2px 8px rgba(0,0,0,0.15)}
+.nav{position:fixed;top:0;left:0;right:0;z-index:9999;display:flex;justify-content:space-between;align-items:center;padding:6px 16px;height:50px;background:linear-gradient(90deg,#02162e 0%,#02162e 45%,#d0daea 75%,#ffffff 100%);color:white;box-shadow:0 2px 8px rgba(0,0,0,0.15)}
 .nav a{color:rgba(255,255,255,0.9);margin-right:10px;text-decoration:none;font-size:0.85rem}
 .button{background:var(--rouge);color:white;padding:6px 12px;border-radius:5px;border:none;cursor:pointer;font-size:0.82rem;font-weight:600}
 .button:hover{filter:brightness(.9)}
@@ -87,8 +88,78 @@ label{color:var(--text-secondary);font-weight:600;font-size:0.8rem}
 /* Mobile sidebar overlay */
 .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:998;display:none}
 .sidebar-overlay.active{display:block}
+
+/* Hide on mobile / show on mobile helpers */
+.hide-on-mobile{display:initial}
+.show-on-mobile{display:none}
+
+/* Responsive tables: make wide tables horizontally scrollable */
+.table-responsive{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:6px}
+
+/* Better touch feedback */
+@media(hover:none){
+  .button:hover,.icon-action-button:hover{filter:none;transform:none;box-shadow:0 8px 20px rgba(2,22,46,0.08)}
+}
+
 @media(max-width:768px){
-  .container{padding:10px}
+  body{padding-top:50px;-webkit-text-size-adjust:100%}
+  .container{padding:12px;margin:12px auto}
   .sidebar-mobile-hidden{display:none!important}
-  .form-row{flex-direction:column}
+  .form-row{flex-direction:column;gap:10px}
+  .hide-on-mobile{display:none!important}
+  .show-on-mobile{display:initial!important}
+
+  /* Login: stack panels vertically, reduce paddings */
+  .login-wrap{padding:12px 10px !important}
+  .login-card{flex-direction:column !important;max-width:100% !important;border-radius:14px !important}
+  .login-brand{flex:0 0 auto !important;padding:22px 20px !important}
+  .login-brand h1{font-size:18px !important;margin-bottom:6px !important}
+  .login-brand p{margin-bottom:14px !important;font-size:13px !important}
+  .login-form-panel{padding:22px 20px !important}
+
+  /* Navbar compact */
+  .nav{padding:6px 10px;gap:8px}
+  .nav a{margin-right:6px;font-size:0.8rem}
+  .nav-brand{padding-left:44px}
+
+  /* Cards softer/more compact */
+  .card{padding:12px;border-radius:10px}
+
+  /* Inputs: larger tap target, prevent iOS zoom */
+  .input,input,select,textarea{font-size:16px !important}
+  .input{padding:10px 12px;border-radius:8px}
+
+  /* Buttons: larger tap area */
+  .button{padding:9px 14px;border-radius:8px;font-size:0.88rem;min-height:40px}
+  .icon-action-button{width:42px;height:42px}
+
+  /* Tables: allow horizontal scroll + slightly bigger font for readability */
+  .table{font-size:0.78rem;min-width:520px}
+  .table th,.table td{padding:8px 10px;white-space:nowrap}
+  /* Any form-card containing a wide child scrolls horizontally on mobile */
+  .form-card{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  /* Any direct parent of a .table becomes horizontally scrollable */
+  *:has(> .table),*:has(> table.table){overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+  /* Container used by pages must also allow horizontal overflow */
+  .container,.card{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+  /* Headings */
+  h2{font-size:1.15rem;margin:0 0 10px 0}
+  h3{font-size:1rem}
+
+  /* Floating menus full width for thumb reach */
+  .floating-menu{min-width:200px;max-width:calc(100vw - 24px)}
+  .floating-submenu{position:static;margin-top:4px;min-width:unset;box-shadow:none;border:none;padding:0 0 0 12px}
+
+  /* Generic modal/dialog: ensure it fits screen */
+  [role="dialog"]>div,.modal,.modal-content{max-width:calc(100vw - 16px) !important}
+
+  /* Safe-area for notched phones */
+  .nav{padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right))}
+}
+
+@media(max-width:480px){
+  .container{padding:10px;margin:8px auto}
+  h2{font-size:1.05rem}
+  .nav{font-size:0.8rem}
 }

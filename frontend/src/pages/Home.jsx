@@ -441,7 +441,7 @@ export default function Home() {
       {/* Hero Banner */}
       <div
         style={{
-          background: 'linear-gradient(90deg, #021630 0%, #ce2b2b 100%)',
+          background: 'linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%)',
           color: 'white',
           padding: '28px 20px',
           textAlign: 'center',

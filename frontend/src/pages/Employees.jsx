@@ -607,7 +607,7 @@ export default function Employees(){
           }} onClick={(e) => e.stopPropagation()}>
             {/* En-tête */}
             <div style={{
-              background: 'linear-gradient(135deg, #021630 0%, #ce2b2b 100%)',
+              background: 'linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%)',
               color: 'white',
               padding: '20px',
               borderRadius: '12px 12px 0 0',

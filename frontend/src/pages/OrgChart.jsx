@@ -529,7 +529,7 @@ export default function OrgChart() {
       <style>{CSS}</style>
 
       {/* Header */}
-      <div style={{ background: `linear-gradient(90deg, ${DARK} 0%, #112033 100%)`, color: 'white', padding: '14px 18px', borderRadius: 10, marginBottom: 10 }}>
+      <div style={{ background: 'linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%)', color: 'white', padding: '14px 18px', borderRadius: 10, marginBottom: 10 }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
           <div>
             <h1 style={{ margin:0, fontSize:'1.1rem', fontWeight:800, display:'flex', alignItems:'center', gap:7 }}>
