@@ -77,7 +77,7 @@ def creer_mission(
 def televerser_rapport_mission(
     id_operation: int,
     rapport: str,
-    matricule: int,
+    matricule: str,
     db: Session
 ) -> Tuple[bool, str]:
     """
@@ -150,7 +150,7 @@ def verifier_rapport_mission(
 
 def creer_demande_frais(
     id_operation: int,
-    matricule: int,
+    matricule: str,
     frais_transport_voyage: Decimal,
     frais_hotel: Decimal,
     frais_deplacement: Decimal,
@@ -249,10 +249,11 @@ def creer_demande_frais(
     if prochain_matricule:
         _emp = db.query(Employe).filter(Employe.matricule == matricule).first()
         _nom_emp = f"{_emp.prenom} {_emp.nom}" if _emp else f"l'employé #{matricule}"
-        notifications.creer_notification(
+        notifications.notifier_prochain_validateur(
+            role=prochain_role,
             matricule=prochain_matricule,
             type_notification='VALIDATION',
-            titre='Nouvelle demande de frais de mission',
+            titre='Une nouvelle demande de frais de mission',
             message=f"{_nom_emp} a soumis une demande de frais de mission ({total_frais} FCFA) pour la mission de {mission.ville or mission.pays or 'destination'}.",
             id_operation=operation_frais.id_operation,
             db=db
@@ -606,7 +607,7 @@ def verifier_relances_rapport_mission(db: Session):
 def envoyer_relance_rapport(
     db: Session,
     mission: Mission,
-    matricules_missionnaires: List[int],
+    matricules_missionnaires: List[str],
     noms_missionnaires: List[str],
     type_relance: str,
     numero_relance: str,
@@ -658,7 +659,7 @@ def envoyer_relance_rapport(
 def escalader_vers_rh_ig(
     db: Session,
     mission: Mission,
-    matricules_missionnaires: List[int],
+    matricules_missionnaires: List[str],
     noms_missionnaires: List[str],
     operation: Operation
 ):

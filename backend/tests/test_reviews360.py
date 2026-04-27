@@ -59,8 +59,8 @@ def test_create_review(client):
     resp = client.post('/api/performance-reviews', json=_review_payload())
     assert resp.status_code == 200
     data = resp.json()
-    assert data['reviewer_id'] == 1001
-    assert data['reviewee_id'] == 2001
+    assert data['reviewer_id'] == '1001'
+    assert data['reviewee_id'] == '2001'
     assert data['scores'] == [4.0, 3.5, 5.0]
     assert data['points_forts'] == 'Rigueur'
 

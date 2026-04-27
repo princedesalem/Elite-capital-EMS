@@ -92,13 +92,13 @@ class TestObtenir_validateur_pour_role:
         """Trouve le validateur PCA via Utilisateur.role_id"""
         employe = seed_pca_ag['employe']
         result = wf_utils.obtenir_validateur_pour_role(employe, 'PCA', db_session)
-        assert result == 6001
+        assert result == '6001'
 
     def test_trouve_validateur_ag_via_employe_fallback(self, db_session, seed_pca_ag):
         """Trouve le validateur AG via Employe.id_role fallback"""
         employe = seed_pca_ag['employe']
         result = wf_utils.obtenir_validateur_pour_role(employe, 'AG', db_session)
-        assert result == 7001
+        assert result == '7001'
 
     def test_retourne_none_si_role_inexistant(self, db_session, seed_reference_data):
         """Retourne None si aucun validateur trouvé"""

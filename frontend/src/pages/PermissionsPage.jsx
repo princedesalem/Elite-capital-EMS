@@ -57,8 +57,8 @@ const PERMISSIONS_CONVENTIONNELLES = {
   'maternelle': {
     label: 'Maternité',
     sousTypes: [
-      { value: 'simple', label: 'Congé maternité (16 semaines)', duree: 112 },
-      { value: 'pathologique', label: 'Congé maternité pathologique (18 semaines)', duree: 126 }
+      { value: 'simple', label: 'Congé maternité (14 semaines)', duree: 98 },
+      { value: 'pathologique', label: 'Congé maternité pathologique (20 semaines)', duree: 140 }
     ]
   }
 }
@@ -107,7 +107,7 @@ const DOCUMENTS_REQUIS = {
   'maternelle': {
     titre: 'Maternité',
     documents: [
-      { label: 'Maternité (16 sem = 112j / 18 sem pathologique = 126j)', doc: 'Certificat médical d\'accouchement' }
+      { label: 'Maternité (14 sem = 98j / 20 sem pathologique = 140j)', doc: 'Certificat médical d\'accouchement' }
     ],
     delai: '48h après l\'événement'
   }
@@ -978,7 +978,7 @@ export default function PermissionsPage() {
                 {peutCreerPourAutrui && (
                   <div className="form-group">
                     <label>Matricule cible (optionnel)</label>
-                    <input type="number" value={matriculeCible} onChange={(e) => setMatriculeCible(e.target.value)} placeholder="Laisser vide pour moi-même" />
+                    <input type="text" pattern="[A-Za-z0-9-]+" value={matriculeCible} onChange={(e) => setMatriculeCible(e.target.value)} placeholder="Laisser vide pour moi-même" />
                   </div>
                 )}
                 <div className="form-row">
@@ -1042,7 +1042,7 @@ export default function PermissionsPage() {
               {peutCreerPourAutrui && (
                 <div className="form-group">
                   <label>Matricule cible (optionnel)</label>
-                  <input type="number" value={matriculeCible} onChange={(e) => setMatriculeCible(e.target.value)} placeholder="Laisser vide pour moi-même" />
+                  <input type="text" pattern="[A-Za-z0-9-]+" value={matriculeCible} onChange={(e) => setMatriculeCible(e.target.value)} placeholder="Laisser vide pour moi-même" />
                 </div>
               )}
               <div className="form-row">

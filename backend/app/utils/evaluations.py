@@ -13,7 +13,7 @@ import json
 
 
 def creer_fiche_de_poste(
-    matricule: int,
+    matricule: str,
     objectifs: List[Dict],
     cree_par: int,
     db: Session
@@ -130,7 +130,7 @@ def creer_periode_evaluation(
 
 def soumettre_auto_evaluation(
     id_evaluation: int,
-    matricule: int,
+    matricule: str,
     reponses: List[Dict],
     db: Session
 ) -> Tuple[bool, str]:
@@ -188,7 +188,7 @@ def soumettre_auto_evaluation(
 
 def soumettre_evaluation_hierarchique(
     id_evaluation: int,
-    evaluateur_matricule: int,
+    evaluateur_matricule: str,
     evaluateur_role: str,
     notes: List[Dict],
     commentaire_general: Optional[str],
@@ -390,7 +390,7 @@ def obtenir_evaluation_complete(id_evaluation: int, db: Session) -> Optional[Dic
     }
 
 
-def obtenir_fiches_de_poste_employe(matricule: int, db: Session) -> List[Dict]:
+def obtenir_fiches_de_poste_employe(matricule: str, db: Session) -> List[Dict]:
     """
     Récupère toutes les fiches de poste d'un employé.
     

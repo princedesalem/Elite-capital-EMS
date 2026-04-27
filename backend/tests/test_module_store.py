@@ -52,7 +52,7 @@ def test_create_item(client):
     data = resp.json()
     assert data['nom'] == 'Budget Q1'
     assert data['montant'] == 10000
-    assert data['_created_by'] == 1001
+    assert data['_created_by'] == '1001'
 
 
 def test_create_item_strips_actor(client):

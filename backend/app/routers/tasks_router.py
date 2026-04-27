@@ -78,7 +78,7 @@ def _serialize_task(task: models.Task, db: Session) -> Dict[str, Any]:
     }
 
 
-def _parse_assignees(payload: Dict, role_actor: Optional[str], matricule_actor: int) -> List[int]:
+def _parse_assignees(payload: Dict, role_actor: Optional[str], matricule_actor: str) -> List[str]:
     """Parse both legacy assigne_a and new assignees[] from payload."""
     assignees_raw = payload.get('assignees') or []
     if isinstance(assignees_raw, str):
@@ -87,11 +87,11 @@ def _parse_assignees(payload: Dict, role_actor: Optional[str], matricule_actor: 
     # Legacy single assignee
     assigne_a_raw = payload.get('assigne_a')
     if assigne_a_raw not in [None, '']:
-        legacy = int(assigne_a_raw)
+        legacy = str(assigne_a_raw).strip().upper()
         if legacy not in assignees_raw:
             assignees_raw = [legacy] + list(assignees_raw)
 
-    assignees = [int(m) for m in assignees_raw if m not in [None, '']]
+    assignees = [str(m).strip().upper() for m in assignees_raw if m not in [None, '']]
 
     if not _is_admin(role_actor):
         for m in assignees:
@@ -102,7 +102,7 @@ def _parse_assignees(payload: Dict, role_actor: Optional[str], matricule_actor: 
 
 
 @router.get('/{matricule}')
-def lister_taches(matricule: int, role: str = '', db: Session = Depends(get_db)):
+def lister_taches(matricule: str, role: str = '', db: Session = Depends(get_db)):
     query = db.query(models.Task)
     if not _is_admin(role):
         # Include tasks where this user is creator, legacy assignee, or in TASK_ASSIGNEE
@@ -223,7 +223,7 @@ def modifier_statut_tache(id_task: int, payload: Dict[str, Any] = Body(...), db:
 
 
 @router.delete('/{id_task}')
-def supprimer_tache(id_task: int, matricule_actor: int, role_actor: str = '', db: Session = Depends(get_db)):
+def supprimer_tache(id_task: int, matricule_actor: str, role_actor: str = '', db: Session = Depends(get_db)):
     task = db.query(models.Task).filter(models.Task.id_task == id_task).first()
     if not task:
         raise HTTPException(status_code=404, detail='Tâche introuvable')

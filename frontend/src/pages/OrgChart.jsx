@@ -10,6 +10,12 @@ const LINE   = '#94a3b8'
 const CSS = `
 .oc-scroll { overflow-x: auto; overflow-y: auto; padding: 20px 16px 32px; min-height: 200px; }
 .oc-node   { display: inline-flex; flex-direction: column; align-items: center; }
+/* Garantie hiérarchique : un responsable (parent) doit toujours apparaître
+   au-dessus de ses subordonnés. flex-direction:column + ordre du DOM
+   (parent rendu avant .oc-row) verrouille cette règle visuellement. */
+.oc-node > .oc-box { order: 0; }
+.oc-node > .oc-stem { order: 1; }
+.oc-node > .oc-row { order: 2; }
 .oc-stem   { width: 2px; height: 18px; background: #94a3b8; flex-shrink: 0; }
 .oc-row    { display: flex; flex-wrap: nowrap; }
 .oc-col    { position: relative; display: flex; flex-direction: column; align-items: center; padding: 18px 6px 0; }
@@ -67,6 +73,30 @@ const CSS = `
 `
 
 // --- Build N1 hierarchy -------------------------------------------------------
+// Sort helper : un employé qui a des subordonnés ou un titre de "responsable"
+// doit toujours apparaître AVANT les autres dans la liste de ses pairs, pour
+// que le visuel reflète clairement la hiérarchie (responsable plus haut /
+// plus à gauche que ses employés).
+function _sortByHierarchy(list) {
+  const fonctionWeight = (e) => {
+    const f = String(e?.fonction || '').toLowerCase()
+    if (/(directeur|directrice|dg|pca|président|presidente|ag|administrateur g)/.test(f)) return 0
+    if (/(chef|responsable|manager|superviseur|sup\.|head|lead)/.test(f)) return 1
+    return 5
+  }
+  return [...list].sort((a, b) => {
+    const wa = fonctionWeight(a)
+    const wb = fonctionWeight(b)
+    if (wa !== wb) return wa - wb
+    const ca = (a.children || []).length
+    const cb = (b.children || []).length
+    if (ca !== cb) return cb - ca // plus d'enfants = "plus haut" dans la hiérarchie
+    return String(`${a.nom || ''} ${a.prenom || ''}`).localeCompare(
+      String(`${b.nom || ''} ${b.prenom || ''}`)
+    )
+  })
+}
+
 function buildN1Tree(emps) {
   const map = {}
   emps.forEach(e => { map[String(e.matricule)] = { ...e, _key: String(e.matricule), children: [] } })
@@ -76,7 +106,12 @@ function buildN1Tree(emps) {
     if (e.n1 && parent && String(e.n1) !== String(e.matricule)) parent.children.push(map[String(e.matricule)])
     else roots.push(map[String(e.matricule)])
   })
-  return roots
+  // Trier récursivement : responsable au-dessus dans chaque branche.
+  const sortRec = (nodes) => {
+    nodes.forEach(n => { if (n.children?.length) sortRec(n.children) })
+    return _sortByHierarchy(nodes)
+  }
+  return sortRec(roots)
 }
 
 // --- Build group tree (group ? members) --------------------------------------
@@ -89,15 +124,21 @@ function buildGroupTree(emps, getGroup) {
   })
   return Object.entries(groups)
     .sort((a, b) => b[1].length - a[1].length)
-    .map(([g, members]) => ({
-      _key: `grp_${g}`,
-      _isGroup: true,
-      nom: g,
-      prenom: '',
-      fonction: members.length + ' employé' + (members.length !== 1 ? 's' : ''),
-      ville: null,
-      children: members.map(e => ({ ...e, _key: String(e.matricule), children: [] })),
-    }))
+    .map(([g, members]) => {
+      // Trier les membres : responsable / chef en haut, puis subordonnés.
+      const sorted = _sortByHierarchy(
+        members.map(e => ({ ...e, _key: String(e.matricule), children: [] }))
+      )
+      return {
+        _key: `grp_${g}`,
+        _isGroup: true,
+        nom: g,
+        prenom: '',
+        fonction: members.length + ' employé' + (members.length !== 1 ? 's' : ''),
+        ville: null,
+        children: sorted,
+      }
+    })
 }
 
 // --- Search helpers -----------------------------------------------------------
@@ -240,8 +281,9 @@ function EditModal({ emp, allEmployees, onClose, onSave }) {
     setSaving(true); setErr('')
     try {
       const payload = {}
-      const newN1 = selectedN1 ? Number(selectedN1.matricule) : null
-      const oldN1 = emp.n1 != null && emp.n1 !== '' ? Number(emp.n1) : null
+      // Matricule est alphanumérique côté backend → on garde une string (ou null)
+      const newN1 = selectedN1 ? String(selectedN1.matricule) : null
+      const oldN1 = emp.n1 != null && emp.n1 !== '' ? String(emp.n1) : null
       if (newN1 !== oldN1)                             payload.n1       = newN1
       if (form.fonction !== (emp.fonction || ''))      payload.fonction = form.fonction
       if (form.ville    !== (emp.ville || ''))         payload.ville    = form.ville
@@ -259,7 +301,13 @@ function EditModal({ emp, allEmployees, onClose, onSave }) {
         n1: newN1,
       })
     } catch (e) {
-      setErr(e?.response?.data?.detail || 'Erreur lors de la sauvegarde')
+      // FastAPI 422 renvoie un tableau d'objets {type,loc,msg,input} → ne pas le rendre directement (React crashe)
+      const detail = e?.response?.data?.detail
+      let msg = 'Erreur lors de la sauvegarde'
+      if (typeof detail === 'string') msg = detail
+      else if (Array.isArray(detail)) msg = detail.map(d => d?.msg || JSON.stringify(d)).join(' ; ')
+      else if (detail && typeof detail === 'object') msg = detail.msg || JSON.stringify(detail)
+      setErr(msg)
     } finally { setSaving(false) }
   }
 

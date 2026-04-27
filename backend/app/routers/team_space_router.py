@@ -37,22 +37,22 @@ def _resolve_audience_matricules(
     if audience_type == 'all' or not selected:
         for emp in base_query.all():
             if emp.matricule is not None:
-                targets.add(int(emp.matricule))
+                targets.add(str(emp.matricule).strip().upper())
     elif audience_type == 'entites':
         ids = [e.id_entite for e in db.query(models.Entite).filter(models.Entite.nom.in_(selected)).all()]
         if ids:
             for emp in base_query.filter(models.Employe.id_entite.in_(ids)).all():
-                targets.add(int(emp.matricule))
+                targets.add(str(emp.matricule).strip().upper())
     elif audience_type == 'directions':
         ids = [d.id_direction for d in db.query(models.Direction).filter(models.Direction.nom.in_(selected)).all()]
         if ids:
             for emp in base_query.filter(models.Employe.id_direction.in_(ids)).all():
-                targets.add(int(emp.matricule))
+                targets.add(str(emp.matricule).strip().upper())
     elif audience_type == 'departements':
         ids = [d.dept_id for d in db.query(models.Departement).filter(models.Departement.nom.in_(selected)).all()]
         if ids:
             for emp in base_query.filter(models.Employe.dept_id.in_(ids)).all():
-                targets.add(int(emp.matricule))
+                targets.add(str(emp.matricule).strip().upper())
 
     # Always include destinataire by name if resolvable (for shoutout / kudos)
     dest = (destinataire or '').strip()
@@ -72,7 +72,7 @@ def _resolve_audience_matricules(
                 (models.Employe.nom == dest) | (models.Employe.prenom == dest)
             ).first()
         if match and match.matricule is not None:
-            targets.add(int(match.matricule))
+            targets.add(str(match.matricule).strip().upper())
 
     return targets
 
@@ -89,7 +89,7 @@ def _notify_post_created(post: models.TeamSpacePost, db: Session) -> None:
         return
 
     if post.author_matricule:
-        targets.discard(int(post.author_matricule))
+        targets.discard(str(post.author_matricule).strip().upper())
     if not targets:
         return
 

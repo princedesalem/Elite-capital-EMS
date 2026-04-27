@@ -285,7 +285,7 @@ def test_api_create_directeur_auto_fill(client, db_session, org):
     assert response.status_code == 200, response.text
 
     db_session.refresh(org['direction'])
-    assert org['direction'].id_directeur == 5001, (
+    assert org['direction'].id_directeur == '5001', (
         f"direction.id_directeur doit être 5001 après création via API, "
         f"reçu: {org['direction'].id_directeur}"
     )
@@ -337,7 +337,7 @@ def test_api_create_responsable_auto_fill(client, db_session, org):
     assert response.status_code == 200, response.text
 
     db_session.refresh(org['departement'])
-    assert org['departement'].id_responsable == 4001, (
+    assert org['departement'].id_responsable == '4001', (
         f"departement.id_responsable doit être 4001 après création via API, "
         f"reçu: {org['departement'].id_responsable}"
     )

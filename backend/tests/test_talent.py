@@ -55,7 +55,7 @@ def test_create_meeting(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data['titre'] == 'Point hebdo'
-    assert data['manager_id'] == 1001
+    assert data['manager_id'] == '1001'
 
 
 def test_update_meeting(client):
@@ -101,7 +101,7 @@ def test_create_goal(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data['titre'] == 'Obtenir certification'
-    assert data['employee_id'] == 2001
+    assert data['employee_id'] == '2001'
 
 
 def test_update_goal(client):

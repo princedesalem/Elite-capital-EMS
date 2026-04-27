@@ -49,7 +49,7 @@ def _get_department_localisation(db: Session, dept: models.Departement):
 
 @router.get('/analytics/{matricule}')
 def get_dashboard_analytics_for_user(
-    matricule: int,
+    matricule: str,
     mois: Optional[int] = None,
     annee: Optional[int] = None,
     db: Session = Depends(get_db)
@@ -902,7 +902,7 @@ def get_dashboard(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get('/trends/{matricule}')
-def get_dashboard_trends(matricule: int, db: Session = Depends(get_db)):
+def get_dashboard_trends(matricule: str, db: Session = Depends(get_db)):
     """
     Retourne les tendances mensuelles sur 12 mois glissants.
     Même logique de périmètre que analytics.

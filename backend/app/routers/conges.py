@@ -15,11 +15,11 @@ router = APIRouter(prefix='/api/conges', tags=['conges'])
 
 @router.post('/demande', status_code=status.HTTP_201_CREATED)
 def creer_demande_conge(
-    matricule: int,
+    matricule: str,
     date_debut: date,
     date_fin: date,
     motif: Optional[str] = None,
-    matricule_createur: Optional[int] = None,
+    matricule_createur: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -94,15 +94,16 @@ def creer_demande_conge(
 
     # Déterminer le premier validateur et notifier
     prochain_role, prochain_matricule = workflow.obtenir_prochain_validateur(operation.id_operation, db)
-    
+
     if prochain_matricule:
-        notifications.creer_notification(
+        notifications.notifier_prochain_validateur(
+            role=prochain_role,
             matricule=prochain_matricule,
             type_notification='VALIDATION',
-            titre=f"Nouvelle demande de congé",
+            titre="Nouvelle demande de congé",
             message=f"{employe.prenom} {employe.nom} demande {duree} jours de congé du {date_debut} au {date_fin}",
             id_operation=operation.id_operation,
-            db=db
+            db=db,
         )
     
     return {
@@ -115,7 +116,7 @@ def creer_demande_conge(
 
 
 @router.get('/eligibilite/{matricule}')
-def verifier_eligibilite(matricule: int, db: Session = Depends(get_db)):
+def verifier_eligibilite(matricule: str, db: Session = Depends(get_db)):
     """
     Vérifier si un employé est éligible aux congés (1 an d'ancienneté requis).
     """
@@ -134,7 +135,7 @@ def verifier_eligibilite(matricule: int, db: Session = Depends(get_db)):
 
 
 @router.get('/solde/{matricule}')
-def obtenir_solde(matricule: int, db: Session = Depends(get_db)):
+def obtenir_solde(matricule: str, db: Session = Depends(get_db)):
     """
     Obtenir le solde de congés d'un employé.
     """
@@ -193,6 +194,31 @@ def modifier_demande_conge(
     if workflow.operation_a_deja_ete_validee(id_operation, db):
         raise HTTPException(status_code=400, detail="Impossible de modifier une demande après la première validation")
 
+    # B3 — Règle métier : si une demande de congé a été créée plus de 3 semaines
+    # à l'avance (date_creation > 21 jours avant date_debut), elle ne peut plus
+    # être modifiée à partir de J-14 du début du congé. Cette règle empêche les
+    # modifications de dernière minute sur des demandes anticipées.
+    today = date.today()
+    date_debut_actuelle = operation.date_debut
+    _dc = getattr(operation, 'date_creation', None) or getattr(operation, 'date_demande', None)
+    date_creation = (
+        _dc.date()
+        if _dc and hasattr(_dc, 'date')
+        else (_dc or today)
+    )
+    if date_debut_actuelle:
+        anticipation_jours = (date_debut_actuelle - date_creation).days
+        jours_avant_debut = (date_debut_actuelle - today).days
+        if anticipation_jours > 21 and 0 <= jours_avant_debut <= 14:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Modification verrouillée : cette demande a été créée plus de "
+                    "3 semaines à l'avance et le début du congé est dans moins de "
+                    "14 jours. Contactez le RH si nécessaire."
+                ),
+            )
+
     employe = db.query(models.Employe).filter(models.Employe.matricule == operation.matricule).first()
     if not employe:
         raise HTTPException(status_code=404, detail="Employé introuvable")
@@ -248,7 +274,7 @@ def modifier_demande_conge(
 @router.post('/activation/{id_operation}/demandeur')
 def activer_conge_demandeur(
     id_operation: int,
-    matricule_demandeur: int,
+    matricule_demandeur: str,
     db: Session = Depends(get_db)
 ):
     """
@@ -267,7 +293,7 @@ def activer_conge_demandeur(
 @router.post('/activation/{id_operation}/rh')
 def activer_conge_rh(
     id_operation: int,
-    matricule_rh: int,
+    matricule_rh: str,
     request: Request = None,
     db: Session = Depends(get_db)
 ):
@@ -289,7 +315,7 @@ def activer_conge_rh(
 @router.post('/cloture/{id_operation}/demandeur')
 def cloturer_conge_demandeur(
     id_operation: int,
-    matricule_demandeur: int,
+    matricule_demandeur: str,
     retour_anticipe: bool = False,
     date_retour_anticipe: Optional[date] = None,
     db: Session = Depends(get_db)
@@ -310,7 +336,7 @@ def cloturer_conge_demandeur(
 @router.post('/cloture/{id_operation}/rh')
 def cloturer_conge_rh(
     id_operation: int,
-    matricule_rh: int,
+    matricule_rh: str,
     db: Session = Depends(get_db)
 ):
     """
@@ -328,7 +354,7 @@ def cloturer_conge_rh(
 
 @router.get('/historique/{matricule}')
 def obtenir_historique_conges(
-    matricule: int,
+    matricule: str,
     annee: Optional[int] = None,
     db: Session = Depends(get_db)
 ):

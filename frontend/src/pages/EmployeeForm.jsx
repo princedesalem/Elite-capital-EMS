@@ -1,4 +1,4 @@
-﻿import React, {useEffect, useState, useRef} from 'react'
+import React, {useEffect, useState, useRef} from 'react'
 import api from '../services/api'
 import {useNavigate, useParams} from 'react-router-dom'
 import AutocompleteInput from '../components/AutocompleteInput'

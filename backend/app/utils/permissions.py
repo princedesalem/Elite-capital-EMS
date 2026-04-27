@@ -43,8 +43,8 @@ DUREES_PERMISSIONS_CONVENTIONNELLES = {
         'certifiee': 3          # Permission maladie sur présentation d'un justificatif médical
     },
     'maternelle': {
-        'simple': 112,          # Congé maternité: 16 semaines (Convention Collective)
-        'pathologique': 126     # Congé maternité pathologique: 18 semaines
+        'simple': 98,           # Congé maternité: 14 semaines
+        'pathologique': 140     # Congé maternité pathologique: 20 semaines
     }
 }
 

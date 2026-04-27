@@ -146,7 +146,7 @@ def _get_workflow_history(id_operation: int, db: Session):
     return history
 
 
-def _get_employee_info(matricule: int, db: Session):
+def _get_employee_info(matricule: str, db: Session):
     """Get employee basic info."""
     emp = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
     if not emp:

@@ -4,18 +4,22 @@ import { useNavigate } from 'react-router-dom'
 
 const DURATION = 10000
 
+// Couleur principale = bleu charte ELITE CAPITAL (--bleu: rgb(2,22,46))
+// On ne conserve une couleur sémantique que pour REFUS (rouge critique).
+const BRAND_BLUE = '#02162e'
+
 const TYPE_META = {
-  VALIDATION:          { color: '#60a5fa', Icon: CheckCircle2,   label: 'Validation' },
-  PAIEMENT:            { color: '#059669', Icon: Banknote,        label: 'Paiement' },
-  REFUS:               { color: '#f87171', Icon: XCircle,        label: 'Refus' },
-  ALERTE_CONGES:       { color: '#fbbf24', Icon: AlertTriangle,  label: 'Alerte congés' },
-  RAPPEL_DEPART:       { color: '#38bdf8', Icon: Plane,          label: 'Départ mission' },
-  RAPPEL_RETOUR:       { color: '#38bdf8', Icon: Home,           label: 'Retour mission' },
-  DEMANDE_MISSION:     { color: '#818cf8', Icon: Briefcase,      label: 'Mission' },
-  DEMANDE_EXPLICATION: { color: '#fb923c', Icon: MessageSquare,  label: 'Explication' },
-  EVALUATION:          { color: '#a78bfa', Icon: Star,           label: 'Évaluation' },
-  CLOTURE_REQUISE:     { color: '#f472b6', Icon: Clock,          label: 'Clôture requise' },
-  AUTRE:               { color: '#60a5fa', Icon: Bell,           label: 'Notification' },
+  VALIDATION:          { color: BRAND_BLUE, Icon: CheckCircle2,   label: 'Validation' },
+  PAIEMENT:            { color: BRAND_BLUE, Icon: Banknote,       label: 'Paiement' },
+  REFUS:               { color: '#d0202b',  Icon: XCircle,        label: 'Refus' },
+  ALERTE_CONGES:       { color: BRAND_BLUE, Icon: AlertTriangle,  label: 'Alerte congés' },
+  RAPPEL_DEPART:       { color: BRAND_BLUE, Icon: Plane,          label: 'Départ mission' },
+  RAPPEL_RETOUR:       { color: BRAND_BLUE, Icon: Home,           label: 'Retour mission' },
+  DEMANDE_MISSION:     { color: BRAND_BLUE, Icon: Briefcase,      label: 'Mission' },
+  DEMANDE_EXPLICATION: { color: BRAND_BLUE, Icon: MessageSquare,  label: 'Explication' },
+  EVALUATION:          { color: BRAND_BLUE, Icon: Star,           label: 'Évaluation' },
+  CLOTURE_REQUISE:     { color: BRAND_BLUE, Icon: Clock,          label: 'Clôture requise' },
+  AUTRE:               { color: BRAND_BLUE, Icon: Bell,           label: 'Notification' },
 }
 
 function getMeta(typeKey, notif) {
@@ -182,7 +186,7 @@ export default function NotificationToast({ notification, onDismiss }) {
               onMouseEnter={e => { e.currentTarget.style.background = meta.color + '22'; e.currentTarget.style.borderColor = meta.color }}
               onMouseLeave={e => { e.currentTarget.style.background = meta.color + '12'; e.currentTarget.style.borderColor = meta.color + '30' }}
             >
-              Voir #{notification.id_operation}
+              {(notification?.type_demande || '').toLowerCase().includes('frais') ? 'Voir la demande' : `Voir #${notification.id_operation}`}
               <ArrowRight size={11} />
             </button>
           </div>

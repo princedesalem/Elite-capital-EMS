@@ -64,12 +64,12 @@ class PushSubscriptionPayload(BaseModel):
 
 
 class PushSubscribePayload(BaseModel):
-    matricule: int
+    matricule: str
     subscription: PushSubscriptionPayload
 
 
 class PushUnsubscribePayload(BaseModel):
-    matricule: Optional[int] = None
+    matricule: Optional[str] = None
     endpoint: str
 
 
@@ -87,7 +87,7 @@ def _get_token_context(request: Request):
     role = str(payload.get('role') or '').strip().upper()
     matricule = payload.get('matricule') or payload.get('sub')
     try:
-        matricule = int(matricule)
+        matricule = str(matricule).strip().upper()
     except Exception:
         raise HTTPException(status_code=401, detail='Token sans matricule valide')
 
@@ -169,7 +169,7 @@ def unsubscribe_push(
 
 @router.post('/push/test/{matricule}')
 def push_test_notification(
-    matricule: int,
+    matricule: str,
     request: Request,
     db: Session = Depends(get_db)
 ):
@@ -191,7 +191,7 @@ def push_test_notification(
 
 
 @router.get('/non-lues/{matricule}')
-def obtenir_notifications_non_lues(matricule: int, db: Session = Depends(get_db)):
+def obtenir_notifications_non_lues(matricule: str, db: Session = Depends(get_db)):
     """
     Obtenir toutes les notifications non lues d'un employé.
     """
@@ -224,7 +224,7 @@ def obtenir_notifications_non_lues(matricule: int, db: Session = Depends(get_db)
 
 @router.get('/toutes/{matricule}')
 def obtenir_toutes_notifications(
-    matricule: int,
+    matricule: str,
     limite: int = 50,
     db: Session = Depends(get_db)
 ):
@@ -272,7 +272,7 @@ def marquer_comme_lue(id_notification: int, db: Session = Depends(get_db)):
 
 
 @router.put('/marquer-toutes-lues/{matricule}')
-def marquer_toutes_lues(matricule: int, db: Session = Depends(get_db)):
+def marquer_toutes_lues(matricule: str, db: Session = Depends(get_db)):
     """
     Marquer toutes les notifications d'un employé comme lues.
     """
@@ -295,7 +295,7 @@ def marquer_toutes_lues(matricule: int, db: Session = Depends(get_db)):
 
 
 @router.get('/compteur/{matricule}')
-def compter_non_lues(matricule: int, db: Session = Depends(get_db)):
+def compter_non_lues(matricule: str, db: Session = Depends(get_db)):
     """
     Compter le nombre de notifications non lues.
     """
@@ -327,7 +327,7 @@ def supprimer_notification(id_notification: int, db: Session = Depends(get_db)):
 
 @router.get('/par-type/{matricule}/{type_notification}')
 def obtenir_notifications_par_type(
-    matricule: int,
+    matricule: str,
     type_notification: str,
     db: Session = Depends(get_db)
 ):
@@ -372,7 +372,7 @@ def tester_alerte_conges(db: Session = Depends(get_db)):
 
 @router.post('/creer')
 def creer_notification_manuelle(
-    matricule: int,
+    matricule: str,
     type_notification: str,
     titre: str,
     message: str,

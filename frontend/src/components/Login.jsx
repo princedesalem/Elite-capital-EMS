@@ -1,4 +1,4 @@
-﻿import React, {useState, useEffect} from 'react'
+import React, {useState, useEffect} from 'react'
 import {useAuth} from '../contexts/AuthContext'
 import {useNavigate} from 'react-router-dom'
 import api from '../services/api'
@@ -17,6 +17,8 @@ export default function Login(){
   const [email,setEmail]=useState('')
   const [emailMsg,setEmailMsg]=useState(null)
   const [showEmail,setShowEmail]=useState(false)
+  const [loading,setLoading]=useState(false)
+  const [emailLoading,setEmailLoading]=useState(false)
   const {login,silentLogout}=useAuth()
   const nav=useNavigate()
 
@@ -36,6 +38,7 @@ export default function Login(){
     e.preventDefault(); setErr(null)
     const pwOk=validatePasswordPolicy(password)
     if(!pwOk.ok){setErr(pwOk.message);return}
+    setLoading(true)
     try{
       await login({matricule,password,mfaCode:mfa})
       nav('/home')
@@ -46,19 +49,40 @@ export default function Login(){
         errMsg=typeof d==='string'?d:JSON.stringify(d)
       }
       setErr(errMsg)
+    }finally{
+      setLoading(false)
     }
   }
 
   async function submitEmail(e){
     e.preventDefault(); setEmailMsg(null)
     if(!email||email.trim()===''){setEmailMsg('Veuillez entrer votre adresse email');return}
+    setEmailLoading(true)
     try{
       await api.post('/auth/login/email',new URLSearchParams({email}))
       setEmailMsg('Lien envoy\u00e9 ! V\u00e9rifiez votre bo\u00eete mail.')
     }catch(ex){setEmailMsg(ex.response?.data?.detail||'Erreur envoi email')}
+    finally{setEmailLoading(false)}
   }
 
+  const LoadingDots = ({color='#ffffff'}) => (
+    <span data-testid="login-loading-dots" aria-label="Chargement en cours" style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6,height:15}}>
+      <span style={{width:8,height:8,borderRadius:'50%',background:color,display:'inline-block',animation:'emsLoginDot 1.2s infinite ease-in-out',animationDelay:'0s'}}/>
+      <span style={{width:8,height:8,borderRadius:'50%',background:color,display:'inline-block',animation:'emsLoginDot 1.2s infinite ease-in-out',animationDelay:'0.2s'}}/>
+      <span style={{width:8,height:8,borderRadius:'50%',background:color,display:'inline-block',animation:'emsLoginDot 1.2s infinite ease-in-out',animationDelay:'0.4s'}}/>
+    </span>
+  )
+
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+
+  useEffect(()=>{
+    if(typeof document==='undefined') return
+    if(document.getElementById('ems-login-dots-style')) return
+    const s=document.createElement('style')
+    s.id='ems-login-dots-style'
+    s.textContent='@keyframes emsLoginDot{0%,80%,100%{opacity:0.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-4px)}}'
+    document.head.appendChild(s)
+  },[])
 
   return (
     <div data-testid="login-page" style={{
@@ -86,7 +110,10 @@ export default function Login(){
           <img
             src="/logo-ecg.png"
             alt="ELITE CAPITAL Group S.A"
-            style={{ height: 96, maxWidth: 280, objectFit: 'contain', mixBlendMode: 'screen', filter: 'brightness(1.1) contrast(1.05)' }}
+            width={560}
+            height={163}
+            decoding="async"
+            style={{ height: 'clamp(96px, 7vw, 160px)', width: 'auto', maxWidth: '32vw', objectFit: 'contain', mixBlendMode: 'screen', filter: 'brightness(1.1) contrast(1.05)' }}
           />
         </div>
 
@@ -96,7 +123,7 @@ export default function Login(){
             data-testid="login-title"
             style={{
               margin: '0 0 0',
-              fontSize: isMobile ? 28 : 48,
+              fontSize: isMobile ? 28 : 'clamp(36px, 3.8vw, 72px)',
               fontWeight: 800,
               color: '#ffffff',
               lineHeight: 1.12,
@@ -110,7 +137,7 @@ export default function Login(){
           </h1>
           {!isMobile && <p style={{
             margin: '44px 0 0',
-            fontSize: 20,
+            fontSize: 'clamp(16px, 1.3vw, 26px)',
             fontWeight: 600,
             color: 'rgba(255,255,255,0.80)',
             letterSpacing: 0.4,
@@ -129,7 +156,7 @@ export default function Login(){
           }}
         >
           <span style={{
-            fontSize: isMobile ? 15 : 34,
+            fontSize: isMobile ? 15 : 'clamp(22px, 2.2vw, 44px)',
             fontWeight: 400,
             color: isMobile ? 'rgba(255,255,255,0.65)' : '#ffffff',
             fontStyle: 'italic',
@@ -196,11 +223,11 @@ export default function Login(){
                 <input className="input" placeholder="Code MFA (si requis)" value={mfa}
                   onChange={e=>setMfa(e.target.value)} style={{fontFamily:CG}}/>
                 {err&&<div className="error" style={{fontFamily:CG}}>{err}</div>}
-                <button type="submit"
-                  style={{marginTop:6,background:'linear-gradient(90deg,'+NAVY+' 0%,#1a4e8a 100%)',color:'#fff',border:'none',borderRadius:10,padding:'14px 0',fontWeight:800,fontSize:15,cursor:'pointer',letterSpacing:0.5,fontFamily:CG,boxShadow:'0 4px 20px rgba(2,22,46,0.28)',transition:'filter 0.15s'}}
-                  onMouseEnter={e=>e.currentTarget.style.filter='brightness(1.18)'}
+                <button type="submit" disabled={loading}
+                  style={{marginTop:6,background:'linear-gradient(90deg,'+NAVY+' 0%,#1a4e8a 100%)',color:'#fff',border:'none',borderRadius:10,padding:'14px 0',fontWeight:800,fontSize:15,cursor:loading?'wait':'pointer',letterSpacing:0.5,fontFamily:CG,boxShadow:'0 4px 20px rgba(2,22,46,0.28)',transition:'filter 0.15s',opacity:loading?0.85:1,display:'flex',alignItems:'center',justifyContent:'center',minHeight:47}}
+                  onMouseEnter={e=>{if(!loading)e.currentTarget.style.filter='brightness(1.18)'}}
                   onMouseLeave={e=>e.currentTarget.style.filter='none'}>
-                  Se connecter
+                  {loading ? <LoadingDots/> : 'Se connecter'}
                 </button>
               </form>
               <div style={{marginTop:20,textAlign:'center'}}>
@@ -221,9 +248,9 @@ export default function Login(){
               <form onSubmit={submitEmail} style={{display:'grid',gap:14}}>
                 <input className="input" placeholder="Email" value={email}
                   onChange={e=>setEmail(e.target.value)} type="email" style={{fontFamily:CG}}/>
-                <button type="submit"
-                  style={{background:'linear-gradient(90deg,'+NAVY+' 0%,#1a4e8a 100%)',color:'#fff',border:'none',borderRadius:10,padding:'14px 0',fontWeight:800,fontSize:15,cursor:'pointer',fontFamily:CG,boxShadow:'0 4px 20px rgba(2,22,46,0.28)'}}>
-                  Recevoir le lien
+                <button type="submit" disabled={emailLoading}
+                  style={{background:'linear-gradient(90deg,'+NAVY+' 0%,#1a4e8a 100%)',color:'#fff',border:'none',borderRadius:10,padding:'14px 0',fontWeight:800,fontSize:15,cursor:emailLoading?'wait':'pointer',fontFamily:CG,boxShadow:'0 4px 20px rgba(2,22,46,0.28)',opacity:emailLoading?0.85:1,display:'flex',alignItems:'center',justifyContent:'center',minHeight:47}}>
+                  {emailLoading ? <LoadingDots/> : 'Recevoir le lien'}
                 </button>
               </form>
               {emailMsg&&<div className="small" style={{marginTop:12,fontFamily:CG}}>{emailMsg}</div>}

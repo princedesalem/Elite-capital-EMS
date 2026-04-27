@@ -15,9 +15,44 @@ DELAI_CLOTURE = 2  # 48 heures après date de retour
 DELAI_RAPPORT_MISSION = 2  # 48 heures pour rapport de mission
 
 
+def verifier_preuves_frais(id_operation: int, db: Session) -> Tuple[bool, str]:
+    """
+    Vérifie qu'au moins une preuve de frais (justificatif) est téléversée pour
+    chaque demande de frais associée à la mission. Si une demande de frais existe
+    mais n'a pas de justificatif, la clôture est interdite.
+
+    Returns:
+        (True, "") si OK ou si aucune demande de frais n'a été déposée.
+        (False, message) si au moins une demande de frais n'a pas de preuve.
+    """
+    from ..models import Frais, FraisMissionnaire
+
+    # Frais globaux (mono-segment / ancien modèle)
+    frais_list = db.query(Frais).filter(Frais.id_operation == id_operation).all()
+    for f in frais_list:
+        if not (f.justificatif_de_frais and str(f.justificatif_de_frais).strip()):
+            return False, (
+                "Preuve de frais manquante : vous devez téléverser le "
+                "justificatif de la demande de frais avant de clôturer la mission."
+            )
+
+    # Frais multi-missionnaires (mission multi-destinations) — id_mission == id_operation
+    frais_miss_list = db.query(FraisMissionnaire).filter(
+        FraisMissionnaire.id_mission == id_operation
+    ).all()
+    for fm in frais_miss_list:
+        if not (fm.justificatif and str(fm.justificatif).strip()):
+            return False, (
+                "Preuve de frais manquante : un missionnaire n'a pas téléversé "
+                "son justificatif. Clôture impossible."
+            )
+
+    return True, ""
+
+
 def activer_operation_demandeur(
     id_operation: int,
-    matricule_demandeur: int,
+    matricule_demandeur: str,
     db: Session
 ) -> Tuple[bool, str]:
     """
@@ -125,7 +160,7 @@ def activer_operation_demandeur(
 
 def activer_operation_auto_apres_validation(
     id_operation: int,
-    matricule_demandeur: int,
+    matricule_demandeur: str,
     db: Session
 ) -> Tuple[bool, str]:
     """
@@ -180,7 +215,7 @@ def activer_operation_auto_apres_validation(
 
 def activer_operation_rh(
     id_operation: int,
-    matricule_rh: int,
+    matricule_rh: str,
     db: Session
 ) -> Tuple[bool, str]:
     """
@@ -285,7 +320,7 @@ def est_operation_active(id_operation: int, db: Session) -> bool:
 
 def cloturer_operation_demandeur(
     id_operation: int,
-    matricule_demandeur: int,
+    matricule_demandeur: str,
     db: Session,
     retour_anticipe: bool = False,
     date_retour_anticipe: Optional[date] = None
@@ -348,7 +383,12 @@ def cloturer_operation_demandeur(
         rapport_ok, message = verifier_rapport_mission(id_operation, db)
         if not rapport_ok:
             return False, f"Impossible de clôturer: {message}"
-        
+
+        # B2 — preuve de frais obligatoire avant clôture
+        preuves_ok, preuves_msg = verifier_preuves_frais(id_operation, db)
+        if not preuves_ok:
+            return False, f"Impossible de clôturer: {preuves_msg}"
+
         # Vérifier que les frais ont été payés (validation à 2 niveaux)
         if not mission.frais_payes:
             if not mission.frais_valides_missionnaire:
@@ -429,7 +469,7 @@ def cloturer_operation_demandeur(
 
 def cloturer_operation_rh(
     id_operation: int,
-    matricule_rh: int,
+    matricule_rh: str,
     db: Session
 ) -> Tuple[bool, str]:
     """
@@ -462,8 +502,13 @@ def cloturer_operation_rh(
     
     # Pour les missions, vérifier que les frais ont été payés
     mission = db.query(Mission).filter(Mission.id_mission == id_operation).first()
-    if mission and not mission.frais_payes:
-        return False, "Impossible de clôturer: Les frais de mission doivent être payés avant la clôture"
+    if mission:
+        # B2 — preuve de frais obligatoire côté RH aussi
+        preuves_ok, preuves_msg = verifier_preuves_frais(id_operation, db)
+        if not preuves_ok:
+            return False, f"Impossible de clôturer: {preuves_msg}"
+        if not mission.frais_payes:
+            return False, "Impossible de clôturer: Les frais de mission doivent être payés avant la clôture"
     
     cloture.rh_fait = True
     cloture.date_rh = datetime.now()
@@ -573,7 +618,7 @@ def obtenir_type_permission(id_operation: int, db: Session) -> Dict:
     return get_perm_type(id_operation, db)
 
 
-def verifier_role_rh(matricule: int, db: Session) -> bool:
+def verifier_role_rh(matricule: str, db: Session) -> bool:
     """
     Vérifie si un employé a le rôle RH.
     
@@ -596,7 +641,7 @@ def verifier_role_rh(matricule: int, db: Session) -> bool:
     return role and role.name.upper() == 'RH'
 
 
-def verifier_role_pca_ag(matricule: int, db: Session) -> bool:
+def verifier_role_pca_ag(matricule: str, db: Session) -> bool:
     """
     Vérifie si un employé a le rôle PCA ou AG.
     Ces rôles n'ont pas de validateurs — ils gèrent eux-mêmes leur cycle complet.

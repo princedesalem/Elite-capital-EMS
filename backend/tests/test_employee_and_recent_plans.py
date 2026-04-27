@@ -24,7 +24,7 @@ def test_employee_registration_creates_new_employee(client, seed_reference_data)
     assert response.status_code == 200
 
     created = response.json()
-    assert created['matricule'] == 7777
+    assert created['matricule'] == '7777'
     assert created['nom'] == 'Nouveau'
     assert created['prenom'] == 'Collaborateur'
     assert created['role'] == 'EMPLOYE'
@@ -73,7 +73,7 @@ def test_employee_registration_allows_stagiaire_under_18(client, seed_reference_
     response = client.post('/employees/', json=payload)
     assert response.status_code == 200
     created = response.json()
-    assert created['matricule'] == 7779
+    assert created['matricule'] == '7779'
 
 
 def test_rh_employee_creation_notifies_admin(client, seed_reference_data, db_session, auth_headers):
@@ -114,7 +114,7 @@ def test_module_store_crud_round_trip(client):
     created = create_response.json()
     assert created['title'] == 'Agent support'
     assert created['status'] == 'en_attente'
-    assert created['_created_by'] == 9001
+    assert created['_created_by'] == '9001'
 
     item_id = created['id']
 

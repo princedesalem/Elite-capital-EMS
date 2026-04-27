@@ -129,7 +129,7 @@ def enregistrer_remplacants_proposes(
 
 def accepter_remplacant(
     id_operation: int,
-    matricule_remplacant: int,
+    matricule_remplacant: str,
     db: Session
 ) -> bool:
     """
@@ -223,7 +223,7 @@ def obtenir_remplacants_proposes(
 
 
 def verifier_disponibilite_remplacant(
-    matricule: int,
+    matricule: str,
     date_debut: str,
     date_fin: str,
     db: Session

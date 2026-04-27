@@ -1,6 +1,18 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional
 from datetime import date, datetime
+import re as _re
+
+_MATRICULE_RE = _re.compile(r'^[A-Za-z0-9-]+$')
+
+
+def _validate_matricule_value(v):
+    if v is None or v == '':
+        return v
+    s = str(v).strip()
+    if not _MATRICULE_RE.match(s):
+        raise ValueError("Le matricule doit être alphanumérique (lettres, chiffres et '-')")
+    return s.upper()
 
 
 class RoleOut(BaseModel):
@@ -11,7 +23,7 @@ class RoleOut(BaseModel):
 
 
 class EmployeBase(BaseModel):
-    matricule: int | str
+    matricule: str
     nom: str
     prenom: str
     date_naissance: Optional[date] = None
@@ -34,15 +46,30 @@ class EmployeBase(BaseModel):
     categorie: Optional[str] = None
     statut_matrimonial: Optional[str] = None
     nombre_enfants: Optional[int] = None
+    salaire_brut: Optional[float] = None
+    salaire_devise: Optional[str] = None
     direction: Optional[str] = None
     anciennete: Optional[str] = None
-    n1: Optional[int | str] = None
+    n1: Optional[str] = None
     n1_fonction: Optional[str] = None
     statut_employe: Optional[str] = None
     photo_url: Optional[str] = None
     id_entite: Optional[int] = None
     id_direction: Optional[int] = None
     dept_id: Optional[int] = None
+
+    @field_validator('matricule', mode='before')
+    @classmethod
+    def _validate_matricule(cls, v):
+        return _validate_matricule_value(v)
+
+    @field_validator('n1', mode='before')
+    @classmethod
+    def _validate_n1(cls, v):
+        if v is None or v == '':
+            return None
+        return _validate_matricule_value(v)
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EmployeOut(EmployeBase):
@@ -96,7 +123,7 @@ class FonctionReferenceCreate(BaseModel):
 
 class ParcoursEmployeOut(BaseModel):
     id_parcours: int
-    matricule: int
+    matricule: str
     type_action: str
     champ_modifie: Optional[str] = None
     ancienne_valeur: Optional[str] = None

@@ -195,7 +195,7 @@ def _serialize_operation_with_demandeur(operation: models.Operation, db: Session
 
 
 @router.get('/mes-demandes/{matricule}')
-def obtenir_mes_demandes(matricule: int, db: Session = Depends(get_db)):
+def obtenir_mes_demandes(matricule: str, db: Session = Depends(get_db)):
     """
     Obtenir toutes les demandes (opérations) créées par un employé.
     """
@@ -207,7 +207,7 @@ def obtenir_mes_demandes(matricule: int, db: Session = Depends(get_db)):
 
 
 @router.get('/a-valider/{matricule}')
-def obtenir_demandes_a_valider(matricule: int, db: Session = Depends(get_db)):
+def obtenir_demandes_a_valider(matricule: str, db: Session = Depends(get_db)):
     """
     Obtenir toutes les opérations en attente de validation par cet employé.
     """
@@ -231,7 +231,7 @@ def obtenir_demandes_a_valider(matricule: int, db: Session = Depends(get_db)):
 
 @router.get('/sequence/{matricule}')
 def obtenir_sequence_validation(
-    matricule: int,
+    matricule: str,
     id_operation: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
@@ -313,7 +313,7 @@ def obtenir_prochain_validateur(id_operation: int, db: Session = Depends(get_db)
 @router.post('/valider/{id_operation}')
 def valider_operation(
     id_operation: int,
-    matricule_validateur: int,
+    matricule_validateur: str,
     statut: str,  # 'validé' ou 'refusé'
     request: Request = None,
     commentaire: Optional[str] = None,
@@ -385,7 +385,7 @@ def obtenir_historique_validations(id_operation: int, db: Session = Depends(get_
 
 
 @router.get('/mes-demandes-detail/{matricule}')
-def obtenir_mes_demandes_detail(matricule: int, db: Session = Depends(get_db)):
+def obtenir_mes_demandes_detail(matricule: str, db: Session = Depends(get_db)):
     """
     Obtenir toutes les demandes créées par un employé avec leur statut de validation.
     """
@@ -421,7 +421,7 @@ def obtenir_mes_demandes_detail(matricule: int, db: Session = Depends(get_db)):
 
 
 @router.get('/a-valider-detail/{matricule_validateur}')
-def obtenir_operations_a_valider(matricule_validateur: int, db: Session = Depends(get_db)):
+def obtenir_operations_a_valider(matricule_validateur: str, db: Session = Depends(get_db)):
     """
     Obtenir toutes les opérations en attente de validation par un validateur.
     """
@@ -466,7 +466,7 @@ def obtenir_operations_a_valider(matricule_validateur: int, db: Session = Depend
 
 
 @router.get('/operations-visibles/{matricule}')
-def obtenir_operations_visibles(matricule: int, db: Session = Depends(get_db)):
+def obtenir_operations_visibles(matricule: str, db: Session = Depends(get_db)):
     """
     Obtenir toutes les opérations visibles par un employé selon son rôle.
     
@@ -505,7 +505,7 @@ def obtenir_operations_visibles(matricule: int, db: Session = Depends(get_db)):
 
 
 @router.get('/peut-creer-pour-autrui/{matricule}')
-def peut_creer_pour_autrui(matricule: int, db: Session = Depends(get_db)):
+def peut_creer_pour_autrui(matricule: str, db: Session = Depends(get_db)):
     """
     Vérifier si un employé peut créer des demandes pour autrui.
     
@@ -524,7 +524,7 @@ def peut_creer_pour_autrui(matricule: int, db: Session = Depends(get_db)):
 
 
 @router.get('/stats-validations/{matricule_validateur}')
-def obtenir_stats_validations(matricule_validateur: int, db: Session = Depends(get_db)):
+def obtenir_stats_validations(matricule_validateur: str, db: Session = Depends(get_db)):
     """
     Obtenir des statistiques sur les validations d'un validateur.
     """
@@ -545,7 +545,7 @@ def obtenir_stats_validations(matricule_validateur: int, db: Session = Depends(g
 
 
 @router.get('/mes-validations/{matricule_validateur}')
-def obtenir_mes_validations(matricule_validateur: int, db: Session = Depends(get_db)):
+def obtenir_mes_validations(matricule_validateur: str, db: Session = Depends(get_db)):
     """
     Obtenir toutes les demandes validées par ce validateur.
     """
@@ -574,7 +574,7 @@ def obtenir_mes_validations(matricule_validateur: int, db: Session = Depends(get
 
 
 @router.get('/mes-refus/{matricule_validateur}')
-def obtenir_mes_refus(matricule_validateur: int, db: Session = Depends(get_db)):
+def obtenir_mes_refus(matricule_validateur: str, db: Session = Depends(get_db)):
     """
     Obtenir toutes les demandes refusées par ce validateur.
     """
@@ -603,7 +603,7 @@ def obtenir_mes_refus(matricule_validateur: int, db: Session = Depends(get_db)):
 
 
 @router.get('/boite/{matricule}')
-def obtenir_boite_workflow(matricule: int, db: Session = Depends(get_db)):
+def obtenir_boite_workflow(matricule: str, db: Session = Depends(get_db)):
     """
     Retourne la boite workflow complete d'un utilisateur:
     - envoye: demandes creees par l'utilisateur

@@ -26,16 +26,17 @@ def get_actor_from_request(request: Request) -> tuple[int | None, str | None]:
     role = (payload.get('role') or 'EMPLOYE').upper()
 
     try:
-        matricule = int(matricule) if matricule is not None else None
+        matricule = str(matricule).strip().upper() if matricule is not None else None
     except Exception:
         matricule = None
 
     return matricule, role
 
 
-def ensure_can_create_for_matricule(request: Request, matricule_cible: int):
+def ensure_can_create_for_matricule(request: Request, matricule_cible: str):
     actor_matricule, actor_role = get_actor_from_request(request)
-    if actor_matricule == matricule_cible:
+    cible = str(matricule_cible).strip().upper() if matricule_cible is not None else None
+    if actor_matricule == cible:
         return actor_matricule, actor_role
 
     if actor_role not in {'RH', 'ADMIN', 'PCA', 'AG'}:
@@ -66,7 +67,7 @@ def ensure_employee_crud_role(request: Request):
         raise HTTPException(status_code=403, detail='Accès refusé: seuls RH/PCA/AG/Admin peuvent gérer les employés')
 
 
-def get_actor_role_from_db(matricule: int, db: Session) -> str:
+def get_actor_role_from_db(matricule: str, db: Session) -> str:
     utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.matricule == matricule).first()
     if not utilisateur or not utilisateur.role_id:
         return 'EMPLOYE'

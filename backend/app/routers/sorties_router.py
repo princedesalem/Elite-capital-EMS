@@ -91,7 +91,7 @@ def _build_commentaire(commentaire: Optional[str], heure_retour: Optional[str]) 
 
 
 @router.get('/')
-def list_sorties(matricule: int = None, db: Session = Depends(get_db)):
+def list_sorties(matricule: str = None, db: Session = Depends(get_db)):
     q = db.query(models.Sortie, models.Operation).outerjoin(
         models.Operation, models.Sortie.id_operation == models.Operation.id_operation
     )
@@ -141,12 +141,12 @@ def create_sortie(payload: Dict[str, Any], db: Session = Depends(get_db)):
     if not matricule:
         raise HTTPException(status_code=422, detail='matricule est requis.')
 
-    employe = db.query(models.Employe).filter(models.Employe.matricule == int(matricule)).first()
+    employe = db.query(models.Employe).filter(models.Employe.matricule == str(matricule).strip().upper()).first()
     if not employe:
         raise HTTPException(status_code=404, detail='Employé introuvable.')
 
     operation = models.Operation(
-        matricule=int(matricule),
+        matricule=str(matricule).strip().upper(),
         titre='Demande de sortie',
         commentaire=_build_commentaire(payload.get('commentaire'), heure_retour),
         type_demande='Sortie',
@@ -165,7 +165,7 @@ def create_sortie(payload: Dict[str, Any], db: Session = Depends(get_db)):
     db.refresh(operation)
 
     sortie = models.Sortie(
-        matricule=int(matricule),
+        matricule=str(matricule).strip().upper(),
         id_operation=operation.id_operation,
         date_sortie=d,
         heure_sortie=h,
@@ -176,19 +176,20 @@ def create_sortie(payload: Dict[str, Any], db: Session = Depends(get_db)):
     db.commit()
     db.refresh(sortie)
 
-    log_action(db, int(matricule), 'CREATE_SORTIE', 'operation', operation.id_operation,
+    log_action(db, str(matricule).strip().upper(), 'CREATE_SORTIE', 'operation', operation.id_operation,
                {'date': str(d), 'heure_sortie': str(h), 'heure_retour': heure_retour,
                 'duree_heures': duree_heures})
 
     prochain_role, prochain_matricule = workflow.obtenir_prochain_validateur(operation.id_operation, db)
     if prochain_matricule:
-        notifications.creer_notification(
+        notifications.notifier_prochain_validateur(
+            role=prochain_role,
             matricule=prochain_matricule,
             type_notification='VALIDATION',
             titre='Nouvelle demande de sortie',
             message=f"{employe.prenom} {employe.nom} a soumis une demande de sortie.",
             id_operation=operation.id_operation,
-            db=db
+            db=db,
         )
 
     return {
@@ -342,7 +343,7 @@ def modifier_sortie(id_operation: int, payload: Dict[str, Any], request: Request
 @router.post('/activation/{id_operation}/demandeur')
 def activer_sortie_demandeur(
     id_operation: int,
-    matricule_demandeur: int,
+    matricule_demandeur: str,
     db: Session = Depends(get_db)
 ):
     success, message = activation_cloture.activer_operation_demandeur(
@@ -356,7 +357,7 @@ def activer_sortie_demandeur(
 @router.post('/activation/{id_operation}/rh')
 def activer_sortie_rh(
     id_operation: int,
-    matricule_rh: int,
+    matricule_rh: str,
     db: Session = Depends(get_db)
 ):
     success, message = activation_cloture.activer_operation_rh(
@@ -370,7 +371,7 @@ def activer_sortie_rh(
 @router.post('/cloture/{id_operation}/demandeur')
 def cloturer_sortie_demandeur(
     id_operation: int,
-    matricule_demandeur: int,
+    matricule_demandeur: str,
     retour_anticipe: bool = False,
     date_retour_anticipe: Optional[date] = None,
     db: Session = Depends(get_db)
@@ -386,7 +387,7 @@ def cloturer_sortie_demandeur(
 @router.post('/cloture/{id_operation}/rh')
 def cloturer_sortie_rh(
     id_operation: int,
-    matricule_rh: int,
+    matricule_rh: str,
     db: Session = Depends(get_db)
 ):
     success, message = activation_cloture.cloturer_operation_rh(

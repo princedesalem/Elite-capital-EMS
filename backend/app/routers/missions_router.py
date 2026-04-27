@@ -41,8 +41,8 @@ class SegmentMissionUpdate(BaseModel):
     frais_hotel_unitaire: Optional[float] = None
 
 class MissionMultiSegments(BaseModel):
-    matricule: int  # Matricule de l'initiateur (créateur de la mission)
-    matricules_missionnaires: List[int]  # Liste de tous les missionnaires (incluant l'initiateur)
+    matricule: str  # Matricule de l'initiateur (créateur de la mission)
+    matricules_missionnaires: List[str]  # Liste de tous les missionnaires (incluant l'initiateur)
     email_contact: Optional[str] = None  # Email de contact pour cette mission
     motif: Optional[str] = None
     mission_comment: Optional[str] = None  # Commentaire / titre libre de la mission
@@ -77,7 +77,7 @@ def _get_frais_entities(id_operation: int, db: Session):
 
 
 @router.get('/rechercher-employes')
-def rechercher_employes(q: str = '', matricule_initiateur: Optional[int] = None, db: Session = Depends(get_db)):
+def rechercher_employes(q: str = '', matricule_initiateur: Optional[str] = None, db: Session = Depends(get_db)):
     """
     Rechercher des employés pour les ajouter comme missionnaires.
     Filtre selon la hiérarchie de l'initiateur :
@@ -166,7 +166,7 @@ def rechercher_employes(q: str = '', matricule_initiateur: Optional[int] = None,
 
 @router.get('/verifier-chevauchement/{matricule}')
 def verifier_chevauchement_missions(
-    matricule: int,
+    matricule: str,
     date_debut: date,
     date_fin: date,
     id_operation_exclure: Optional[int] = None,
@@ -216,7 +216,7 @@ def verifier_chevauchement_missions(
 
 @router.post('/creer', status_code=status.HTTP_201_CREATED)
 def creer_mission(
-    matricule: int,
+    matricule: str,
     pays: str,
     ville: str,
     moyens_transport: List[str],  # ['routiere', 'aerien', 'ferroviaire', 'maritime']
@@ -324,13 +324,14 @@ def creer_mission(
     # Notifier le premier validateur
     prochain_role, prochain_matricule = workflow.obtenir_prochain_validateur(operation.id_operation, db)
     if prochain_matricule:
-        notifications.creer_notification(
+        notifications.notifier_prochain_validateur(
+            role=prochain_role,
             matricule=prochain_matricule,
             type_notification='VALIDATION',
-            titre=f"Nouvelle mission",
+            titre="Nouvelle mission",
             message=f"{employe.prenom} {employe.nom} demande une mission à {ville}, {pays}",
             id_operation=operation.id_operation,
-            db=db
+            db=db,
         )
     
     return {
@@ -533,7 +534,7 @@ def creer_mission_multi_segments(
         notifications.creer_notification(
             matricule=prochain_matricule,
             type_notification='VALIDATION',
-            titre=f"Nouvelle mission multi-destinations",
+            titre=f"Nouvelle mission",
             message=f"Mission pour {len(noms_missionnaires)} employé(s) ({missionnaires_str}) vers: {destinations}",
             id_operation=operation.id_operation,
             db=db
@@ -934,7 +935,7 @@ def supprimer_segment(
 @router.post('/{id_mission}/missionnaires/{matricule}')
 def ajouter_missionnaire(
     id_mission: int,
-    matricule: int,
+    matricule: str,
     role_mission: str = Query(default='participant'),
     request: Request = None,
     db: Session = Depends(get_db)
@@ -1013,7 +1014,7 @@ def ajouter_missionnaire(
 @router.delete('/{id_mission}/missionnaires/{matricule}')
 def retirer_missionnaire(
     id_mission: int,
-    matricule: int,
+    matricule: str,
     request: Request = None,
     db: Session = Depends(get_db)
 ):
@@ -1074,7 +1075,7 @@ def retirer_missionnaire(
 
 # ── Frais individuels par missionnaire ──────────────────────────────────────
 
-def _ville_employe(matricule: int, db) -> Optional[str]:
+def _ville_employe(matricule: str, db) -> Optional[str]:
     """Retourne la ville de l'employé (en minuscules) via sa localisation, ou None."""
     emp = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
     if not emp or not emp.id_localisation:
@@ -1117,7 +1118,7 @@ class FraisMissionnaireSchema(BaseModel):
 @router.post('/{id_mission}/frais-missionnaire')
 def creer_frais_missionnaire(
     id_mission: int,
-    matricule: int = Query(...),
+    matricule: str = Query(...),
     data: FraisMissionnaireSchema = Body(...),
     request: Request = None,
     db: Session = Depends(get_db)
@@ -1411,7 +1412,7 @@ def modifier_mission(
 @router.post('/{id_operation}/televerser-rapport')
 async def televerser_rapport(
     id_operation: int,
-    matricule: int,
+    matricule: str,
     fichier: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -1560,8 +1561,8 @@ def obtenir_statut_mission(id_operation: int, db: Session = Depends(get_db)):
 @router.post('/{id_operation}/demande-frais', status_code=status.HTTP_201_CREATED)
 def creer_demande_frais(
     id_operation: int,
-    matricule: int,
-    matricule_createur: Optional[int] = None,
+    matricule: str,
+    matricule_createur: Optional[str] = None,
     frais_transport: float = 0,
     frais_hotel: float = 0,
     frais_deplacement: float = 0,
@@ -1774,7 +1775,7 @@ def annuler_demande_frais(id_operation: int, request: Request, db: Session = Dep
 @router.delete('/frais/{id_frais}/supprimer-preuve')
 def supprimer_preuve_frais(
     id_frais: int,
-    matricule: int,
+    matricule: str,
     index: int,
     db: Session = Depends(get_db)
 ):
@@ -1815,7 +1816,7 @@ def supprimer_preuve_frais(
 async def televerser_preuves_frais(
     id_frais: int,
     type_preuve: str,  # ticket, recu, facture, etc.
-    matricule: int = Query(..., description="Matricule du missionnaire"),
+    matricule: str = Query(..., description="Matricule du missionnaire"),
     fichier: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -1862,7 +1863,7 @@ async def televerser_preuves_frais(
 
 @router.get('/mes-missions/{matricule}')
 def obtenir_mes_missions(
-    matricule: int,
+    matricule: str,
     annee: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
@@ -1925,7 +1926,7 @@ def obtenir_mes_missions(
 @router.post('/activation/{id_operation}/rh')
 def activer_mission_rh(
     id_operation: int,
-    matricule_rh: int,
+    matricule_rh: str,
     db: Session = Depends(get_db)
 ):
     success, message = activation_cloture.activer_operation_rh(
@@ -1939,7 +1940,7 @@ def activer_mission_rh(
 @router.post('/activation/{id_operation}/demandeur')
 def activer_mission_demandeur(
     id_operation: int,
-    matricule_demandeur: int,
+    matricule_demandeur: str,
     db: Session = Depends(get_db)
 ):
     success, message = activation_cloture.activer_operation_demandeur(
@@ -1953,7 +1954,7 @@ def activer_mission_demandeur(
 @router.post('/cloture/{id_operation}/demandeur')
 def cloturer_mission_demandeur(
     id_operation: int,
-    matricule_demandeur: int,
+    matricule_demandeur: str,
     retour_anticipe: bool = False,
     date_retour_anticipe: Optional[date] = None,
     db: Session = Depends(get_db)
@@ -1969,7 +1970,7 @@ def cloturer_mission_demandeur(
 @router.post('/cloture/{id_operation}/rh')
 def cloturer_mission_rh(
     id_operation: int,
-    matricule_rh: int,
+    matricule_rh: str,
     db: Session = Depends(get_db)
 ):
     success, message = activation_cloture.cloturer_operation_rh(
@@ -1981,7 +1982,7 @@ def cloturer_mission_rh(
 
 
 @router.get('/stats-missions/{matricule}')
-def obtenir_stats_missions(matricule: int, db: Session = Depends(get_db)):
+def obtenir_stats_missions(matricule: str, db: Session = Depends(get_db)):
     """
     Obtenir des statistiques sur les missions d'un employé.
     """
@@ -2306,7 +2307,7 @@ def obtenir_rapport_mission(id_operation: int, db: Session = Depends(get_db)):
 @router.delete('/{id_operation}/supprimer-rapport')
 def supprimer_rapport_mission(
     id_operation: int,
-    matricule: int,
+    matricule: str,
     db: Session = Depends(get_db)
 ):
     is_missionnaire = db.query(models.MissionnairesMission).filter(
@@ -2375,7 +2376,7 @@ def marquer_frais_paye(id_mission: int, request: Request, db: Session = Depends(
 
 
 @router.get('/en-tant-que-missionnaire/{matricule}')
-def obtenir_missions_en_tant_que_missionnaire(matricule: int, db: Session = Depends(get_db)):
+def obtenir_missions_en_tant_que_missionnaire(matricule: str, db: Session = Depends(get_db)):
     """
     Retourne les missions où l'utilisateur est missionnaire (pas l'initiateur).
     Doit être défini AVANT /{id_mission} pour éviter la capture par le paramètre dynamique.
@@ -2458,7 +2459,7 @@ def obtenir_missions_en_tant_que_missionnaire(matricule: int, db: Session = Depe
 @router.get('/{id_mission}')
 def obtenir_detail_mission(
     id_mission: int,
-    matricule: Optional[int] = Query(None),
+    matricule: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """

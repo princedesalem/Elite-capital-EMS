@@ -49,9 +49,10 @@
   --section-header-bg:#1e2d42;
 }
 *{box-sizing:border-box;font-family:inherit}
-html{background:#02162e}
-body,#root{height:100%;margin:0;font-family:'Century Gothic','Avant Garde',Avantgarde,AppleGothic,'URW Gothic L',sans-serif;background:var(--bg);color:var(--text)}
-input,button,select,textarea,option{font-family:inherit}
+html{background:#02162e;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body,#root{height:100%;margin:0;font-family:'Century Gothic','Avant Garde',Avantgarde,AppleGothic,'URW Gothic L',sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-synthesis:none}
+img,svg{image-rendering:auto;image-rendering:-webkit-optimize-contrast}
+input,button,select,textarea,option{font-family:inherit;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 body{padding-top:50px}
 .container{max-width:1100px;margin:20px auto;padding:16px}
 .card{background:var(--card);border-radius:6px;box-shadow:0 1px 2px rgba(16,24,40,0.06);padding:14px;border:1px solid var(--border)}
@@ -136,12 +137,6 @@ label{color:var(--text-secondary);font-weight:600;font-size:0.8rem}
   /* Tables: allow horizontal scroll + slightly bigger font for readability */
   .table{font-size:0.78rem;min-width:520px}
   .table th,.table td{padding:8px 10px;white-space:nowrap}
-  /* Any form-card containing a wide child scrolls horizontally on mobile */
-  .form-card{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  /* Any direct parent of a .table becomes horizontally scrollable */
-  *:has(> .table),*:has(> table.table){overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
-  /* Container used by pages must also allow horizontal overflow */
-  .container,.card{overflow-x:auto;-webkit-overflow-scrolling:touch}
 
   /* Headings */
   h2{font-size:1.15rem;margin:0 0 10px 0}

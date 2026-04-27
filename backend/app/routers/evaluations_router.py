@@ -14,7 +14,7 @@ router = APIRouter(prefix='/api/evaluations', tags=['evaluations'])
 
 @router.post('/fiche-poste', status_code=status.HTTP_201_CREATED)
 def creer_fiche_poste(
-    matricule: int,
+    matricule: str,
     objectifs: List[Dict],  # [{"titre": "...", "description": "...", "poids": 25}, ...]
     cree_par: int,
     db: Session = Depends(get_db)
@@ -63,7 +63,7 @@ def creer_fiche_poste(
 
 
 @router.get('/fiche-poste/{matricule}')
-def obtenir_fiche_poste(matricule: int, db: Session = Depends(get_db)):
+def obtenir_fiche_poste(matricule: str, db: Session = Depends(get_db)):
     """
     Obtenir la fiche de poste d'un employé.
     """
@@ -131,7 +131,7 @@ def obtenir_periodes_evaluation(db: Session = Depends(get_db)):
 @router.post('/auto-evaluation', status_code=status.HTTP_201_CREATED)
 def soumettre_auto_evaluation(
     id_evaluation: int,
-    matricule: int,
+    matricule: str,
     reponses: List[Dict],  # [{"objectif_id": 1, "note": 4, "commentaire": "..."}, ...]
     db: Session = Depends(get_db)
 ):
@@ -151,7 +151,7 @@ def soumettre_auto_evaluation(
 @router.post('/evaluation-hierarchique', status_code=status.HTTP_201_CREATED)
 def soumettre_evaluation_hierarchique(
     id_evaluation: int,
-    evaluateur_matricule: int,
+    evaluateur_matricule: str,
     evaluateur_role: str,  # RESPONSABLE, DIRECTEUR, RH, DG
     notes: List[Dict],  # [{"objectif_id": 1, "note": 4}, ...]
     commentaire: Optional[str] = None,
@@ -242,7 +242,7 @@ def calculer_note_finale(id_evaluation: int, db: Session = Depends(get_db)):
 
 
 @router.get('/mes-evaluations/{matricule}')
-def obtenir_mes_evaluations(matricule: int, db: Session = Depends(get_db)):
+def obtenir_mes_evaluations(matricule: str, db: Session = Depends(get_db)):
     """
     Obtenir toutes les évaluations d'un employé.
     """
@@ -269,7 +269,7 @@ def obtenir_mes_evaluations(matricule: int, db: Session = Depends(get_db)):
 
 @router.get('/a-evaluer/{matricule_evaluateur}')
 def obtenir_evaluations_a_faire(
-    matricule_evaluateur: int,
+    matricule_evaluateur: str,
     role_evaluateur: str,
     db: Session = Depends(get_db)
 ):

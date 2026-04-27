@@ -1,6 +1,6 @@
-// Bumped: 2026-04-23 — force clients to take the latest assets and purge any
-// stale Cache Storage entries (mobile PWA install).
-const SW_VERSION = '2026-04-23-mobile-ui'
+// Bumped: 2026-04-24 — force clients to take the latest assets and purge any
+// stale Cache Storage entries (fix BOM + question mark rendering).
+const SW_VERSION = '2026-04-24-fix-bom-questionmark'
 
 self.addEventListener('install', (event) => {
   self.skipWaiting()

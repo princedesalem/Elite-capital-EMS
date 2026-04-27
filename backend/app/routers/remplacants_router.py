@@ -33,7 +33,7 @@ def lister_operations_disponibles(
 
     token_matricule = payload.get('matricule') or payload.get('sub')
     try:
-        matricule = int(token_matricule)
+        matricule = str(token_matricule).strip().upper()
     except Exception:
         raise HTTPException(status_code=401, detail='Token sans matricule valide')
 
@@ -222,7 +222,7 @@ def generer_remplacants(
 @router.post('/{id_operation}/accepter/{matricule_remplacant}')
 def accepter_remplacant(
     id_operation: int,
-    matricule_remplacant: int,
+    matricule_remplacant: str,
     db: Session = Depends(get_db)
 ):
     """
@@ -275,7 +275,7 @@ def accepter_remplacant(
 @router.post('/{id_operation}/demander/{matricule_remplacant}')
 def demander_remplacant(
     id_operation: int,
-    matricule_remplacant: int,
+    matricule_remplacant: str,
     request: Request,
     db: Session = Depends(get_db)
 ):
@@ -338,7 +338,7 @@ def demander_remplacant(
 
 
 @router.get('/mes-demandes/{matricule}')
-def obtenir_mes_demandes(matricule: int, db: Session = Depends(get_db)):
+def obtenir_mes_demandes(matricule: str, db: Session = Depends(get_db)):
     """
     Retourne les opérations pour lesquelles l'employé a reçu une demande
     (demande_envoyee=True, est_accepte=False) afin qu'il puisse accepter.
@@ -375,7 +375,7 @@ def obtenir_mes_demandes(matricule: int, db: Session = Depends(get_db)):
 
 @router.get('/disponibilite/{matricule}')
 def verifier_disponibilite(
-    matricule: int,
+    matricule: str,
     date_debut: date,
     date_fin: date,
     db: Session = Depends(get_db)
@@ -395,7 +395,7 @@ def verifier_disponibilite(
 
 
 @router.get('/mes-remplacements/{matricule}')
-def obtenir_mes_remplacements(matricule: int, db: Session = Depends(get_db)):
+def obtenir_mes_remplacements(matricule: str, db: Session = Depends(get_db)):
     """
     Obtenir toutes les opérations pour lesquelles un employé a été accepté comme remplaçant.
     """

@@ -31,7 +31,7 @@ def _decode_token(request: Request) -> int | None:
 
 
 @router.get('/{matricule}')
-def get_settings(matricule: int, request: Request, db: Session = Depends(get_db)):
+def get_settings(matricule: str, request: Request, db: Session = Depends(get_db)):
     """Récupère les paramètres sauvegardés en DB pour un utilisateur."""
     actor = _decode_token(request)
     if actor is None:
@@ -47,7 +47,7 @@ def get_settings(matricule: int, request: Request, db: Session = Depends(get_db)
 
 @router.put('/{matricule}')
 def save_settings(
-    matricule: int,
+    matricule: str,
     request: Request,
     payload: Dict[str, Any] = Body(...),
     db: Session = Depends(get_db),

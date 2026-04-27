@@ -314,7 +314,7 @@ def obtenir_validateur_pour_role(
     return None
 
 
-def obtenir_tous_matricules_dg(db: Session) -> List[int]:
+def obtenir_tous_matricules_dg(db: Session) -> List[str]:
     """
     Retourne la liste ordonnée (par matricule) des matricules ayant le rôle DG,
     toutes entités confondues. Règle métier : lorsque plusieurs DG existent, ils
@@ -487,7 +487,7 @@ def rerouter_notifications_validation_en_attente(db: Session) -> dict:
                 titre="Demande à valider (reroutée)",
                 message=(
                     f"Une {str(type_demande).lower()} de {demandeur_label} "
-                    f"est en attente de votre validation en tant que {role_correct}."
+                    f"est en attente de votre validation."
                 ),
                 id_operation=op.id_operation,
             )
@@ -549,7 +549,7 @@ def operation_a_deja_ete_validee(id_operation: int, db: Session) -> bool:
 
 def valider_operation(
     id_operation: int,
-    matricule_validateur: int,
+    matricule_validateur: str,
     statut: str,
     commentaire: Optional[str],
     db: Session
@@ -686,17 +686,26 @@ def valider_operation(
         
         demandeur_label = f"{demandeur.prenom} {demandeur.nom}" if demandeur else "un demandeur"
         type_demande = operation.type_demande if operation and operation.type_demande else 'opération'
-        notification_prochain = Notification(
-            matricule=prochain_matricule_apres,
-            type_notification=TypeNotificationEnum.VALIDATION,
-            titre="Nouvelle demande à valider",
-            message=(
-                f"Une {type_demande.lower()} de {demandeur_label} "
-                f"est en attente de votre validation en tant que {prochain_role_apres}."
-            ),
-            id_operation=id_operation
-        )
-        db.add(notification_prochain)
+
+        # B5 — si DG, notifier tous les DG simultanément.
+        cibles_notif: list[int] = []
+        if (prochain_role_apres or '').upper() == 'DG':
+            cibles_notif = list(obtenir_tous_matricules_dg(db))
+        if not cibles_notif:
+            cibles_notif = [prochain_matricule_apres]
+
+        for _mat_cible in cibles_notif:
+            notification_prochain = Notification(
+                matricule=_mat_cible,
+                type_notification=TypeNotificationEnum.VALIDATION,
+                titre="Nouvelle demande à valider",
+                message=(
+                    f"Une {type_demande.lower()} de {demandeur_label} "
+                    f"est en attente de votre validation."
+                ),
+                id_operation=id_operation
+            )
+            db.add(notification_prochain)
         db.commit()
 
         # Email au prochain validateur
@@ -711,7 +720,7 @@ def valider_operation(
                 (
                     f"Bonjour {prochain_emp.prenom} {prochain_emp.nom},\n\n"
                     f"Une demande de {type_demande} de {demandeur_label} "
-                    f"est en attente de votre validation en tant que {prochain_role_apres}.\n\n"
+                    f"est en attente de votre validation.\n\n"
                     f"Connectez-vous à EMS pour la traiter : {app_url}\n\n"
                     f"Cordialement,\nÉquipe EMS"
                 )
@@ -720,7 +729,7 @@ def valider_operation(
     return True, f"Validation enregistrée. En attente de {prochain_role_apres}"
 
 
-def verifier_role_employe(matricule: int, role_name: str, db: Session) -> bool:
+def verifier_role_employe(matricule: str, role_name: str, db: Session) -> bool:
     """
     Vérifie si un employé a un rôle spécifique.
     
@@ -747,7 +756,7 @@ def verifier_role_employe(matricule: int, role_name: str, db: Session) -> bool:
     return role_employe == role_recherche
 
 
-def obtenir_role_validateur(matricule: int, db: Session) -> str:
+def obtenir_role_validateur(matricule: str, db: Session) -> str:
     """
     Obtient le rôle d'un validateur.
     
@@ -777,7 +786,7 @@ def obtenir_role_validateur(matricule: int, db: Session) -> str:
 
 def auto_valider_si_sequence_vide(
     id_operation: int,
-    matricule_demandeur: int,
+    matricule_demandeur: str,
     db: Session
 ) -> bool:
     """
@@ -826,7 +835,7 @@ def auto_valider_si_sequence_vide(
     return True
 
 
-def peut_creer_demande_pour_autrui(matricule: int, db: Session) -> bool:
+def peut_creer_demande_pour_autrui(matricule: str, db: Session) -> bool:
     """
     Vérifie si un employé peut créer des demandes pour d'autres employés.
     
@@ -851,7 +860,7 @@ def peut_creer_demande_pour_autrui(matricule: int, db: Session) -> bool:
     return subordonnes > 0
 
 
-def obtenir_operations_visibles(matricule: int, db: Session) -> List[Operation]:
+def obtenir_operations_visibles(matricule: str, db: Session) -> List[Operation]:
     """
     Obtient les opérations visibles pour un employé selon son rôle.
     

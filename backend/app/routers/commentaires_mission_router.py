@@ -15,13 +15,13 @@ router = APIRouter(prefix='/api/missions/commentaires', tags=['commentaires-miss
 
 class CommentaireCreate(BaseModel):
     id_mission: int
-    matricule: int
+    matricule: str
     commentaire: str
 
 class CommentaireResponse(BaseModel):
     id_commentaire: int
     id_mission: int
-    matricule: int
+    matricule: str
     auteur_nom: str
     auteur_fonction: str
     commentaire: str
@@ -136,7 +136,7 @@ def lister_commentaires(
 @router.post('/{id_commentaire}/marquer-lu')
 def marquer_commentaire_lu(
     id_commentaire: int,
-    matricule: int,
+    matricule: str,
     db: Session = Depends(get_db)
 ):
     """
@@ -162,7 +162,7 @@ def marquer_commentaire_lu(
 @router.get('/mission/{id_mission}/non-lus/{matricule}')
 def compter_non_lus(
     id_mission: int,
-    matricule: int,
+    matricule: str,
     db: Session = Depends(get_db)
 ):
     """

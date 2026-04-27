@@ -112,7 +112,7 @@ class FonctionReference(Base):
 
 class Employe(Base):
     __tablename__ = 'EMPLOYE'
-    matricule = Column(Integer, primary_key=True)
+    matricule = Column(String(32), primary_key=True)
     nom = Column(String(100), nullable=False)
     prenom = Column(String(100), nullable=False)
     email = Column(String(150), unique=True, nullable=True)
@@ -138,20 +138,23 @@ class Employe(Base):
     # absence / backup fields (garder pour compatibilité)
     absent = Column(Boolean, default=False)
     absence_until = Column(Date, nullable=True)
-    backup_matricule = Column(Integer, nullable=True)
-    n1 = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    backup_matricule = Column(String(32), nullable=True)
+    n1 = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
     n1_fonction = Column(String(255), nullable=True)
     photo_url = Column(String(500), nullable=True)
     contact_urgence = Column(String(30), nullable=True)
     statut_matrimonial = Column(Enum(StatutMatrimonialEnum), nullable=True)
     nombre_enfants = Column(Integer, nullable=True, default=0)
+    # Salaire confidentiel (D backlog) — visible RH uniquement, ou propre matricule.
+    salaire_brut = Column(DECIMAL(12, 2), nullable=True)
+    salaire_devise = Column(String(3), nullable=True, default='XAF')
     utilisateur = relationship('Utilisateur', back_populates='employe', uselist=False)
 
 
 class Utilisateur(Base):
     __tablename__ = 'UTILISATEUR'
     id_user = Column(Integer, primary_key=True, autoincrement=True)
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), unique=True, nullable=True)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), unique=True, nullable=True)
     mot_de_passe_hash = Column(String(500), nullable=False)
     mot_de_passe_temporaire = Column(Boolean, default=True)
     dernier_login = Column(DateTime)
@@ -194,7 +197,7 @@ class Direction(Base):
     nom = Column(String(150), nullable=False)
     id_entite = Column(Integer, ForeignKey('ENTITE.id_entite'), nullable=False)
     id_localisation = Column(Integer, ForeignKey('LOCALISATION.id_localisation'), nullable=True)
-    id_directeur = Column(Integer, ForeignKey('EMPLOYE.matricule'))
+    id_directeur = Column(String(32), ForeignKey('EMPLOYE.matricule'))
 
 class Departement(Base):
     __tablename__ = 'DEPARTEMENT'
@@ -202,7 +205,7 @@ class Departement(Base):
     nom = Column(String(150))
     id_entite = Column(Integer, ForeignKey('ENTITE.id_entite'), nullable=False)
     id_direction = Column(Integer, ForeignKey('DIRECTION.id_direction'))
-    id_responsable = Column(Integer, ForeignKey('EMPLOYE.matricule'))
+    id_responsable = Column(String(32), ForeignKey('EMPLOYE.matricule'))
     villes = relationship('DepartementImplantation', back_populates='departement', cascade='all, delete-orphan')
 
 
@@ -222,7 +225,7 @@ class Embauche(Base):
     time_action = Column(String(8))
     type = Column(String(50))
     id_entite = Column(Integer, ForeignKey('ENTITE.id_entite'))
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'))
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'))
 
 class Congedier(Base):
     __tablename__ = 'Congedier'
@@ -231,14 +234,14 @@ class Congedier(Base):
     time_action = Column(String(8))
     type = Column(String(50))
     id_entite = Column(Integer, ForeignKey('ENTITE.id_entite'))
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'))
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'))
 
 class FicheDePoste(Base):
     __tablename__ = 'Fiche_de_poste'
     id_fiche = Column(Integer, primary_key=True, autoincrement=True)
     objectifs = Column(JSON, nullable=False)
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
-    cree_par = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
+    cree_par = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     date_creation = Column(DateTime, default=datetime.utcnow)
 
 class PeriodeEvaluation(Base):
@@ -246,14 +249,14 @@ class PeriodeEvaluation(Base):
     id_periode = Column(Integer, primary_key=True, autoincrement=True)
     date_debut = Column(Date, nullable=False)
     date_fin = Column(Date, nullable=False)
-    cree_par = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    cree_par = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
 
 class Evaluation(Base):
     __tablename__ = 'Evaluation'
     id_eval = Column(Integer, primary_key=True, autoincrement=True)
     id_fiche = Column(Integer, ForeignKey('Fiche_de_poste.id_fiche'), nullable=False)
     id_periode = Column(Integer, ForeignKey('Periode_evaluation.id_periode'), nullable=False)
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     auto_evaluation = Column(JSON)
     evaluations = Column(JSON)
     note_finale = Column(DECIMAL(5,2))
@@ -268,7 +271,7 @@ EvaluationEmploye = Evaluation
 class Operation(Base):
     __tablename__ = 'OPERATIONS'
     id_operation = Column(Integer, primary_key=True, autoincrement=True)
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'))
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'))
     titre = Column(String(200), nullable=True)
     commentaire = Column(Text)
     # Champs ajoutés par migration 010
@@ -283,8 +286,8 @@ class Operation(Base):
     date_depart = Column(Date)  # Date départ (missions)
     date_retour = Column(Date)  # Date retour (missions)
     duree = Column(Integer)  # Durée brute
-    remplacant = Column(Integer, ForeignKey('EMPLOYE.matricule'))
-    cree_par = Column(Integer, ForeignKey('EMPLOYE.matricule'))
+    remplacant = Column(String(32), ForeignKey('EMPLOYE.matricule'))
+    cree_par = Column(String(32), ForeignKey('EMPLOYE.matricule'))
     est_modifie = Column(Boolean, default=False)
     solde_deduit = Column(Boolean, default=False)
     date_modification = Column(DateTime)
@@ -387,7 +390,7 @@ class MissionnairesMission(Base):
     __tablename__ = 'MissionnairesMission'
     id_missionnaire_mission = Column(Integer, primary_key=True, autoincrement=True)
     id_mission = Column(Integer, ForeignKey('Mission.id_mission', name='fk_missionnaires_mission'))
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule', name='fk_missionnaires_employe'))
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule', name='fk_missionnaires_employe'))
     role_mission = Column(String(50))  # 'responsable', 'participant', etc.
     date_ajout = Column(DateTime, default=datetime.utcnow)
 
@@ -404,7 +407,7 @@ class CommentaireMission(Base):
     __tablename__ = 'CommentaireMission'
     id_commentaire = Column(Integer, primary_key=True, autoincrement=True)
     id_mission = Column(Integer, ForeignKey('Mission.id_mission', name='fk_commentaire_mission'))
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule', name='fk_commentaire_employe'))
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule', name='fk_commentaire_employe'))
     commentaire = Column(Text)
     date_creation = Column(DateTime, default=datetime.utcnow)
     lu_par = Column(JSON)  # Array des matricules qui ont lu le commentaire
@@ -426,7 +429,7 @@ class FraisMissionnaire(Base):
     __tablename__ = 'FraisMissionnaire'
     id = Column(Integer, primary_key=True, autoincrement=True)
     id_mission = Column(Integer, ForeignKey('Mission.id_mission', name='fk_frais_miss_mission', ondelete='CASCADE'), nullable=False)
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule', name='fk_frais_miss_employe', ondelete='CASCADE'), nullable=False)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule', name='fk_frais_miss_employe', ondelete='CASCADE'), nullable=False)
     # Lien optionnel vers un segment précis de la mission (multi-destinations).
     # NULL = frais globaux non attribués. ON DELETE SET NULL : la suppression
     # d'un segment ne purge pas ses frais, ils retombent en « non assignés ».
@@ -457,7 +460,7 @@ class Validation(Base):
     __tablename__ = 'Validation'
     id_validation = Column(Integer, primary_key=True, autoincrement=True)
     id_operation = Column(Integer, ForeignKey('OPERATIONS.id_operation'))
-    matricule_validateur = Column(Integer, ForeignKey('EMPLOYE.matricule'))
+    matricule_validateur = Column(String(32), ForeignKey('EMPLOYE.matricule'))
     role_validateur = Column(String(50))  # RESPONSABLE, DIRECTEUR, DFC, RH, DG, PCA, AG
     statut_validation = Column(String(20))
     commentaire = Column(Text)
@@ -466,7 +469,7 @@ class Validation(Base):
 class Creation(Base):
     __tablename__ = 'Creation'
     id_creation = Column(Integer, primary_key=True, autoincrement=True)
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'))
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'))
     id_operation = Column(Integer, ForeignKey('OPERATIONS.id_operation'))
     timestamp_action = Column(DateTime, default=datetime.utcnow)
     type = Column(String(50))
@@ -476,7 +479,7 @@ class RemplacantPropose(Base):
     __tablename__ = 'Remplacant_propose'
     id_remplacant_propose = Column(Integer, primary_key=True, autoincrement=True)
     id_operation = Column(Integer, ForeignKey('OPERATIONS.id_operation'), nullable=False)
-    matricule_remplacant = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    matricule_remplacant = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     ordre_proposition = Column(Integer)
     est_accepte = Column(Boolean, default=False)
     demande_envoyee = Column(Boolean, default=False)
@@ -486,7 +489,7 @@ class RemplacantPropose(Base):
 class ParcoursEmploye(Base):
     __tablename__ = 'PARCOURS_EMPLOYE'
     id_parcours = Column(Integer, primary_key=True, autoincrement=True)
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False, index=True)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False, index=True)
     type_action = Column(Enum(TypeParcoursEnum), nullable=False)
     champ_modifie = Column(String(64), nullable=True)
     ancienne_valeur = Column(String(255), nullable=True)
@@ -499,7 +502,7 @@ class ParcoursEmploye(Base):
 class Notification(Base):
     __tablename__ = 'Notification'
     id_notification = Column(Integer, primary_key=True, autoincrement=True)
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     type_notification = Column(Enum(TypeNotificationEnum))
     titre = Column(String(200))
     message = Column(Text, nullable=False)
@@ -512,7 +515,7 @@ class Notification(Base):
 class PushSubscription(Base):
     __tablename__ = 'PUSH_SUBSCRIPTION'
     id_push_subscription = Column(Integer, primary_key=True, autoincrement=True)
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     endpoint = Column(String(700), unique=True, nullable=False)
     p256dh = Column(String(255), nullable=False)
     auth = Column(String(255), nullable=False)
@@ -524,7 +527,7 @@ class PushSubscription(Base):
 class DemandeExplication(Base):
     __tablename__ = 'Demande_explication'
     id_demande_explication = Column(Integer, primary_key=True, autoincrement=True)
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     id_operation = Column(Integer, ForeignKey('OPERATIONS.id_operation'))
     motif = Column(Text)
     explication_fournie = Column(Text)
@@ -535,7 +538,7 @@ class DemandeExplication(Base):
 class AlerteCongesAnnuelle(Base):
     __tablename__ = 'Alerte_conges_annuelle'
     id_alerte = Column(Integer, primary_key=True, autoincrement=True)
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     annee = Column(Integer, nullable=False)
     solde_restant = Column(DECIMAL(5,2))
     date_alerte = Column(DateTime, default=datetime.utcnow)
@@ -544,7 +547,7 @@ class AlerteCongesAnnuelle(Base):
 class SessionUtilisation(Base):
     __tablename__ = 'SESSION_UTILISATION'
     id_session = Column(Integer, primary_key=True, autoincrement=True)
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     date_connexion = Column(DateTime, default=datetime.utcnow, nullable=False)
     date_deconnexion = Column(DateTime, nullable=True)
     duree_minutes = Column(Integer, nullable=True)  # Duration in minutes
@@ -555,7 +558,7 @@ class SessionUtilisation(Base):
 class Sortie(Base):
     __tablename__ = 'SORTIE'
     id_sortie = Column(Integer, primary_key=True, autoincrement=True)
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     id_operation = Column(Integer, ForeignKey('OPERATIONS.id_operation'), nullable=True)
     date_sortie = Column(Date, nullable=False)
     heure_sortie = Column(Time, nullable=False)
@@ -572,8 +575,8 @@ class Task(Base):
     priorite = Column(String(20), nullable=False, default='moyenne')
     statut = Column(String(20), nullable=False, default='a_faire')
     date_echeance = Column(Date, nullable=True)
-    assigne_a = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
-    cree_par = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    assigne_a = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
+    cree_par = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     date_creation = Column(DateTime, default=datetime.utcnow, nullable=False)
     date_modification = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -582,7 +585,7 @@ class TeamSpacePost(Base):
     __tablename__ = 'TEAM_SPACE_POST'
     id_post = Column(Integer, primary_key=True, autoincrement=True)
     post_type = Column(String(20), nullable=False)
-    author_matricule = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    author_matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
     author_name = Column(String(150), nullable=False)
     destinataire = Column(String(150), nullable=True)
     message = Column(Text, nullable=True)
@@ -602,7 +605,7 @@ class ModuleStoreItem(Base):
     id_item = Column(Integer, primary_key=True, autoincrement=True)
     module_name = Column(String(100), nullable=False)
     payload = Column(JSON, nullable=False)
-    created_by = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    created_by = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -620,7 +623,7 @@ class Evenement(Base):
     organisateur = Column(String(200), nullable=True)
     capacite = Column(Integer, nullable=True)
     statut = Column(String(50), default='brouillon')
-    created_by = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    created_by = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -629,8 +632,8 @@ class Evenement(Base):
 class Review360(Base):
     __tablename__ = 'reviews_360'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    reviewer_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
-    reviewee_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    reviewer_id = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
+    reviewee_id = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     scores = Column(JSON, nullable=False, default=list)
     commentaire = Column(Text, nullable=True)
     points_forts = Column(Text, nullable=True)
@@ -643,8 +646,8 @@ class TalentMeeting(Base):
     __tablename__ = 'talent_meetings'
     id = Column(Integer, primary_key=True, autoincrement=True)
     titre = Column(String(200), nullable=False)
-    manager_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
-    employee_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    manager_id = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
+    employee_id = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
     date = Column(String(20), nullable=True)
     agenda = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
@@ -662,7 +665,7 @@ class TalentGoal(Base):
     type = Column(String(100), nullable=True)
     echeance = Column(String(20), nullable=True)
     statut = Column(String(50), default='a_faire')
-    employee_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    employee_id = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -680,7 +683,7 @@ class WorkforcePosition(Base):
     priorite = Column(String(50), default='moyenne')
     statut = Column(String(50), default='planifie')
     notes = Column(Text, nullable=True)
-    created_by = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    created_by = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -693,7 +696,7 @@ class Club(Base):
     description = Column(Text, nullable=True)
     type = Column(String(100), default='Sports')
     emoji = Column(String(10), nullable=True)
-    created_by = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    created_by = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -702,7 +705,7 @@ class ClubMembership(Base):
     __tablename__ = 'club_memberships'
     id = Column(Integer, primary_key=True, autoincrement=True)
     club_id = Column(Integer, ForeignKey('clubs.id'), nullable=False)
-    user_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    user_id = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     joined_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -713,7 +716,7 @@ class ClubActivity(Base):
     titre = Column(String(200), nullable=False)
     date = Column(String(20), nullable=True)
     description = Column(Text, nullable=True)
-    created_by = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=True)
+    created_by = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -721,7 +724,7 @@ class ClubReviewItem(Base):
     __tablename__ = 'club_review_items'
     id = Column(Integer, primary_key=True, autoincrement=True)
     club_id = Column(Integer, ForeignKey('clubs.id'), nullable=False)
-    user_id = Column(Integer, ForeignKey('EMPLOYE.matricule'), nullable=False)
+    user_id = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     rating = Column(Integer, nullable=False)
     commentaire = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -732,7 +735,7 @@ class TaskAssignee(Base):
     __tablename__ = 'TASK_ASSIGNEE'
     id = Column(Integer, primary_key=True, autoincrement=True)
     id_task = Column(Integer, ForeignKey('TASK.id_task', ondelete='CASCADE'), nullable=False)
-    matricule_employe = Column(Integer, ForeignKey('EMPLOYE.matricule', ondelete='CASCADE'), nullable=False)
+    matricule_employe = Column(String(32), ForeignKey('EMPLOYE.matricule', ondelete='CASCADE'), nullable=False)
     __table_args__ = (
         UniqueConstraint('id_task', 'matricule_employe', name='uq_task_employe'),
     )
@@ -741,6 +744,6 @@ class TaskAssignee(Base):
 # ── Paramètres utilisateurs (persistence DB) ──────────────────────────────────
 class UserSettings(Base):
     __tablename__ = 'USER_SETTINGS'
-    matricule = Column(Integer, ForeignKey('EMPLOYE.matricule', ondelete='CASCADE'), primary_key=True)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule', ondelete='CASCADE'), primary_key=True)
     settings = Column(JSON, nullable=False, default=dict)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

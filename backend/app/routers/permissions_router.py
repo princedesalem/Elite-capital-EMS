@@ -75,10 +75,10 @@ def obtenir_types_conventionnels():
 
 @router.post('/conventionnelle', status_code=status.HTTP_201_CREATED)
 def creer_permission_conventionnelle(
-    matricule: int,
+    matricule: str,
     type_permission: str,
     sous_type: Optional[str] = None,
-    matricule_createur: Optional[int] = None,
+    matricule_createur: Optional[str] = None,
     duree: int = None,
     date_debut: date = None,
     date_fin: date = None,
@@ -173,13 +173,14 @@ def creer_permission_conventionnelle(
     # Notifier le premier validateur
     prochain_role, prochain_matricule = workflow.obtenir_prochain_validateur(operation.id_operation, db)
     if prochain_matricule:
-        notifications.creer_notification(
+        notifications.notifier_prochain_validateur(
+            role=prochain_role,
             matricule=prochain_matricule,
             type_notification='VALIDATION',
             titre=f"Permission conventionnelle ({type_permission_norm})",
             message=f"{employe.prenom} {employe.nom} demande une permission conventionnelle",
             id_operation=operation.id_operation,
-            db=db
+            db=db,
         )
     
     return {
@@ -194,11 +195,11 @@ def creer_permission_conventionnelle(
 
 @router.post('/non-conventionnelle', status_code=status.HTTP_201_CREATED)
 def creer_permission_non_conventionnelle(
-    matricule: int,
+    matricule: str,
     date_debut: date,
     date_fin: date,
     duree: Optional[int] = None,
-    matricule_createur: Optional[int] = None,
+    matricule_createur: Optional[str] = None,
     motif: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
@@ -271,13 +272,14 @@ def creer_permission_non_conventionnelle(
     # Notifier
     prochain_role, prochain_matricule = workflow.obtenir_prochain_validateur(operation.id_operation, db)
     if prochain_matricule:
-        notifications.creer_notification(
+        notifications.notifier_prochain_validateur(
+            role=prochain_role,
             matricule=prochain_matricule,
             type_notification='VALIDATION',
-            titre=f"Permission non-conventionnelle",
+            titre="Permission non-conventionnelle",
             message=f"{employe.prenom} {employe.nom} demande {duree_calculee} jours de permission",
             id_operation=operation.id_operation,
-            db=db
+            db=db,
         )
     
     return {
@@ -407,7 +409,7 @@ def supprimer_preuve(id_operation: int, id_preuve: int, db: Session = Depends(ge
 
 @router.get('/mes-permissions/{matricule}')
 def obtenir_mes_permissions(
-    matricule: int,
+    matricule: str,
     annee: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
@@ -595,7 +597,7 @@ def modifier_permission(
 @router.post('/activation/{id_operation}/rh')
 def activer_permission_rh(
     id_operation: int,
-    matricule_rh: int,
+    matricule_rh: str,
     db: Session = Depends(get_db)
 ):
     success, message = activation_cloture.activer_operation_rh(
@@ -609,7 +611,7 @@ def activer_permission_rh(
 @router.post('/activation/{id_operation}/demandeur')
 def activer_permission_demandeur(
     id_operation: int,
-    matricule_demandeur: int,
+    matricule_demandeur: str,
     db: Session = Depends(get_db)
 ):
     success, message = activation_cloture.activer_operation_demandeur(
@@ -623,7 +625,7 @@ def activer_permission_demandeur(
 @router.post('/cloture/{id_operation}/demandeur')
 def cloturer_permission_demandeur(
     id_operation: int,
-    matricule_demandeur: int,
+    matricule_demandeur: str,
     retour_anticipe: bool = False,
     date_retour_anticipe: Optional[date] = None,
     db: Session = Depends(get_db)
@@ -639,7 +641,7 @@ def cloturer_permission_demandeur(
 @router.post('/cloture/{id_operation}/rh')
 def cloturer_permission_rh(
     id_operation: int,
-    matricule_rh: int,
+    matricule_rh: str,
     db: Session = Depends(get_db)
 ):
     success, message = activation_cloture.cloturer_operation_rh(

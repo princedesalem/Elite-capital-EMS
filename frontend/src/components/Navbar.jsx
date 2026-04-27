@@ -293,7 +293,7 @@ export default function Navbar(){
                 </span>
               )}
             </Link>
-            <Link to="/rh/profile" style={{color:'#02162e',fontSize:'0.8rem',textDecoration:'none',display:'flex',alignItems:'center',gap:6,minWidth:0,fontWeight:600,minWidth:0}}>
+            <Link to="/rh/profile" style={{color:'#02162e',fontSize:'0.8rem',textDecoration:'none',display:'flex',alignItems:'center',gap:6,minWidth:0,fontWeight:600}}>
               <AvatarCircle
                 photoUrl={employee?.photo_url}
                 letter={(() => { try { return String(user?.matricule || user?.sub || '?')[0].toUpperCase() } catch { return '?' } })()}

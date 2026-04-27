@@ -62,6 +62,13 @@ export default function Employees(){
     return `${years} an${years > 1 ? 's' : ''} ${months} mois`
   }
 
+  const formatSalaire = (amount, currency = 'XAF') => {
+    if (amount == null || amount === '') return 'Non renseigne'
+    const n = Number(amount)
+    if (Number.isNaN(n)) return `${amount} ${currency}`
+    return `${n.toLocaleString('fr-FR')} ${currency}`
+  }
+
   const getEmployeeInitial = (employee) => {
     const firstName = String(employee?.prenom || '').trim()
     const lastName = String(employee?.nom || '').trim()
@@ -607,7 +614,7 @@ export default function Employees(){
           }} onClick={(e) => e.stopPropagation()}>
             {/* En-tête */}
             <div style={{
-              background: 'linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%)',
+              background: 'linear-gradient(135deg, #021630 0%, #ce2b2b 100%)',
               color: 'white',
               padding: '20px',
               borderRadius: '12px 12px 0 0',
@@ -729,6 +736,12 @@ export default function Employees(){
                   <div><span style={{color: '#64748b'}}>Date d'embauche:</span> <strong>{selectedEmployee.date_embauche ? new Date(selectedEmployee.date_embauche).toLocaleDateString('fr-FR') : '-'}</strong></div>
                   <div><span style={{color: '#64748b'}}>Ancienneté:</span> <strong>{calculateAnciennete(selectedEmployee.date_embauche)}</strong></div>
                   <div><span style={{color: '#64748b'}}>Solde de congés:</span> <strong>{selectedEmployee.solde_conges ?? '-'} jours</strong></div>
+                  {isRhAdmin && (
+                    <>
+                      <div><span style={{color: '#64748b'}}>Salaire brut:</span> <strong>{formatSalaire(selectedEmployee.salaire_brut, selectedEmployee.salaire_devise || 'XAF')}</strong></div>
+                      <div><span style={{color: '#64748b'}}>Devise salaire:</span> <strong>{selectedEmployee.salaire_devise || 'XAF'}</strong></div>
+                    </>
+                  )}
                 </div>
               </div>
 

@@ -143,7 +143,7 @@ def test_cancel_allowed_after_partial_validation_before_final_and_notifications_
     assert operation is None
 
     notifications = db_session.query(models.Notification).order_by(models.Notification.matricule.asc()).all()
-    assert [notif.matricule for notif in notifications] == [1001, 3001]
+    assert [notif.matricule for notif in notifications] == ['1001', '3001']
     assert all(notif.id_operation is None for notif in notifications)
     assert all('annul' in notif.message.lower() for notif in notifications)
 

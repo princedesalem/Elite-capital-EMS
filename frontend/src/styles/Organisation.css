@@ -6,7 +6,7 @@
 }
 
 .org-header {
-  background: linear-gradient(135deg, #021630 0%, #ce2b2b 100%);
+  background: linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%);
   color: white;
   padding: 40px 30px;
   border-radius: 10px;
@@ -154,8 +154,11 @@
 }
 
 .pays-button-flag {
-  font-size: 1.5rem;
+  font-size: 0.7rem;
   line-height: 1;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.05em;
 }
 
 .pays-button-info {
@@ -241,8 +244,11 @@
 }
 
 .ville-button-flag {
-  font-size: 1.4rem;
+  font-size: 0.7rem;
   line-height: 1;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.05em;
 }
 
 .ville-button-name {

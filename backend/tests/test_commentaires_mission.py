@@ -41,7 +41,7 @@ def _seed(db):
     """Crée un employé et une mission pour les tests."""
     from datetime import date
     emp = models.Employe(
-        matricule=1001, prenom='Jean', nom='Dupont',
+        matricule='1001', prenom='Jean', nom='Dupont',
         statut_employe='ACTIF', fonction='Analyste',
         date_embauche=date(2020, 1, 1),
     )
@@ -59,7 +59,7 @@ def _seed(db):
 def test_create_commentaire_mission_not_found(client):
     resp = client.post('/api/missions/commentaires/creer', json={
         'id_mission': 9999,
-        'matricule': 1001,
+        'matricule': '1001',
         'commentaire': 'Test',
     })
     assert resp.status_code == 404
@@ -75,7 +75,7 @@ def test_create_commentaire_employe_not_found(client, db_session):
     db_session.commit()
     resp = client.post('/api/missions/commentaires/creer', json={
         'id_mission': 1,
-        'matricule': 9999,
+        'matricule': '9999',
         'commentaire': 'Test',
     })
     assert resp.status_code == 404
@@ -85,7 +85,7 @@ def test_create_and_list_commentaire(client, db_session):
     _seed(db_session)
     resp = client.post('/api/missions/commentaires/creer', json={
         'id_mission': 1,
-        'matricule': 1001,
+        'matricule': '1001',
         'commentaire': 'Bon déroulement de mission.',
     })
     assert resp.status_code == 201
@@ -98,7 +98,7 @@ def test_create_and_list_commentaire(client, db_session):
 
 
 def test_marquer_commentaire_lu_not_found(client):
-    resp = client.post('/api/missions/commentaires/99999/marquer-lu', params={'matricule': 1001})
+    resp = client.post('/api/missions/commentaires/99999/marquer-lu', params={'matricule': '1001'})
     assert resp.status_code == 404
 
 
@@ -106,9 +106,9 @@ def test_marquer_commentaire_lu(client, db_session):
     _seed(db_session)
     create_resp = client.post('/api/missions/commentaires/creer', json={
         'id_mission': 1,
-        'matricule': 1001,
+        'matricule': '1001',
         'commentaire': 'Lu test',
     })
     comm_id = create_resp.json()['id_commentaire']
-    resp = client.post(f'/api/missions/commentaires/{comm_id}/marquer-lu', params={'matricule': 1001})
+    resp = client.post(f'/api/missions/commentaires/{comm_id}/marquer-lu', params={'matricule': '1001'})
     assert resp.status_code == 200

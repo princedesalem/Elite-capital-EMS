@@ -5,15 +5,6 @@ import { Building2, Globe, MapPin, Plus, Pencil, Trash2, ChevronDown, ChevronRig
 import '../styles/Organisation.css'
 import { toast, confirmDialog } from '../components/ui/bridge'
 
-// Emoji drapeaux par code pays
-const FLAG_EMOJI = {
-  CM: '🇨🇲', GA: '🇬🇦', CG: '🇨🇬', FR: '🇫🇷', CI: '🇨🇮',
-  SN: '🇸🇳', BJ: '🇧🇯', TG: '🇹🇬', ML: '🇲🇱', BF: '🇧🇫',
-  NE: '🇳🇪', TD: '🇹🇩', RW: '🇷🇼', CD: '🇨🇩', GN: '🇬🇳',
-  MR: '🇲🇷', GH: '🇬🇭', NG: '🇳🇬', ET: '🇪🇹', default: '🌍'
-}
-
-const getCountryEmoji = (code) => FLAG_EMOJI[code?.toUpperCase()] || FLAG_EMOJI.default
 
 export default function Organisation() {
   const { user } = useAuth()
@@ -514,32 +505,51 @@ export default function Organisation() {
                 {pays.length === 0 ? (
                   <p className="empty-state">Aucun pays disponible</p>
                 ) : (
-                  pays.map((p) => (
-                    <div
-                      key={p.id_pays}
-                      className="pays-button"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleSelectPaysForVille(p)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSelectPaysForVille(p)}
-                    >
-                      <span className="pays-button-flag">{getCountryEmoji(p.code_pays)}</span>
-                      <div className="pays-button-info">
-                        <span className="pays-button-name">{p.nom_pays}</span>
-                        <span className="pays-button-code">{p.code_pays}</span>
+                  <>
+                    {pays.map((p) => (
+                      <div
+                        key={p.id_pays}
+                        className="pays-button"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleSelectPaysForVille(p)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSelectPaysForVille(p)}
+                      >
+                        <span className="pays-button-flag">{p.code_pays}</span>
+                        <div className="pays-button-info">
+                          <span className="pays-button-name">{p.nom_pays}</span>
+                          <span className="pays-button-code">{p.code_pays}</span>
+                        </div>
+                        {peutModifierOrganisation && (
+                          <button
+                            className="btn-delete-small"
+                            onClick={(e) => handleDeletePays(p.id_pays, e)}
+                            title="Supprimer"
+                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
                       </div>
-                      {peutModifierOrganisation && (
-                        <button
-                          className="btn-delete-small"
-                          onClick={(e) => handleDeletePays(p.id_pays, e)}
-                          title="Supprimer"
-                          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                        >
-                          <X size={12} />
-                        </button>
-                      )}
-                    </div>
-                  ))
+                    ))}
+                    {/* C3 — label informatif (pas un bouton) */}
+                    <span
+                      className="pays-autres-label"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '6px 12px',
+                        marginLeft: 4,
+                        color: '#64748b',
+                        fontFamily: 'inherit',
+                        fontStyle: 'italic',
+                        fontSize: '0.85rem',
+                        userSelect: 'none'
+                      }}
+                    >
+                      et autres
+                    </span>
+                  </>
                 )}
               </div>
             </div>
@@ -572,7 +582,7 @@ export default function Organisation() {
                           onClick={() => handleSelectLocation(v)}
                           onKeyDown={(e) => e.key === 'Enter' && handleSelectLocation(v)}
                         >
-                          <span className="ville-button-flag">{getCountryEmoji(selectedPays.code_pays)}</span>
+                          <span className="ville-button-flag">{selectedPays.code_pays}</span>
                           <div className="pays-button-info">
                             <span className="ville-button-name">{v.ville}</span>
                             <span className="ville-button-code">{selectedPays.code_pays}</span>

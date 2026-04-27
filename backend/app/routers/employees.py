@@ -84,7 +84,7 @@ def _notify_admin_employee_creation(
     db: Session,
     created: models.Employe,
     creator_role: str,
-    creator_matricule: Optional[int],
+    creator_matricule: Optional[str],
     background_tasks: Optional[BackgroundTasks],
 ):
     if str(creator_role or '').upper() != 'RH':
@@ -180,7 +180,7 @@ def _notify_admin_employee_update(
     before_data: dict,
     after: models.Employe,
     actor_role: str,
-    actor_matricule: Optional[int],
+    actor_matricule: Optional[str],
 ):
     """Notifie tous les admins quand le RH modifie le dossier d'un employé.
     before_data doit être un snapshot dict capturé AVANT crud.update_employe
@@ -360,14 +360,30 @@ def _get_token_context(request: Request):
     role = str(payload.get('role') or '').strip().upper()
     matricule = payload.get('matricule') or payload.get('sub')
     try:
-        matricule = int(matricule)
+        matricule = str(matricule).strip().upper()
     except Exception:
         raise HTTPException(status_code=401, detail='Token sans matricule valide')
 
     return matricule, role
 
 
-def _serialize_employee(e: models.Employe, db: Session):
+def _normalize_sexe_filter(sexe: Optional[str]) -> Optional[str]:
+    """Normalise un paramètre `sexe` reçu en query (M/F/Autre)."""
+    if sexe is None:
+        return None
+    raw = str(sexe).strip().lower()
+    if not raw:
+        return None
+    if raw in {'m', 'masculin', 'homme', 'male'}:
+        return 'M'
+    if raw in {'f', 'féminin', 'feminin', 'femme', 'female'}:
+        return 'F'
+    if raw in {'a', 'autre', 'other'}:
+        return 'Autre'
+    return None
+
+
+def _serialize_employee(e: models.Employe, db: Session, *, viewer_matricule: Optional[str] = None, viewer_role: Optional[str] = None):
     data = schemas.EmployeOut.model_validate(e).model_dump()
     role = db.query(models.Role).filter(models.Role.id == e.id_role).first() if e.id_role else None
     entite = db.query(models.Entite).filter(models.Entite.id_entite == e.id_entite).first() if e.id_entite else None
@@ -390,6 +406,18 @@ def _serialize_employee(e: models.Employe, db: Session):
     data['n1_fonction'] = e.n1_fonction
     sv = e.statut_employe
     data['statut_employe'] = (sv.value if hasattr(sv, 'value') else str(sv)) if sv else 'ACTIF'
+
+    # D — Salaire confidentiel : visible uniquement par RH/ADMIN, ou par
+    # le propriétaire du salaire (chacun voit le sien). Sinon on masque.
+    privileged_roles = {'RH', 'ADMIN', 'PCA', 'AG'}
+    role_norm = (viewer_role or '').strip().upper()
+    is_owner = bool(viewer_matricule) and str(viewer_matricule).strip().upper() == str(e.matricule).strip().upper()
+    if role_norm in privileged_roles or is_owner:
+        data['salaire_brut'] = float(e.salaire_brut) if e.salaire_brut is not None else None
+        data['salaire_devise'] = e.salaire_devise or 'XAF'
+    else:
+        data['salaire_brut'] = None
+        data['salaire_devise'] = None
     return data
 
 
@@ -453,9 +481,9 @@ def _prepare_employee_payload(payload: schemas.EmployeBase, db: Session):
             raise HTTPException(status_code=400, detail="L'âge de l'employé doit être au moins 18 ans (hors stagiaires).")
 
     if cleaned.get('matricule') is not None and cleaned.get('matricule') != '':
-        cleaned['matricule'] = int(cleaned['matricule'])
+        cleaned['matricule'] = str(cleaned['matricule']).strip().upper()
     if cleaned.get('n1') is not None and cleaned.get('n1') != '':
-        cleaned['n1'] = int(cleaned['n1'])
+        cleaned['n1'] = str(cleaned['n1']).strip().upper()
     elif 'n1' in cleaned and not cleaned['n1']:
         cleaned['n1'] = None
     # Resolve n1 from function: find the active holder of n1_fonction
@@ -725,17 +753,26 @@ def _employee_export_rows(db: Session):
 
 @router.get('/', response_model=list[schemas.EmployeOut])
 def list_employees(
+    request: Request,
     id_pays: Optional[int] = Query(None),
     id_localisation: Optional[int] = Query(None),
+    sexe: Optional[str] = Query(None),
     include_deleted: bool = Query(False),
     db: Session = Depends(get_db)
 ):
+    try:
+        viewer_mat, viewer_role = _get_token_context(request)
+    except Exception:
+        viewer_mat, viewer_role = None, None
     q = db.query(models.Employe)
     if not include_deleted:
         q = q.filter(models.Employe.statut_employe != models.StatutEmployeEnum.CONGEDIE)
+    sexe_norm = _normalize_sexe_filter(sexe)
+    if sexe_norm:
+        q = q.filter(models.Employe.sexe == sexe_norm)
     employees = q.all()
     employees = [e for e in employees if _employee_matches_geo_filters(e, db, id_pays, id_localisation)]
-    return [_serialize_employee(e, db) for e in employees]
+    return [_serialize_employee(e, db, viewer_matricule=viewer_mat, viewer_role=viewer_role) for e in employees]
 
 
 @router.get('/scoped', response_model=list[schemas.EmployeOut])
@@ -743,20 +780,25 @@ def list_employees_scoped(
     request: Request,
     id_pays: Optional[int] = Query(None),
     id_localisation: Optional[int] = Query(None),
+    sexe: Optional[str] = Query(None),
     include_deleted: bool = Query(False),
     db: Session = Depends(get_db)
 ):
     requester_matricule, requester_role = _get_token_context(request)
     role = str(requester_role or 'EMPLOYE').upper()
 
+    sexe_norm = _normalize_sexe_filter(sexe)
+
     is_full_access = role in {'RH', 'ADMIN', 'PCA', 'AG'}
     if is_full_access:
         q = db.query(models.Employe)
         if not include_deleted:
             q = q.filter(models.Employe.statut_employe != models.StatutEmployeEnum.CONGEDIE)
+        if sexe_norm:
+            q = q.filter(models.Employe.sexe == sexe_norm)
         employees = q.all()
         employees = [e for e in employees if _employee_matches_geo_filters(e, db, id_pays, id_localisation)]
-        return [_serialize_employee(e, db) for e in employees]
+        return [_serialize_employee(e, db, viewer_matricule=requester_matricule, viewer_role=role) for e in employees]
 
     requester = db.query(models.Employe).filter(models.Employe.matricule == requester_matricule).first()
     if not requester:
@@ -765,6 +807,8 @@ def list_employees_scoped(
     query = db.query(models.Employe)
     if not include_deleted:
         query = query.filter(models.Employe.statut_employe != models.StatutEmployeEnum.CONGEDIE)
+    if sexe_norm:
+        query = query.filter(models.Employe.sexe == sexe_norm)
     if role == 'DG':
         query = query.filter(models.Employe.id_entite == requester.id_entite)
     elif role == 'DIRECTEUR':
@@ -776,7 +820,7 @@ def list_employees_scoped(
 
     employees = query.all()
     employees = [e for e in employees if _employee_matches_geo_filters(e, db, id_pays, id_localisation)]
-    return [_serialize_employee(e, db) for e in employees]
+    return [_serialize_employee(e, db, viewer_matricule=requester_matricule, viewer_role=role) for e in employees]
 
 
 @router.post('/', response_model=schemas.EmployeOut)
@@ -795,7 +839,7 @@ def create_employee(
             token_payload = security.jwt.decode(token, security.SECRET_KEY, algorithms=[security.ALGORITHM])
             creator_role = str(token_payload.get('role') or '').strip().upper()
             creator_matricule = token_payload.get('matricule') or token_payload.get('sub')
-            creator_matricule = int(creator_matricule) if creator_matricule is not None else None
+            creator_matricule = str(creator_matricule).strip().upper() if creator_matricule is not None else None
         except Exception:
             creator_role = ''
             creator_matricule = None
@@ -922,11 +966,15 @@ def export_employees(
 
 
 @router.get('/{matricule}', response_model=schemas.EmployeOut)
-def get_employee(matricule: str, db: Session = Depends(get_db)):
+def get_employee(matricule: str, request: Request, db: Session = Depends(get_db)):
     e = crud.get_employe(db, matricule)
     if not e:
         raise HTTPException(status_code=404, detail='Non trouvé')
-    return _serialize_employee(e, db)
+    try:
+        viewer_mat, viewer_role = _get_token_context(request)
+    except HTTPException:
+        viewer_mat, viewer_role = None, None
+    return _serialize_employee(e, db, viewer_matricule=viewer_mat, viewer_role=viewer_role)
 
 
 @router.delete('/{matricule}')
@@ -936,7 +984,7 @@ def soft_delete_employee(matricule: str, request: Request, db: Session = Depends
     if str(actor_role or '').upper() != 'ADMIN':
         raise HTTPException(status_code=403, detail='Réservé aux administrateurs')
 
-    e = db.query(models.Employe).filter(models.Employe.matricule == int(matricule)).first()
+    e = db.query(models.Employe).filter(models.Employe.matricule == str(matricule).strip().upper()).first()
     if not e:
         raise HTTPException(status_code=404, detail='Employé introuvable')
 
@@ -947,7 +995,7 @@ def soft_delete_employee(matricule: str, request: Request, db: Session = Depends
     db.flush()
 
     # Disable associated user account if any
-    utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.matricule == int(matricule)).first()
+    utilisateur = db.query(models.Utilisateur).filter(models.Utilisateur.matricule == str(matricule).strip().upper()).first()
     if utilisateur:
         utilisateur.bloque_jusqua = datetime(9999, 12, 31)  # block permanently
         db.flush()
@@ -976,12 +1024,12 @@ def export_personal_data(matricule: str, request: Request, db: Session = Depends
     if not requesting_own and role not in {'ADMIN', 'RH', 'PCA', 'AG'}:
         raise HTTPException(status_code=403, detail='Accès refusé')
 
-    e = db.query(models.Employe).filter(models.Employe.matricule == int(matricule)).first()
+    e = db.query(models.Employe).filter(models.Employe.matricule == str(matricule).strip().upper()).first()
     if not e:
         raise HTTPException(status_code=404, detail='Employé introuvable')
 
-    operations = db.query(models.Operation).filter(models.Operation.matricule == int(matricule)).all()
-    missions = db.query(models.MissionnairesMission).filter(models.MissionnairesMission.matricule == int(matricule)).all()
+    operations = db.query(models.Operation).filter(models.Operation.matricule == str(matricule).strip().upper()).all()
+    missions = db.query(models.MissionnairesMission).filter(models.MissionnairesMission.matricule == str(matricule).strip().upper()).all()
 
     data = {
         'employe': {
@@ -1015,7 +1063,7 @@ def anonymize_employee(matricule: str, request: Request, db: Session = Depends(g
     if str(actor_role or '').upper() != 'ADMIN':
         raise HTTPException(status_code=403, detail='Réservé aux administrateurs')
 
-    e = db.query(models.Employe).filter(models.Employe.matricule == int(matricule)).first()
+    e = db.query(models.Employe).filter(models.Employe.matricule == str(matricule).strip().upper()).first()
     if not e:
         raise HTTPException(status_code=404, detail='Employé introuvable')
 
@@ -1076,7 +1124,7 @@ def update_employee(matricule: str, payload: schemas.EmployeBase, request: Reque
             from ..utils import security
             token_payload = security.jwt.decode(auth.split(None, 1)[1], security.SECRET_KEY, algorithms=[security.ALGORITHM])
             actor_matricule = token_payload.get('matricule') or token_payload.get('sub')
-            actor_matricule = int(actor_matricule) if actor_matricule is not None else None
+            actor_matricule = str(actor_matricule).strip().upper() if actor_matricule is not None else None
             actor_role = str(token_payload.get('role') or '').strip().upper()
         except Exception:
             actor_matricule = None
@@ -1092,7 +1140,7 @@ def update_employee(matricule: str, payload: schemas.EmployeBase, request: Reque
                 'id_entite': getattr(e, 'id_entite', None),
                 'id_localisation': getattr(e, 'id_localisation', None),
             }
-            _parcours.record_employee_diff(db, int(matricule), before_snapshot, after_snapshot, actor=actor_matricule)
+            _parcours.record_employee_diff(db, str(matricule).strip().upper(), before_snapshot, after_snapshot, actor=actor_matricule)
         except Exception:
             # Ne jamais bloquer la mise à jour employé en cas d'échec d'historisation
             db.rollback()
@@ -1682,7 +1730,7 @@ def _serialize_utilisateur_admin(utilisateur: models.Utilisateur, db: Session):
 
 
 @router.get('/{matricule}/parcours', response_model=list[schemas.ParcoursEmployeOut])
-def get_employee_parcours(matricule: int, db: Session = Depends(get_db)):
+def get_employee_parcours(matricule: str, db: Session = Depends(get_db)):
     """Retourne l'historique de parcours (promotions / mutations / transferts) d'un employé, trié du plus récent au plus ancien."""
     rows = (
         db.query(models.ParcoursEmploye)
@@ -1704,7 +1752,7 @@ def get_admin_utilisateurs(request: Request, db: Session = Depends(get_db)):
 
 @router.put('/admin/utilisateurs/{matricule}')
 def update_admin_utilisateur(
-    matricule: int,
+    matricule: str,
     payload: UtilisateurAdminUpdate,
     request: Request,
     db: Session = Depends(get_db)
@@ -1759,7 +1807,7 @@ def update_admin_utilisateur(
             from ..utils import parcours as _parcours
             _parcours.record_event(
                 db,
-                matricule=int(matricule),
+                matricule=str(matricule).strip().upper(),
                 type_action=models.TypeParcoursEnum.PROMOTION,
                 champ_modifie='id_role',
                 ancienne_valeur=_parcours._role_label(db, previous_role_id),
@@ -1775,7 +1823,7 @@ def update_admin_utilisateur(
 
 @router.post('/admin/utilisateurs/{matricule}/reset-password-temp')
 def reset_admin_utilisateur_password(
-    matricule: int,
+    matricule: str,
     payload: UtilisateurResetPassword,
     request: Request,
     db: Session = Depends(get_db)
@@ -1829,7 +1877,7 @@ def get_employes_sans_compte(request: Request, db: Session = Depends(get_db)):
 
 @router.post('/admin/utilisateurs/{matricule}/creer-compte')
 def creer_compte_utilisateur(
-    matricule: int,
+    matricule: str,
     payload: UtilisateurCreerCompte,
     request: Request,
     db: Session = Depends(get_db)
@@ -1988,7 +2036,7 @@ def _resolve_minutes(session, today) -> int:
 
 
 @router.get('/stats/usage/{matricule}/today')
-def get_usage_today(matricule: int, request: Request, db: Session = Depends(get_db)):
+def get_usage_today(matricule: str, request: Request, db: Session = Depends(get_db)):
     """Statistiques d'utilisation du jour"""
     _check_admin_role(request)
 
@@ -2008,7 +2056,7 @@ def get_usage_today(matricule: int, request: Request, db: Session = Depends(get_
 
 
 @router.get('/stats/usage/{matricule}/week')
-def get_usage_week(matricule: int, request: Request, db: Session = Depends(get_db)):
+def get_usage_week(matricule: str, request: Request, db: Session = Depends(get_db)):
     """Statistiques d'utilisation de la semaine"""
     _check_admin_role(request)
 
@@ -2039,7 +2087,7 @@ def get_usage_week(matricule: int, request: Request, db: Session = Depends(get_d
 
 
 @router.get('/stats/usage/{matricule}/month')
-def get_usage_month(matricule: int, month: int = None, year: int = None, request: Request = None, db: Session = Depends(get_db)):
+def get_usage_month(matricule: str, month: int = None, year: int = None, request: Request = None, db: Session = Depends(get_db)):
     """Statistiques d'utilisation du mois"""
     if request:
         _check_admin_role(request)
@@ -2082,7 +2130,7 @@ def get_usage_month(matricule: int, month: int = None, year: int = None, request
 
 
 @router.get('/stats/usage/{matricule}/year')
-def get_usage_year(matricule: int, year: int = None, request: Request = None, db: Session = Depends(get_db)):
+def get_usage_year(matricule: str, year: int = None, request: Request = None, db: Session = Depends(get_db)):
     """Statistiques d'utilisation de l'année"""
     if request:
         _check_admin_role(request)

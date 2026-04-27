@@ -14,6 +14,16 @@ from decimal import Decimal
 from . import webpush
 from . import email as email_utils
 
+# Rôles commençant par une voyelle → élision "l'" au lieu de "le "
+_ROLES_VOYELLE = {'AG', 'ADMIN'}
+
+def _avec_article(role: str) -> str:
+    """Retourne 'l'AG', 'le DG', 'le RH', etc. selon le rôle."""
+    r = (role or '').upper()
+    if r in _ROLES_VOYELLE:
+        return f"l'{role}"
+    return f"le {role}"
+
 
 def envoyer_alerte_conges_fin_annee(db: Session):
     """
@@ -290,7 +300,7 @@ def notifier_validation_operation(
     titre_notif = f"{libelle.capitalize()} {statut_accorde}"
 
     # Message au demandeur
-    message_demandeur = f"{poss} {libelle} {avoir} {statut_accorde} par le {validateur_role}."
+    message_demandeur = f"{poss} {libelle} {avoir} {statut_accorde} par {_avec_article(validateur_role)}."
     if commentaire:
         message_demandeur += f"\nCommentaire : {commentaire}"
 
@@ -312,7 +322,7 @@ def notifier_validation_operation(
         _nom_initiateur = f"{_emp_initiateur.prenom} {_emp_initiateur.nom}" if _emp_initiateur else f"Employé #{operation.matricule}"
         for mm in missionnaires:
             if mm.matricule != operation.matricule:
-                msg_miss = f"La mission de {_nom_initiateur} a été {statut_accorde} par le {validateur_role}."
+                msg_miss = f"La mission de {_nom_initiateur} a été {statut_accorde} par {_avec_article(validateur_role)}."
                 if commentaire:
                     msg_miss += f"\nCommentaire : {commentaire}"
                 db.add(Notification(
@@ -333,7 +343,7 @@ def notifier_validation_operation(
         _article_rh = "La"
     else:
         _article_rh = "Le"
-    message_rh = f"{_article_rh} {libelle} de {_nom_employe} {avoir} {statut_accorde} par le {validateur_role}."
+    message_rh = f"{_article_rh} {libelle} de {_nom_employe} {avoir} {statut_accorde} par {_avec_article(validateur_role)}."
     if commentaire:
         message_rh += f"\nCommentaire : {commentaire}"
     creer_notification_rh(
@@ -353,7 +363,7 @@ def notifier_validation_operation(
                 f"{poss} {libelle} du {operation.date_debut} au "
                 f"{operation.date_fin or operation.date_retour} "
                 f"({operation.duree_jours or ''} jour(s)) {avoir} {statut_accorde} "
-                f"par le {validateur_role}.\n"
+                f"par {_avec_article(validateur_role)}.\n"
                 + (f"\nCommentaire : {commentaire}\n" if commentaire else "")
                 + f"\nCordialement,\nÉquipe EMS"
             )
@@ -362,7 +372,7 @@ def notifier_validation_operation(
                 f"Bonjour {_emp.prenom} {_emp.nom},\n\n"
                 f"{poss} {libelle} du {operation.date_debut} au "
                 f"{operation.date_fin or operation.date_retour} "
-                f"malheureusement {avoir} {statut_accorde} par le {validateur_role}.\n"
+                f"malheureusement {avoir} {statut_accorde} par {_avec_article(validateur_role)}.\n"
                 + (f"\nMotif : {commentaire}\n" if commentaire else "")
                 + f"\nCordialement,\nÉquipe EMS"
             )
@@ -387,14 +397,14 @@ def notifier_validation_operation(
                         (
                             f"Bonjour {mm_emp.prenom} {mm_emp.nom},\n\n"
                             f"La mission de {_nom_initiateur} a été {statut_accorde} "
-                            f"par le {validateur_role}.\n"
+                            f"par {_avec_article(validateur_role)}.\n"
                             + (f"\nCommentaire : {commentaire}\n" if commentaire else "")
                             + f"\nCordialement,\nÉquipe EMS"
                         )
                     )
 
 
-def obtenir_notifications_non_lues(matricule: int, db: Session) -> List[Dict]:
+def obtenir_notifications_non_lues(matricule: str, db: Session) -> List[Dict]:
     """
     Récupère toutes les notifications non lues d'un employé.
     
@@ -449,7 +459,7 @@ def marquer_notification_comme_lue(id_notification: int, db: Session) -> bool:
     return False
 
 
-def compter_notifications_non_lues(matricule: int, db: Session) -> int:
+def compter_notifications_non_lues(matricule: str, db: Session) -> int:
     """
     Compte le nombre de notifications non lues d'un employé.
     
@@ -468,7 +478,7 @@ def compter_notifications_non_lues(matricule: int, db: Session) -> int:
     ).count()
 
 
-def envoyer_notification_evaluation(matricule: int, message: str, db: Session):
+def envoyer_notification_evaluation(matricule: str, message: str, db: Session):
     """
     Envoie une notification concernant une évaluation.
     
@@ -488,7 +498,7 @@ def envoyer_notification_evaluation(matricule: int, message: str, db: Session):
 
 
 def creer_notification_personnalisee(
-    matricule: int,
+    matricule: str,
     titre: str,
     message: str,
     type_notification: TypeNotificationEnum,
@@ -538,7 +548,7 @@ def nettoyer_anciennes_notifications(jours: int, db: Session):
     db.commit()
 
 
-def envoyer_resume_notifications_hebdomadaire(matricule: int, db: Session):
+def envoyer_resume_notifications_hebdomadaire(matricule: str, db: Session):
     """
     Envoie un résumé hebdomadaire des notifications importantes.
     
@@ -574,7 +584,7 @@ def envoyer_resume_notifications_hebdomadaire(matricule: int, db: Session):
 
 
 def creer_notification(
-    matricule: int,
+    matricule: str,
     type_notification: TypeNotificationEnum,
     titre: str,
     message: str,
@@ -614,6 +624,56 @@ def creer_notification(
     except Exception as e:
         db.rollback()
         return False, f"Erreur lors de la création de la notification: {str(e)}"
+
+
+def notifier_prochain_validateur(
+    role: Optional[str],
+    matricule: Optional[str],
+    type_notification,
+    titre: str,
+    message: str,
+    id_operation: Optional[int],
+    db: Session,
+) -> int:
+    """
+    Crée une (ou plusieurs) notification(s) pour le prochain validateur.
+
+    Règle B5 — Si le prochain rôle est DG, **tous** les DG actifs reçoivent
+    la notification simultanément (cross-entité), au lieu d'un seul. Cela
+    garantit que les opérations apparaissent en même temps chez les deux DG.
+
+    Pour les autres rôles, comportement standard : une notification au
+    matricule désigné.
+
+    Returns: nombre de notifications créées.
+    """
+    if not matricule and (role or '').upper() != 'DG':
+        return 0
+
+    role_up = (role or '').upper()
+    cibles: list[int] = []
+    if role_up == 'DG':
+        # Import local pour éviter une dépendance circulaire avec workflow.py
+        from .workflow import obtenir_tous_matricules_dg
+        cibles = list(obtenir_tous_matricules_dg(db))
+        if not cibles and matricule:
+            cibles = [matricule]
+    else:
+        cibles = [matricule] if matricule else []
+
+    count = 0
+    for mat in cibles:
+        ok, _ = creer_notification(
+            matricule=mat,
+            type_notification=type_notification,
+            titre=titre,
+            message=message,
+            id_operation=id_operation,
+            db=db,
+        )
+        if ok:
+            count += 1
+    return count
 
 
 def notifier_tous_employes_debut_operation(db: Session):
@@ -699,7 +759,7 @@ def notifier_tous_employes_debut_operation(db: Session):
 
 def ajouter_notifications_annulation_operation(
     operation: Operation,
-    actor_matricule: Optional[int],
+    actor_matricule: Optional[str],
     db: Session
 ) -> None:
     if not operation:

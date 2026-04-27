@@ -88,7 +88,7 @@ def _type_for_field(champ: str) -> models.TypeParcoursEnum:
 
 def record_event(
     db: Session,
-    matricule: int,
+    matricule: str,
     type_action: models.TypeParcoursEnum,
     champ_modifie: Optional[str] = None,
     ancienne_valeur: Optional[str] = None,
@@ -121,7 +121,7 @@ def record_event(
 
 def record_employee_diff(
     db: Session,
-    matricule: int,
+    matricule: str,
     before: dict,
     after: dict,
     actor: Optional[str] = None,
