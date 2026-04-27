@@ -39,7 +39,7 @@ jobs:
           ls -lh "$OUT"
           echo "BACKUP_FILE=$OUT" >> $GITHUB_ENV
       - name: Upload artifact (30j retention)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ems-db-backup-${{ github.run_id }}
           path: ems-db-*.sql.gz
