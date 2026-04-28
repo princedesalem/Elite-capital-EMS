@@ -72,6 +72,13 @@ class EmployeBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EmployeUpdate(EmployeBase):
+    """Schéma pour PUT (mise à jour partielle) — matricule, nom, prénom deviennent optionnels."""
+    matricule: Optional[str] = None
+    nom: Optional[str] = None
+    prenom: Optional[str] = None
+
+
 class EmployeOut(EmployeBase):
     model_config = ConfigDict(from_attributes=True)
 

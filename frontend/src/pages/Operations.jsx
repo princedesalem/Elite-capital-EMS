@@ -2182,7 +2182,7 @@ export default function Operations() {
             {demandeType === 'missions' && (
               <>
                 <form className="form-card" onSubmit={submitMission}>
-                  <h3>{missionEditMode ? 'Modifier la mission' : 'Demande de mission multi-destinations'}</h3>
+                  <h3>{missionEditMode ? 'Modifier la mission' : 'Nouvelle mission'}</h3>
                   {missionEditMode && (
                     <div style={{background: '#fff3cd', padding: '10px', borderRadius: '6px', marginBottom: '15px', border: '1px solid #ffc107', display:'flex', alignItems:'center', gap:6}}>
                       <AlertTriangle size={13} color="#856404"/> Vous modifiez la mission ID #{missionEditId}

@@ -830,10 +830,7 @@ export default function MissionsPage() {
           {isMissionnaire && isValid && etat === 'AttenteRH' && <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente RH</span>}
           {isMissionnaire && isValid && etat === 'Active' && <button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer'}</button>}
           {estRh && isValid && etat === 'AttenteRH' && <button onClick={(e) => { e.stopPropagation(); handleActiverRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer (RH)'}</button>}
-          {estRh && isValid && (etat === 'Active' || etat === 'ClotureDemandee') && <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer (RH)'}</button>}
-          {estRh && isValid && (() => { const p = statutsPaiementFrais[id]; return p && p.frais_valides_missionnaire && !p.frais_payes })() && (
-            <button onClick={(e) => { e.stopPropagation(); validerPaiementRH(id) }} style={btnStyle({ ...okBtn, background: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)', border: '1.5px solid #1d4ed8' })} disabled={isLoading} title="Confirmer le paiement des frais">{isLoading ? '…' : 'Confirmer paiement'}</button>
-          )}
+          {estRh && isValid && etat === 'Active' && <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer (RH)'}</button>}
           {pdfBtn}{eyeBtn}{remplacantBtn}
         </div>
       )
@@ -864,9 +861,7 @@ export default function MissionsPage() {
     }
 
     if (etat === 'ClotureDemandee') {
-      const p = statutsPaiementFrais[id]
-      const besoinPaiement = p && p.frais_valides_missionnaire && !p.frais_payes
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{estRh && besoinPaiement && <button onClick={(e) => { e.stopPropagation(); validerPaiementRH(id) }} style={btnStyle({ ...okBtn, background: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)', border: '1.5px solid #1d4ed8' })} disabled={isLoading} title="Confirmer le paiement des frais">{isLoading ? '…' : 'Confirmer paiement'}</button>}<span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente confirmation RH</span>{pdfBtn}{eyeBtn}{remplacantBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente confirmation RH</span>{pdfBtn}{eyeBtn}{remplacantBtn}</div>
     }
 
     return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{pdfBtn}{eyeBtn}{remplacantBtn}</div>
@@ -988,7 +983,7 @@ export default function MissionsPage() {
           {formSuccess && <div style={{ background: '#d1fae5', color: '#065f46', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: '0.9rem' }}>{formSuccess}</div>}
 
           <form className="form-card" onSubmit={submitMission}>
-            <h3>{missionEditMode ? 'Modifier la mission' : 'Demande de mission multi-destinations'}</h3>
+            <h3>{missionEditMode ? 'Modifier la mission' : 'Nouvelle mission'}</h3>
             {missionEditMode && (
               <div style={{background: '#fff3cd', padding: '10px', borderRadius: '6px', marginBottom: '15px', border: '1px solid #ffc107', display:'flex', alignItems:'center', gap:6}}>
                 <AlertTriangle size={13} color="#856404"/> Vous modifiez la mission ID #{missionEditId}

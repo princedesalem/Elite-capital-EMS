@@ -1,5 +1,5 @@
 import React from 'react'
-import {BrowserRouter,Routes,Route,Navigate} from 'react-router-dom'
+import {BrowserRouter,Routes,Route,Navigate,useParams} from 'react-router-dom'
 import {AuthProvider} from './contexts/AuthContext'
 import {ThemeProvider} from './contexts/ThemeContext'
 import Navbar from './components/Navbar'
@@ -47,6 +47,11 @@ import ProfilePage from './pages/ProfilePage'
 import RemplacantsPage from './pages/RemplacantsPage'
 import { ToastProvider, ConfirmProvider } from './components/ui'
 import './index.css'
+
+function EmployeeIdRedirect() {
+  const { id } = useParams()
+  return <Navigate to={`/rh/employees/${id}`} replace />
+}
 
 export default function App(){
   return (
@@ -111,6 +116,7 @@ export default function App(){
           <Route path="/dashboard" element={<Navigate to="/rh/dashboard" replace />} />
           <Route path="/employees" element={<Navigate to="/rh/employees" replace />} />
           <Route path="/employees/new" element={<Navigate to="/rh/employees/new" replace />} />
+          <Route path="/employees/:id" element={<EmployeeIdRedirect />} />
           <Route path="/leaves" element={<Navigate to="/rh/conges" replace />} />
           <Route path="/leaves/new" element={<Navigate to="/rh/conges" replace />} />
           <Route path="/operations" element={<Navigate to="/rh/operations" replace />} />

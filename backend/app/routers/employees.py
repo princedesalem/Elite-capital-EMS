@@ -1086,17 +1086,29 @@ def anonymize_employee(matricule: str, request: Request, db: Session = Depends(g
 
 
 @router.put('/{matricule}', response_model=schemas.EmployeOut)
-def update_employee(matricule: str, payload: schemas.EmployeBase, request: Request, db: Session = Depends(get_db)):
-    data = _prepare_employee_payload(payload, db)
-    # Snapshot BEFORE update pour détecter promotions/mutations/transferts
+def update_employee(matricule: str, payload: schemas.EmployeUpdate, request: Request, db: Session = Depends(get_db)):
+    # Récupérer l'employé existant — nécessaire pour le fallback des champs manquants ET le snapshot AVANT
     before = crud.get_employe(db, matricule)
+    if not before:
+        raise HTTPException(status_code=404, detail='Non trouvé')
+    # Compléter les champs requis depuis l'employé existant si absents du payload
+    update_dict = payload.model_dump()
+    if not update_dict.get('matricule'):
+        update_dict['matricule'] = str(before.matricule)
+    if not update_dict.get('nom'):
+        update_dict['nom'] = str(before.nom) if before.nom else ''
+    if not update_dict.get('prenom'):
+        update_dict['prenom'] = str(before.prenom) if before.prenom else ''
+    full_payload = schemas.EmployeBase(**update_dict)
+    data = _prepare_employee_payload(full_payload, db)
+    # Snapshot BEFORE update pour détecter promotions/mutations/transferts
     before_snapshot = {
-        'id_role': getattr(before, 'id_role', None) if before else None,
-        'dept_id': getattr(before, 'dept_id', None) if before else None,
-        'id_direction': getattr(before, 'id_direction', None) if before else None,
-        'id_entite': getattr(before, 'id_entite', None) if before else None,
-        'id_localisation': getattr(before, 'id_localisation', None) if before else None,
-    } if before else {}
+        'id_role': getattr(before, 'id_role', None),
+        'dept_id': getattr(before, 'dept_id', None),
+        'id_direction': getattr(before, 'id_direction', None),
+        'id_entite': getattr(before, 'id_entite', None),
+        'id_localisation': getattr(before, 'id_localisation', None),
+    }
     # Snapshot complet pour la notification admin (capturé avant crud.update_employe
     # car SQLAlchemy met à jour l'objet en mémoire via l'identity map).
     before_notif_snapshot = {
@@ -1112,7 +1124,7 @@ def update_employee(matricule: str, payload: schemas.EmployeBase, request: Reque
         'dept_id': getattr(before, 'dept_id', None),
         'id_role': getattr(before, 'id_role', None),
         'id_entite': getattr(before, 'id_entite', None),
-    } if before else {}
+    }
     e = crud.update_employe(db, matricule, data)
     if not e:
         raise HTTPException(status_code=404, detail='Non trouvé')
