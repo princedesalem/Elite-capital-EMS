@@ -80,6 +80,7 @@ class EmployeUpdate(EmployeBase):
 
 
 class EmployeOut(EmployeBase):
+    n1_nom: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -144,3 +145,12 @@ class ParcoursEmployeOut(BaseModel):
 
 class RemplacantCommentaireUpdate(BaseModel):
     commentaire: Optional[str] = Field(default=None, max_length=2000)
+
+
+class OperationVueOut(BaseModel):
+    matricule_observateur: str
+    nom_observateur: Optional[str] = None
+    role_observateur: Optional[str] = None
+    date_vue: datetime
+    model_config = ConfigDict(from_attributes=True)
+

@@ -31,6 +31,8 @@ class TypeNotificationEnum(str, enum.Enum):
     DEMANDE_EXPLICATION = 'DEMANDE_EXPLICATION'
     EVALUATION = 'EVALUATION'
     CLOTURE_REQUISE = 'CLOTURE_REQUISE'
+    RELANCE_VALIDATION = 'RELANCE_VALIDATION'
+    RETARD_POINTAGE = 'RETARD_POINTAGE'
     AUTRE = 'AUTRE'
 
 class TypeActionEnum(str, enum.Enum):
@@ -148,6 +150,8 @@ class Employe(Base):
     # Salaire confidentiel (D backlog) — visible RH uniquement, ou propre matricule.
     salaire_brut = Column(DECIMAL(12, 2), nullable=True)
     salaire_devise = Column(String(3), nullable=True, default='XAF')
+    # Préférence d'envoi email pour les notifications hors-app (opt-out par employé)
+    notif_email_enabled = Column(Boolean, nullable=False, default=True)
     utilisateur = relationship('Utilisateur', back_populates='employe', uselist=False)
 
 
@@ -510,6 +514,9 @@ class Notification(Base):
     date_creation = Column(DateTime, default=datetime.utcnow)
     date_lecture = Column(DateTime)
     id_operation = Column(Integer, ForeignKey('OPERATIONS.id_operation'))
+    # Horodatage du dernier rappel hors-app (email/push) pour cette notification ;
+    # utilisé par le job de relance toutes les 15 min en heures ouvrées.
+    dernier_rappel_at = Column(DateTime, nullable=True)
 
 
 class PushSubscription(Base):
@@ -523,6 +530,45 @@ class PushSubscription(Base):
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class Pointage(Base):
+    """Stub d'intégration biométrie : enregistre les pointages reçus via webhook.
+
+    Les retards sont calculés au moment de l'insertion (utils/retards.py) et stockés
+    dans `retard_minutes`. Le câblage à un device réel (ZKTeco/Suprema/...) reste
+    à faire ; cette table sert de point d'entrée stable.
+    """
+    __tablename__ = 'POINTAGE'
+    id_pointage = Column(Integer, primary_key=True, autoincrement=True)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False, index=True)
+    date_pointage = Column(Date, nullable=False)
+    heure_arrivee = Column(Time, nullable=True)
+    heure_depart = Column(Time, nullable=True)
+    device_id = Column(String(64), nullable=True)
+    source = Column(String(32), nullable=False, default='biometrie')
+    retard_minutes = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    __table_args__ = (
+        UniqueConstraint('matricule', 'date_pointage', 'device_id', name='uq_pointage_unique'),
+    )
+
+class OperationVue(Base):
+    """Trace de la PREMIÈRE consultation d'une opération par un utilisateur.
+
+    Voir migration 058 — l'unicité (id_operation, matricule_observateur) est
+    garantie en base ; les ré-ouvertures sont silencieusement ignorées.
+    """
+    __tablename__ = 'OPERATION_VUE'
+    id_vue = Column(Integer, primary_key=True, autoincrement=True)
+    id_operation = Column(Integer, ForeignKey('OPERATIONS.id_operation', ondelete='CASCADE'), nullable=False, index=True)
+    matricule_observateur = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False, index=True)
+    nom_observateur = Column(String(255), nullable=True)
+    role_observateur = Column(String(32), nullable=True)
+    date_vue = Column(DateTime, default=datetime.utcnow, nullable=False)
+    __table_args__ = (
+        UniqueConstraint('id_operation', 'matricule_observateur', name='uq_opvue_unique'),
+    )
 
 class DemandeExplication(Base):
     __tablename__ = 'Demande_explication'

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { GitBranch, Search, X, ChevronDown, ChevronUp, Pencil, XCircle, MapPin, Briefcase, AlignLeft, Save, Building2 } from 'lucide-react'
+import { toast } from '../components/ui/bridge'
 
 const ACCENT = '#ce2b2b'
 const DARK   = '#021630'
@@ -77,13 +78,21 @@ const CSS = `
 // doit toujours apparaître AVANT les autres dans la liste de ses pairs, pour
 // que le visuel reflète clairement la hiérarchie (responsable plus haut /
 // plus à gauche que ses employés).
+// Niveau hiérarchique par fonction : 0 = Directeur/DG/PCA, 1 = Responsable/Chef,
+// 2+ = autres. Utilisé pour le tri ET pour la classe CSS du visuel afin
+// qu'un Responsable n'apparaisse JAMAIS au même niveau qu'un Directeur,
+// même s'il n'a pas de N1 renseigné (il serait alors une racine de l'arbre).
+export function niveauFonctionnel(employe) {
+  const f = String(employe?.fonction || '').toLowerCase()
+  // Word boundaries pour éviter les faux positifs : "manager" contient "ag",
+  // "responsable" contient "pa"... On utilise \b pour matcher les mots entiers.
+  if (/\b(directeur|directrice|dg|pca|président|présidente|presidente|ag|administrateur)\b/.test(f)) return 0
+  if (/\b(chef|responsable|manager|superviseur|sup|head|lead)\b/.test(f)) return 1
+  return 2
+}
+
 function _sortByHierarchy(list) {
-  const fonctionWeight = (e) => {
-    const f = String(e?.fonction || '').toLowerCase()
-    if (/(directeur|directrice|dg|pca|président|presidente|ag|administrateur g)/.test(f)) return 0
-    if (/(chef|responsable|manager|superviseur|sup\.|head|lead)/.test(f)) return 1
-    return 5
-  }
+  const fonctionWeight = (e) => niveauFonctionnel(e) === 2 ? 5 : niveauFonctionnel(e)
   return [...list].sort((a, b) => {
     const wa = fonctionWeight(a)
     const wb = fonctionWeight(b)
@@ -169,10 +178,15 @@ function Box({ node, depth, collapsed, hasChildren, onToggle, hitSet, onEdit, ed
     : `${node.prenom || ''} ${node.nom || ''}`.trim()
 
   const isHit = hitSet ? hitSet.has(String(node._key || node.matricule)) : false
+  // Niveau visuel : on utilise la fonction (rôle) plutôt que la profondeur dans
+  // l'arbre N1. Sinon un Responsable sans N1 (racine de l'arbre, depth=0)
+  // hérite du style "Directeur" (oc-d0). Pour les groupes, on garde la
+  // logique par profondeur car ce ne sont pas des employés.
+  const niveauVisuel = node._isGroup ? depth : niveauFonctionnel(node)
   const cls = [
     'oc-box',
     hasChildren ? 'oc-clickable' : '',
-    depth === 0 ? 'oc-d0' : depth === 1 ? 'oc-d1' : '',
+    niveauVisuel === 0 ? 'oc-d0' : niveauVisuel === 1 ? 'oc-d1' : '',
     node._isGroup ? 'oc-group' : '',
     isHit ? 'oc-hit' : '',
   ].filter(Boolean).join(' ')
@@ -284,7 +298,12 @@ function EditModal({ emp, allEmployees, onClose, onSave }) {
       // Matricule est alphanumérique côté backend → on garde une string (ou null)
       const newN1 = selectedN1 ? String(selectedN1.matricule) : null
       const oldN1 = emp.n1 != null && emp.n1 !== '' ? String(emp.n1) : null
-      if (newN1 !== oldN1)                             payload.n1       = newN1
+      if (newN1 !== oldN1) {
+        payload.n1 = newN1
+        // Synchronise n1_fonction pour que le modal de détail employé
+        // affiche immédiatement la nouvelle fonction du supérieur.
+        payload.n1_fonction = selectedN1?.fonction ? String(selectedN1.fonction) : null
+      }
       if (form.fonction !== (emp.fonction || ''))      payload.fonction = form.fonction
       if (form.ville    !== (emp.ville || ''))         payload.ville    = form.ville
       if (form.entite   !== (emp.nom_entite || emp.entite || '')) {
@@ -299,7 +318,10 @@ function EditModal({ emp, allEmployees, onClose, onSave }) {
         nom_entite: form.entite,
         entite: form.entite,
         n1: newN1,
+        n1_fonction: selectedN1?.fonction || null,
+        n1_nom: selectedN1 ? `${selectedN1.prenom || ''} ${selectedN1.nom || ''}`.trim() : null,
       })
+      toast.success('Modifications enregistrées')
     } catch (e) {
       // FastAPI 422 renvoie un tableau d'objets {type,loc,msg,input} → ne pas le rendre directement (React crashe)
       const detail = e?.response?.data?.detail
@@ -308,6 +330,7 @@ function EditModal({ emp, allEmployees, onClose, onSave }) {
       else if (Array.isArray(detail)) msg = detail.map(d => d?.msg || JSON.stringify(d)).join(' ; ')
       else if (detail && typeof detail === 'object') msg = detail.msg || JSON.stringify(detail)
       setErr(msg)
+      toast.error(msg)
     } finally { setSaving(false) }
   }
 

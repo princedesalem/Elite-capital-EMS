@@ -2266,6 +2266,12 @@ def obtenir_statut_paiement_frais(id_mission: int, db: Session = Depends(get_db)
 
     frais = db.query(models.Frais).filter(models.Frais.id_mission == id_mission).first()
 
+    # Vérifier la complétude des preuves de frais (justificatifs téléversés).
+    # Sert au frontend pour désactiver visuellement le bouton "Clôturer" tant
+    # qu'un justificatif manque.
+    from ..utils.activation_cloture import verifier_preuves_frais
+    preuves_ok, preuves_msg = verifier_preuves_frais(id_mission, db)
+
     return {
         "id_mission": id_mission,
         "id_frais": frais.id_frais if frais else None,
@@ -2273,6 +2279,8 @@ def obtenir_statut_paiement_frais(id_mission: int, db: Session = Depends(get_db)
         "frais_valides_missionnaire": mission.frais_valides_missionnaire or False,
         "frais_valides_rh": mission.frais_valides_rh or False,
         "frais_payes": mission.frais_payes or False,
+        "preuves_completes": preuves_ok,
+        "preuves_message": preuves_msg or None,
         "date_validation_frais_missionnaire": mission.date_validation_frais_missionnaire.isoformat() if mission.date_validation_frais_missionnaire else None,
         "date_validation_frais_rh": mission.date_validation_frais_rh.isoformat() if mission.date_validation_frais_rh else None,
         "date_paiement_frais": mission.date_paiement_frais.isoformat() if mission.date_paiement_frais else None

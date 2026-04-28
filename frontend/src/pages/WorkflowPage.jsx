@@ -28,6 +28,9 @@ export default function WorkflowPage() {
   const [showWorkflowInDetail, setShowWorkflowInDetail] = useState(false)
   const [workflowDecisionComment, setWorkflowDecisionComment] = useState('')
   const [validationRefreshKey, setValidationRefreshKey] = useState(0)
+  // Liste des utilisateurs ayant déjà ouvert l'opération sélectionnée.
+  // Chaque entrée : { matricule_observateur, nom_observateur, role_observateur, date_vue }
+  const [vues, setVues] = useState([])
 
   useEffect(() => {
     if (!matricule) return
@@ -39,11 +42,21 @@ export default function WorkflowPage() {
   }, [selectedOperation])
 
   useEffect(() => {
-    if (!selectedOperation) { setSelectedOperationDetails(null); return }
+    if (!selectedOperation) { setSelectedOperationDetails(null); setVues([]); return }
     api.get(`/api/operations/${selectedOperation}`)
       .then(res => setSelectedOperationDetails(res.data || null))
       .catch(() => setSelectedOperationDetails(null))
-  }, [selectedOperation])
+    // Suivi des consultations (B1=tout le monde, B2=première vue uniquement).
+    // Le POST est idempotent côté serveur : on l'envoie sans vérifier le rôle.
+    if (matricule) {
+      api.post(`/api/workflow/marquer-vu/${selectedOperation}`, null, {
+        params: { matricule_observateur: matricule }
+      }).catch(() => {})
+    }
+    api.get(`/api/workflow/vues/${selectedOperation}`)
+      .then(res => setVues(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setVues([]))
+  }, [selectedOperation, matricule])
 
   async function loadWorkflow() {
     setLoading(true)
@@ -142,15 +155,15 @@ export default function WorkflowPage() {
 
   return (
     <div className="operations-container">
-      <div className="operations-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', background: 'linear-gradient(90deg, #021630 0%, #112033 100%)', borderRadius: 10, marginBottom: 20, color: 'white' }}>
         <div>
-          <h1 style={{ fontSize: '1.3rem', margin: '0 0 2px 0' }}>{"Workflow de validation"}</h1>
-          <p style={{ fontSize: '0.82rem', margin: 0 }}>{"Suivi des demandes et validations"}</p>
+          <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: 'white' }}>{"Workflow de validation"}</h1>
+          <p style={{ margin: '4px 0 0', fontSize: '0.85rem', opacity: 0.8, color: 'white' }}>{"Suivi des demandes et validations"}</p>
         </div>
         <button
           onClick={loadWorkflow}
           disabled={loading}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: '1px solid #cbd5e1', background: 'var(--card)', cursor: 'pointer', fontSize: '0.82rem', color: '#334155' }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', cursor: 'pointer', fontSize: '0.82rem', color: 'white', fontWeight: 600 }}
         >
           <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> {"Rafraîchir"}
         </button>
@@ -203,6 +216,34 @@ export default function WorkflowPage() {
                   {showWorkflowInDetail ? "Masquer le workflow" : "Voir le workflow"}
                 </button>
               </div>
+
+              {/* Liste des consultations — qui a déjà ouvert l'opération et quand
+                  (B2 : seule la PREMIÈRE consultation par utilisateur est conservée). */}
+              {vues.length > 0 && (
+                <div className="card" style={{ marginBottom: '10px', padding: '8px 10px', borderTop: '3px solid #112033' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#021630', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    {"Consulté par"} <span style={{ color: '#64748b', fontWeight: 500 }}>({vues.length})</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {vues.map(v => {
+                      const d = v.date_vue ? new Date(v.date_vue) : null
+                      const dateStr = d ? d.toLocaleString('fr-FR', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                      }) : ''
+                      const label = v.nom_observateur || v.matricule_observateur
+                      return (
+                        <span key={`${v.matricule_observateur}-${v.date_vue}`} title={`${v.matricule_observateur}${v.role_observateur ? ' — ' + v.role_observateur : ''} • ${dateStr}`}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '3px 8px', borderRadius: '999px', background: '#f1f5f9', border: '1px solid #cbd5e1', fontSize: '0.72rem', color: '#0f172a' }}>
+                          <strong style={{ fontWeight: 600 }}>{label}</strong>
+                          <span style={{ color: '#64748b' }}>·</span>
+                          <span style={{ color: '#475569' }}>{dateStr}</span>
+                        </span>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {showWorkflowInDetail && (
                 <div className="card" style={{ marginBottom: '12px', padding: '8px 10px', border: '2px solid rgba(206,43,43,0.35)', boxShadow: '0 0 0 3px rgba(206,43,43,0.08)' }}>

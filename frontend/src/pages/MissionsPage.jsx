@@ -740,7 +740,13 @@ export default function MissionsPage() {
       if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      toast.error('Clôture : ' + errMsg(err, err.message))
+      const msg = errMsg(err, err.message)
+      const lower = String(msg).toLowerCase()
+      if (lower.includes('preuve') || lower.includes('justificatif')) {
+        toast.error('Clôture impossible : ' + msg + " Téléversez le justificatif depuis la fiche de la mission (icône œil).")
+      } else {
+        toast.error('Clôture : ' + msg)
+      }
     } finally {
       setLoadingOp(null)
     }
@@ -787,7 +793,13 @@ export default function MissionsPage() {
       if (response?.data?.message) toast.success(response.data.message)
       await loadData()
     } catch (err) {
-      toast.error('Clôture RH : ' + errMsg(err, err.message))
+      const msg = errMsg(err, err.message)
+      const lower = String(msg).toLowerCase()
+      if (lower.includes('preuve') || lower.includes('justificatif')) {
+        toast.error('Clôture RH impossible : ' + msg + " Le missionnaire doit téléverser le justificatif depuis la fiche de la mission.")
+      } else {
+        toast.error('Clôture RH : ' + msg)
+      }
     } finally {
       setLoadingOp(null)
     }
@@ -817,6 +829,28 @@ export default function MissionsPage() {
     const pdfBtn = isValid ? <button key="pdf" onClick={(e) => { e.stopPropagation(); setDownloadingPdf(id); api.get(`/api/pdf/mission/${id}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `mission_${id}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }).finally(() => setDownloadingPdf(null)) }} className="btn-ghost-primary" style={{ ...rowBtn, display: 'inline-flex', alignItems: 'center', opacity: downloadingPdf === id ? 0.6 : 1 }} disabled={downloadingPdf === id} title="Télécharger PDF"><FileDown size={13} /></button> : null
     const remplacantBtn = <button key="remplacant" onClick={(e) => { e.stopPropagation(); setRemplacantOpId(id); setShowRemplacantModal(true) }} className="btn-ghost-primary" style={{ ...rowBtn, display: 'inline-flex', alignItems: 'center' }} title="Remplaçant"><Users2 size={12} /></button>
 
+    // Verrou UX : avant clôture, on exige que tous les justificatifs de frais
+    // soient téléversés. Le backend bloque déjà côté API (defense en profondeur),
+    // mais on désactive visuellement le bouton et on guide l'utilisateur vers
+    // la section Frais pour une UX propre.
+    const fraisStatut = statutsPaiementFrais[id]
+    // Si le statut n'est pas (encore) chargé, on considère par défaut OK pour
+    // ne pas bloquer l'action légitime ; le backend tranchera.
+    const preuvesCompletes = fraisStatut?.preuves_completes !== false
+    const tooltipPreuves = !preuvesCompletes
+      ? (fraisStatut?.preuves_message || "Veuillez téléverser le justificatif de frais avant de clôturer la mission.")
+      : null
+    const cloturerDisabled = isLoading || !preuvesCompletes
+    const cloturerStyle = { ...btnStyle(warnBtn), opacity: cloturerDisabled ? 0.55 : (isLoading ? 0.6 : 1), cursor: cloturerDisabled ? 'not-allowed' : 'pointer' }
+    const handleCloturerWithCheck = (e, ferme) => {
+      e.stopPropagation()
+      if (!preuvesCompletes) {
+        toast.error(tooltipPreuves + " Cliquez sur l'icône œil pour ouvrir la mission et téléverser la preuve.")
+        return
+      }
+      ferme()
+    }
+
     if (isRefus) return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>{eyeBtn}</div>
 
     if (isRecu) {
@@ -828,9 +862,9 @@ export default function MissionsPage() {
           {canApprove && <button onClick={(e) => { e.stopPropagation(); handleWorkflow(id, 'refusé') }} style={dangerBtn} disabled={isLoading}>{"Refuser"}</button>}
           {isMissionnaire && isValid && etat === '--' && <button onClick={(e) => { e.stopPropagation(); handleActiver(id) }} style={btnStyle(okBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer'}</button>}
           {isMissionnaire && isValid && etat === 'AttenteRH' && <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, color: '#f59e0b', background: '#f59e0b22' }}>En attente RH</span>}
-          {isMissionnaire && isValid && etat === 'Active' && <button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer'}</button>}
+          {isMissionnaire && isValid && etat === 'Active' && <button onClick={(e) => handleCloturerWithCheck(e, () => handleCloturer(id))} style={cloturerStyle} disabled={cloturerDisabled} title={tooltipPreuves || undefined}>{isLoading ? '…' : 'Clôturer'}</button>}
           {estRh && isValid && etat === 'AttenteRH' && <button onClick={(e) => { e.stopPropagation(); handleActiverRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Activer (RH)'}</button>}
-          {estRh && isValid && etat === 'Active' && <button onClick={(e) => { e.stopPropagation(); handleCloturerRh(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer (RH)'}</button>}
+          {estRh && isValid && etat === 'Active' && <button onClick={(e) => handleCloturerWithCheck(e, () => handleCloturerRh(id))} style={cloturerStyle} disabled={cloturerDisabled} title={tooltipPreuves || undefined}>{isLoading ? '…' : 'Clôturer (RH)'}</button>}
           {pdfBtn}{eyeBtn}{remplacantBtn}
         </div>
       )
@@ -857,7 +891,7 @@ export default function MissionsPage() {
     if (etat === 'Active') {
       const dateFin = item.date_fin || item.date_retour
       const canRetourAnticipe = dateFin && new Date() < new Date(dateFin)
-      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => { e.stopPropagation(); handleCloturer(id) }} style={btnStyle(warnBtn)} disabled={isLoading}>{isLoading ? '…' : 'Clôturer'}</button>{canRetourAnticipe && <button onClick={(e) => { e.stopPropagation(); handleRetourAnticipe(id) }} style={btnStyle({ ...primaryBtn, background: '#3b82f6' })} disabled={isLoading}>{isLoading ? '…' : 'Retour anticipé'}</button>}{pdfBtn}{eyeBtn}{remplacantBtn}</div>
+      return <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><button onClick={(e) => handleCloturerWithCheck(e, () => handleCloturer(id))} style={cloturerStyle} disabled={cloturerDisabled} title={tooltipPreuves || undefined}>{isLoading ? '…' : 'Clôturer'}</button>{canRetourAnticipe && <button onClick={(e) => { e.stopPropagation(); handleRetourAnticipe(id) }} style={btnStyle({ ...primaryBtn, background: '#3b82f6' })} disabled={isLoading}>{isLoading ? '…' : 'Retour anticipé'}</button>}{pdfBtn}{eyeBtn}{remplacantBtn}</div>
     }
 
     if (etat === 'ClotureDemandee') {
@@ -1177,7 +1211,8 @@ export default function MissionsPage() {
       <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <Tabs active={activeTab} setActive={tab => { setActiveTab(tab); setFilterDate(''); setFilterStatut(''); setFilterSource(''); setFilterEmetteur(''); setFilterEtat('') }} counts={{ envoye: workflowEnvoye.length, recu: recu.length }} />
         <FilterBar date={filterDate} setDate={setFilterDate} statut={filterStatut} setStatut={setFilterStatut} source={filterSource} setSource={setFilterSource} emetteur={filterEmetteur} setEmetteur={setFilterEmetteur} etat={filterEtat} setEtat={setFilterEtat} />
-        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1300 }}>
           <thead>
             <tr>
               <th style={{ ...th, width: '12%' }}>Titre de demande</th>
@@ -1198,13 +1233,15 @@ export default function MissionsPage() {
           </thead>
           <tbody>{renderRows(pagination.pageItems, activeTab === 'recu')}</tbody>
         </table>
+        </div>
         <Pagination {...pagination} />
         {activeTab === 'recu' && estRh && workflowPcaAg.length > 0 && (
           <div style={{ marginTop: 24 }}>
             <div style={{ padding: '10px 14px', background: 'rgba(2,22,46,0.06)', borderLeft: '3px solid var(--bleu)', borderTop: '1px solid rgba(2,22,46,0.15)', borderBottom: '1px solid rgba(2,22,46,0.15)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--bleu)', letterSpacing: '0.02em' }}>
               Pour information — PCA / AG
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1100 }}>
               <thead>
                 <tr>
                   <th style={{ ...th, width: '18%' }}>Titre de demande</th>
@@ -1248,6 +1285,7 @@ export default function MissionsPage() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

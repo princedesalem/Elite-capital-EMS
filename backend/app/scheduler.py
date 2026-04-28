@@ -15,6 +15,7 @@ from .utils.activation_cloture import verifier_delai_cloture
 from .utils.missions import verifier_alertes_rapport_mission, verifier_relances_rapport_mission, verifier_missions_a_activer
 from .utils.permissions import envoyer_rappel_preuves_permission
 from .utils.business_logic import calculer_augmentation_solde_mensuel
+from .utils.relances import executer_relances
 from .db import SessionLocal
 from .models import Employe, PermConventionelle
 
@@ -175,6 +176,29 @@ def job_activation_reminders():
         db.close()
 
 
+def job_relances_15min():
+    """Relances toutes les 15 minutes en heures ouvrées (L-V 8h-18h).
+
+    - Crée une notification RELANCE_VALIDATION pour chaque validateur courant
+      d'une opération en attente (déclenche email + push via les events).
+    - Ré-émet email + push pour toute notification non lue depuis > 15 min,
+      sans créer de doublon en base.
+    """
+    db = SessionLocal()
+    try:
+        nb_val, nb_unread = executer_relances(db)
+        if nb_val or nb_unread:
+            print(
+                f"[{datetime.now()}] Relances 15min : {nb_val} validateurs, "
+                f"{nb_unread} notifs non lues r\u00e9-\u00e9mises."
+            )
+    except Exception as e:
+        print(f"[{datetime.now()}] Erreur lors des relances 15min: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def configurer_scheduler():
     """
     Configure APScheduler avec toutes les tâches planifiées.
@@ -229,6 +253,15 @@ def configurer_scheduler():
         name='Rappels activation missions (toutes les 6h)',
         replace_existing=True
     )
+
+    # Relances toutes les 15 minutes (filtre interne heures ouvr\u00e9es L-V 8h-18h)
+    scheduler.add_job(
+        job_relances_15min,
+        CronTrigger(minute='*/15'),
+        id='job_relances_15min',
+        name='Relances validateurs + notifs non lues (15 min, heures ouvr\u00e9es)',
+        replace_existing=True
+    )
     
     scheduler.start()
     print("Scheduler configuré et démarré.")
@@ -237,6 +270,7 @@ def configurer_scheduler():
     print("  - Job mensuel: 1er du mois 00h30")
     print("  - Job relances rapports: Toutes les 2 heures")
     print("  - Job rappels activation missions: Toutes les 6 heures")
+    print("  - Job relances 15 min: heures ouvr\u00e9es L-V 8h-18h")
     
     return scheduler
 

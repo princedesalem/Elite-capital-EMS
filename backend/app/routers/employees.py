@@ -404,6 +404,13 @@ def _serialize_employee(e: models.Employe, db: Session, *, viewer_matricule: Opt
     data['id_pays'] = pays.id_pays if pays else None
     data['pays'] = pays.nom_pays if pays else None
     data['n1_fonction'] = e.n1_fonction
+    # Nom complet du supérieur hiérarchique (pour affichage côté UI sans
+    # second appel API). Champ additif, jamais requis par les schémas.
+    if e.n1:
+        n1_emp = db.query(models.Employe).filter(models.Employe.matricule == e.n1).first()
+        data['n1_nom'] = f"{n1_emp.prenom or ''} {n1_emp.nom or ''}".strip() if n1_emp else None
+    else:
+        data['n1_nom'] = None
     sv = e.statut_employe
     data['statut_employe'] = (sv.value if hasattr(sv, 'value') else str(sv)) if sv else 'ACTIF'
 
@@ -500,6 +507,15 @@ def _prepare_employee_payload(payload: schemas.EmployeBase, db: Session):
     elif 'n1_fonction' in cleaned and not cleaned.get('n1_fonction'):
         cleaned['n1_fonction'] = None
         cleaned['n1'] = None
+    elif cleaned.get('n1'):
+        # Si seul `n1` (matricule) est fourni — typiquement depuis l'organigramme —
+        # on synchronise automatiquement `n1_fonction` à partir de la fonction
+        # de l'employé désigné, pour que les deux colonnes restent cohérentes.
+        holder = db.query(models.Employe).filter(
+            models.Employe.matricule == cleaned['n1']
+        ).first()
+        if holder and holder.fonction:
+            cleaned['n1_fonction'] = holder.fonction
     if cleaned.get('sexe') is not None:
         sexe_raw = str(cleaned.get('sexe') or '').strip().lower()
         if sexe_raw in {'m', 'masculin', 'homme'}:
@@ -1091,8 +1107,11 @@ def update_employee(matricule: str, payload: schemas.EmployeUpdate, request: Req
     before = crud.get_employe(db, matricule)
     if not before:
         raise HTTPException(status_code=404, detail='Non trouvé')
+    # PARTIAL UPDATE : ne traiter QUE les champs réellement envoyés par le client.
+    # Sinon les champs absents sont remplis avec None et écrasent les valeurs existantes.
+    sent_fields = payload.model_fields_set
+    update_dict = payload.model_dump(exclude_unset=True)
     # Compléter les champs requis depuis l'employé existant si absents du payload
-    update_dict = payload.model_dump()
     if not update_dict.get('matricule'):
         update_dict['matricule'] = str(before.matricule)
     if not update_dict.get('nom'):
@@ -1100,7 +1119,45 @@ def update_employee(matricule: str, payload: schemas.EmployeUpdate, request: Req
     if not update_dict.get('prenom'):
         update_dict['prenom'] = str(before.prenom) if before.prenom else ''
     full_payload = schemas.EmployeBase(**update_dict)
-    data = _prepare_employee_payload(full_payload, db)
+    prepared = _prepare_employee_payload(full_payload, db)
+    # Filtrer 'prepared' pour ne garder que les clés que le client a vraiment envoyées
+    # (plus les clés calculées par _prepare_employee_payload qui dépendent des champs envoyés).
+    # Mapping : un nom logique envoyé par le client → les colonnes DB qu'il met à jour.
+    LOGICAL_TO_DB = {
+        'role': {'id_role'},
+        'entite': {'id_entite'},
+        'direction': {'id_direction'},
+        'departement': {'dept_id', 'departement'},
+        'fonction': {'fonction'},
+        'ville': {'ville', 'id_localisation'},
+        'id_localisation': {'id_localisation', 'ville'},
+        'pays': {'pays', 'id_pays'},
+        'n1': {'n1'},
+    }
+    keys_to_apply = set()
+    for k in sent_fields:
+        keys_to_apply.add(k)
+        keys_to_apply.update(LOGICAL_TO_DB.get(k, set()))
+    # matricule/nom/prenom sont toujours valides (fallback DB)
+    keys_to_apply.update({'matricule', 'nom', 'prenom'})
+    data = {k: v for k, v in prepared.items() if k in keys_to_apply}
+    # PROTECTION ANTI-EFFACEMENT : un PUT ne doit jamais écraser une valeur
+    # existante par None ou par une chaîne vide. Pour vider explicitement un
+    # champ, utiliser un endpoint dédié (DELETE / clear). Cela protège l'app
+    # contre les payloads partiels (form, API tierce, tests) qui omettent ou
+    # envoient null/"" pour des champs qu'ils n'ont pas l'intention de modifier.
+    NEVER_BLANK_PROTECTED = {'matricule', 'nom', 'prenom'}
+    cleaned = {}
+    for k, v in data.items():
+        if k in NEVER_BLANK_PROTECTED:
+            cleaned[k] = v
+            continue
+        if v is None:
+            continue
+        if isinstance(v, str) and v.strip() == '':
+            continue
+        cleaned[k] = v
+    data = cleaned
     # Snapshot BEFORE update pour détecter promotions/mutations/transferts
     before_snapshot = {
         'id_role': getattr(before, 'id_role', None),

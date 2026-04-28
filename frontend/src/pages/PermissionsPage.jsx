@@ -1165,7 +1165,8 @@ export default function PermissionsPage() {
       <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <Tabs active={activeTab} setActive={tab => { setActiveTab(tab); setFilterDate(''); setFilterStatut(''); setFilterSource(''); setFilterEmetteur(''); setFilterEtat('') }} counts={{ envoye: workflowEnvoye.length, recu: recu.length }} />
         <FilterBar date={filterDate} setDate={setFilterDate} statut={filterStatut} setStatut={setFilterStatut} source={filterSource} setSource={setFilterSource} emetteur={filterEmetteur} setEmetteur={setFilterEmetteur} etat={filterEtat} setEtat={setFilterEtat} />
-        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1000 }}>
           <thead>
             <tr>
               <th style={{ ...th, width: '16%' }}>Titre de demande</th>
@@ -1183,13 +1184,15 @@ export default function PermissionsPage() {
           </thead>
           <tbody>{renderRows(pagination.pageItems, activeTab === 'recu')}</tbody>
         </table>
+        </div>
         <Pagination {...pagination} />
         {activeTab === 'recu' && estRh && workflowPcaAg.length > 0 && (
           <div style={{ marginTop: 24 }}>
             <div style={{ padding: '10px 14px', background: 'rgba(2,22,46,0.06)', borderLeft: '3px solid var(--bleu)', borderTop: '1px solid rgba(2,22,46,0.15)', borderBottom: '1px solid rgba(2,22,46,0.15)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--bleu)', letterSpacing: '0.02em' }}>
               Pour information — PCA / AG
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1000 }}>
               <thead>
                 <tr>
                   <th style={{ ...th, width: '18%' }}>Titre de demande</th>
@@ -1233,6 +1236,7 @@ export default function PermissionsPage() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

@@ -114,6 +114,7 @@ def run_migrations(engine) -> None:
                                 'duplicate column', 'already exists',
                                 '1060',   # MySQL: Duplicate column name
                                 '1050',   # MySQL: Table already exists
+                                '1061',   # MySQL: Duplicate key name (index)
                                 'duplicate key', 'unique constraint',
                             ]):
                                 logger.info(f"[auto_migrate] {nom}: ignoré (déjà appliqué partiellement) — {e}")

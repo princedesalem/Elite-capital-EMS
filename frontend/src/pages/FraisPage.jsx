@@ -970,7 +970,8 @@ export default function FraisPage() {
       <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <Tabs active={activeTab} setActive={tab => { setActiveTab(tab); setFilterDate(''); setFilterStatut(''); setFilterSource(''); setFilterEmetteur(''); setFilterEtat('') }} counts={{ envoye: workflowEnvoye.length, recu: recu.length }} />
         <FilterBar date={filterDate} setDate={setFilterDate} statut={filterStatut} setStatut={setFilterStatut} source={filterSource} setSource={setFilterSource} emetteur={filterEmetteur} setEmetteur={setFilterEmetteur} etat={filterEtat} setEtat={setFilterEtat} />
-        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1100 }}>
           <thead>
             <tr>
               <th style={{ ...th, width: '13%' }}>Titre de demande</th>
@@ -989,6 +990,7 @@ export default function FraisPage() {
           </thead>
           <tbody>{renderRows(pagination.pageItems, activeTab === 'recu')}</tbody>
         </table>
+        </div>
         <Pagination {...pagination} />
       </div>
       {selectedOperationForWorkflow && (

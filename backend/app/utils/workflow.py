@@ -621,6 +621,21 @@ def valider_operation(
     )
     db.add(validation)
     db.commit()
+
+    # Multi-DG : marquer comme lue la notif VALIDATION du DG qui vient de valider,
+    # pour qu'elle disparaisse de SA boîte sans toucher celles des autres DG.
+    if role_validation_effectif == 'DG':
+        notifs_dg_self = db.query(Notification).filter(
+            Notification.id_operation == id_operation,
+            Notification.matricule == matricule_validateur,
+            Notification.type_notification == TypeNotificationEnum.VALIDATION,
+            Notification.lue == False,  # noqa: E712
+        ).all()
+        for _n in notifs_dg_self:
+            _n.lue = True
+            db.add(_n)
+        if notifs_dg_self:
+            db.commit()
     
     # Notifier
     from .notifications import notifier_validation_operation
@@ -636,6 +651,18 @@ def valider_operation(
     if statut == 'refusé':
         operation.statut = 'refusé'
         db.add(operation)
+        # Multi-DG : un refus par un DG annule l'étape pour TOUS les DG ; on
+        # archive leurs notifications VALIDATION en attente pour que l'op
+        # disparaisse de leur boîte.
+        if role_validation_effectif == 'DG':
+            notifs_dg_pending = db.query(Notification).filter(
+                Notification.id_operation == id_operation,
+                Notification.type_notification == TypeNotificationEnum.VALIDATION,
+                Notification.lue == False,  # noqa: E712
+            ).all()
+            for _n in notifs_dg_pending:
+                _n.lue = True
+                db.add(_n)
         db.commit()
         return True, "Opération refusée"
     
@@ -687,11 +714,31 @@ def valider_operation(
         demandeur_label = f"{demandeur.prenom} {demandeur.nom}" if demandeur else "un demandeur"
         type_demande = operation.type_demande if operation and operation.type_demande else 'opération'
 
-        # B5 — si DG, notifier tous les DG simultanément.
+        # B5 — si DG, notifier tous les DG simultanément, mais on évite :
+        #   - de re-notifier un DG qui a déjà validé (sa notif a été marquée
+        #     lue ci-dessus) ;
+        #   - de doublonner une notif VALIDATION non lue déjà présente.
         cibles_notif: list[int] = []
         if (prochain_role_apres or '').upper() == 'DG':
-            cibles_notif = list(obtenir_tous_matricules_dg(db))
-        if not cibles_notif:
+            tous_dg = list(obtenir_tous_matricules_dg(db))
+            # DGs ayant déjà validé cette opération
+            deja_valides = {
+                v.matricule_validateur for v in db.query(Validation).filter(
+                    Validation.id_operation == id_operation,
+                    Validation.role_validateur == 'DG',
+                    Validation.statut_validation == 'validé',
+                ).all()
+            }
+            # DGs qui ont déjà une notif VALIDATION non lue pour cette op
+            deja_notifies = {
+                n.matricule for n in db.query(Notification).filter(
+                    Notification.id_operation == id_operation,
+                    Notification.type_notification == TypeNotificationEnum.VALIDATION,
+                    Notification.lue == False,  # noqa: E712
+                ).all()
+            }
+            cibles_notif = [m for m in tous_dg if m not in deja_valides and m not in deja_notifies]
+        if not cibles_notif and (prochain_role_apres or '').upper() != 'DG':
             cibles_notif = [prochain_matricule_apres]
 
         for _mat_cible in cibles_notif:

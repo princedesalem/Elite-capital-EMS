@@ -626,6 +626,50 @@ def creer_notification(
         return False, f"Erreur lors de la création de la notification: {str(e)}"
 
 
+def notifier_missionnaires(
+    operation: Operation,
+    type_notification,
+    titre: str,
+    message: str,
+    db: Session,
+) -> int:
+    """Notifie tous les missionnaires d'une op\u00e9ration mission (cas RH).
+
+    Le matricule porteur de l'op\u00e9ration (`operation.matricule`) re\u00e7oit la
+    notification, ainsi que tous les co-missionnaires r\u00e9f\u00e9renc\u00e9s dans
+    `MissionnairesMission` (d\u00e9doublonnage). Pour les types `Cong\u00e9` /
+    `Permission`, seul le porteur est notifi\u00e9.
+
+    Returns: nombre de notifications cr\u00e9\u00e9es (donc d'envois email/push d\u00e9clench\u00e9s).
+    """
+    if operation is None:
+        return 0
+    recipients = set()
+    if operation.matricule:
+        recipients.add(operation.matricule)
+    type_demande = (operation.type_demande or '').lower()
+    if 'mission' in type_demande:
+        missionnaires = db.query(MissionnairesMission).filter(
+            MissionnairesMission.id_mission == operation.id_operation
+        ).all()
+        for mm in missionnaires:
+            if mm.matricule:
+                recipients.add(mm.matricule)
+    count = 0
+    for matricule in recipients:
+        ok, _ = creer_notification(
+            matricule=matricule,
+            type_notification=type_notification,
+            titre=titre,
+            message=message,
+            id_operation=operation.id_operation,
+            db=db,
+        )
+        if ok:
+            count += 1
+    return count
+
+
 def notifier_prochain_validateur(
     role: Optional[str],
     matricule: Optional[str],
@@ -853,4 +897,37 @@ def _dispatch_webpush_after_notification_insert(mapper, connection, target):
             )
     except Exception:
         # Push failures must never block business transactions.
+        return
+
+
+@event.listens_for(Notification, 'after_insert')
+def _dispatch_email_after_notification_insert(mapper, connection, target):
+    """Envoi automatique d'un email pour chaque notification ins\u00e9r\u00e9e en base.
+
+    Le destinataire est r\u00e9solu via EMPLOYE.email ; respecte l'opt-out
+    `notif_email_enabled`. Les \u00e9checs SMTP sont silencieux pour ne jamais
+    bloquer la transaction m\u00e9tier.
+    """
+    if not getattr(email_utils, 'SMTP_ENABLED', False):
+        return
+    try:
+        # R\u00e9soudre l'employ\u00e9 destinataire via une requ\u00eate brute (la session ORM
+        # n'est pas disponible dans le hook after_insert).
+        from ..models import Employe as _Employe
+        stmt = select(
+            _Employe.email,
+            _Employe.notif_email_enabled,
+        ).where(_Employe.matricule == target.matricule)
+        row = connection.execute(stmt).first()
+        if not row:
+            return
+        email_addr = row[0]
+        enabled = row[1] if row[1] is not None else True
+        if not email_addr or not enabled:
+            return
+        subject = f"[EMS] {target.titre or 'Nouvelle notification'}"
+        body = (target.message or '').strip()
+        # send_email contient son propre try/except et ne l\u00e8ve pas.
+        email_utils.send_email(to=email_addr, subject=subject, body=body)
+    except Exception:
         return

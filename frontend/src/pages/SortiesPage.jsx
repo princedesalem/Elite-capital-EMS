@@ -643,8 +643,8 @@ export default function SortiesPage() {
       <div style={{ background: 'var(--card)', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <Tabs active={activeTab} setActive={(tab) => { setActiveTab(tab); setFilterDate(''); setFilterStatut(''); setFilterSource(''); setFilterEmetteur(''); setFilterEtat('') }} counts={{ envoye: workflowEnvoye.length, recu: recu.length }} />
         <FilterBar date={filterDate} setDate={setFilterDate} statut={filterStatut} setStatut={setFilterStatut} source={filterSource} setSource={setFilterSource} emetteur={filterEmetteur} setEmetteur={setFilterEmetteur} etat={filterEtat} setEtat={setFilterEtat} />
-        <div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1100 }}>
           <thead>
             <tr>
               <th style={{ ...th, width: '15%' }}>Titre de demande</th>

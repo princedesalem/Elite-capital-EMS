@@ -274,4 +274,14 @@ describe('EmployeeForm', () => {
     expect(screen.getByText(/Cameroun \(\+237\)/)).toBeInTheDocument()
     expect(screen.getByText(/France \(\+33\)/)).toBeInTheDocument()
   })
+
+  it('always renders the Salaire brut input (no role restriction in form)', async () => {
+    renderPage()
+
+    // Even without an AuthProvider in test (user role unknown), the salary input
+    // is shown so users with create rights can fill it in.
+    expect(await screen.findByText(/Salaire brut/i)).toBeInTheDocument()
+    // Devise selector default to XAF
+    expect(screen.getByDisplayValue('XAF')).toBeInTheDocument()
+  })
 })

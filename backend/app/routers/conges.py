@@ -166,6 +166,69 @@ def calculer_duree_conge(date_debut: date, date_fin: date):
     }
 
 
+def _evaluer_modifiabilite_b3(operation: 'models.Operation', db: Session) -> tuple[bool, Optional[str]]:
+    """\u00c9value la r\u00e8gle B3 et autres verrous de modification d'un cong\u00e9.
+
+    Retourne (peut_modifier, motif_blocage). `motif_blocage` est None si OK.
+    Centralise la logique pour qu'elle soit identique entre l'endpoint GET
+    et l'endpoint PUT (\u00e9vite la divergence frontend/backend).
+    """
+    if not operation:
+        return False, "Demande introuvable."
+    if operation.statut and str(operation.statut).lower() != 'en attente':
+        return False, "Seules les demandes en attente peuvent \u00eatre modifi\u00e9es."
+    if workflow.operation_a_deja_ete_validee(operation.id_operation, db):
+        return False, "Impossible de modifier une demande apr\u00e8s la premi\u00e8re validation."
+    today = date.today()
+    date_debut_actuelle = operation.date_debut
+    _dc = getattr(operation, 'date_creation', None) or getattr(operation, 'date_demande', None)
+    date_creation = (
+        _dc.date()
+        if _dc and hasattr(_dc, 'date')
+        else (_dc or today)
+    )
+    if date_debut_actuelle:
+        anticipation_jours = (date_debut_actuelle - date_creation).days
+        jours_avant_debut = (date_debut_actuelle - today).days
+        if anticipation_jours > 21 and 0 <= jours_avant_debut <= 14:
+            return False, (
+                "Modification verrouill\u00e9e : cette demande a \u00e9t\u00e9 cr\u00e9\u00e9e plus de "
+                "3 semaines \u00e0 l'avance et le d\u00e9but du cong\u00e9 est dans moins de "
+                "14 jours. Contactez le RH si n\u00e9cessaire."
+            )
+    return True, None
+
+
+@router.get('/{id_operation}/modifiabilite')
+def obtenir_modifiabilite_conge(id_operation: int, db: Session = Depends(get_db)):
+    """Renvoie l'\u00e9tat de modifiabilit\u00e9 (r\u00e8gle B3) d'une demande de cong\u00e9.
+
+    R\u00e9ponse :
+        {
+          "peut_modifier": bool,
+          "motif_blocage": str|null,
+          "id_operation": int,
+          "date_debut": date,
+          "date_creation": date,
+        }
+    """
+    operation = db.query(models.Operation).filter(
+        models.Operation.id_operation == id_operation,
+        models.Operation.type_demande == 'Cong\u00e9'
+    ).first()
+    if not operation:
+        raise HTTPException(status_code=404, detail="Demande de cong\u00e9 introuvable")
+    peut_modifier, motif = _evaluer_modifiabilite_b3(operation, db)
+    _dc = getattr(operation, 'date_creation', None) or getattr(operation, 'date_demande', None)
+    return {
+        "id_operation": operation.id_operation,
+        "peut_modifier": peut_modifier,
+        "motif_blocage": motif,
+        "date_debut": operation.date_debut,
+        "date_creation": _dc.date() if _dc and hasattr(_dc, 'date') else _dc,
+    }
+
+
 @router.put('/{id_operation}/modifier')
 def modifier_demande_conge(
     id_operation: int,
@@ -188,36 +251,15 @@ def modifier_demande_conge(
         if operation.matricule != actor_matricule and not access_control.can_access_globally(str(actor_role or '').upper()):
             raise HTTPException(status_code=403, detail="Vous n'êtes pas autorisé à modifier cette demande")
 
-    if operation.statut and str(operation.statut).lower() != 'en attente':
-        raise HTTPException(status_code=400, detail="Seules les demandes en attente peuvent être modifiées")
-
-    if workflow.operation_a_deja_ete_validee(id_operation, db):
-        raise HTTPException(status_code=400, detail="Impossible de modifier une demande après la première validation")
-
-    # B3 — Règle métier : si une demande de congé a été créée plus de 3 semaines
-    # à l'avance (date_creation > 21 jours avant date_debut), elle ne peut plus
-    # être modifiée à partir de J-14 du début du congé. Cette règle empêche les
-    # modifications de dernière minute sur des demandes anticipées.
-    today = date.today()
-    date_debut_actuelle = operation.date_debut
-    _dc = getattr(operation, 'date_creation', None) or getattr(operation, 'date_demande', None)
-    date_creation = (
-        _dc.date()
-        if _dc and hasattr(_dc, 'date')
-        else (_dc or today)
-    )
-    if date_debut_actuelle:
-        anticipation_jours = (date_debut_actuelle - date_creation).days
-        jours_avant_debut = (date_debut_actuelle - today).days
-        if anticipation_jours > 21 and 0 <= jours_avant_debut <= 14:
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    "Modification verrouillée : cette demande a été créée plus de "
-                    "3 semaines à l'avance et le début du congé est dans moins de "
-                    "14 jours. Contactez le RH si nécessaire."
-                ),
-            )
+    peut_modifier, motif_blocage = _evaluer_modifiabilite_b3(operation, db)
+    if not peut_modifier:
+        # Distinction de code retour pour pr\u00e9server la s\u00e9mantique pr\u00e9-existante :
+        # - 400 si statut non "en attente"
+        # - 400 si d\u00e9j\u00e0 valid\u00e9e
+        # - 403 si verrou B3
+        if motif_blocage and 'verrouill\u00e9e' in motif_blocage:
+            raise HTTPException(status_code=403, detail=motif_blocage)
+        raise HTTPException(status_code=400, detail=motif_blocage or "Demande non modifiable")
 
     employe = db.query(models.Employe).filter(models.Employe.matricule == operation.matricule).first()
     if not employe:

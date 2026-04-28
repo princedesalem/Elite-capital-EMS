@@ -277,16 +277,15 @@ def activer_operation_rh(
             db.add(operation)
             db.commit()
     
-    # Notifier le demandeur
-    notification = Notification(
-        matricule=operation.matricule,
-        type_notification=TypeNotificationEnum.VALIDATION,
-        titre="Opération activée",
-        message="Votre opération a été activée par le RH. Bon séjour!",
-        id_operation=id_operation
+    # Notifier le demandeur + co-missionnaires (canaux email/push gérés par creer_notification)
+    from .notifications import notifier_missionnaires
+    notifier_missionnaires(
+        operation,
+        TypeNotificationEnum.VALIDATION,
+        "Opération activée",
+        "Votre opération a été activée par le RH. Bon séjour!",
+        db,
     )
-    db.add(notification)
-    db.commit()
     
     return True, "Opération activée avec succès"
 
@@ -516,17 +515,16 @@ def cloturer_operation_rh(
     
     db.commit()
     
-    # Notifier le demandeur
+    # Notifier le demandeur + co-missionnaires
     operation = db.query(Operation).filter(Operation.id_operation == id_operation).first()
-    notification = Notification(
-        matricule=operation.matricule,
-        type_notification=TypeNotificationEnum.VALIDATION,
-        titre="Opération clôturée",
-        message="Votre opération a été clôturée par le RH.",
-        id_operation=id_operation
+    from .notifications import notifier_missionnaires
+    notifier_missionnaires(
+        operation,
+        TypeNotificationEnum.VALIDATION,
+        "Opération clôturée",
+        "Votre opération a été clôturée par le RH.",
+        db,
     )
-    db.add(notification)
-    db.commit()
     
     return True, "Opération clôturée avec succès"
 
@@ -563,15 +561,15 @@ def verifier_delai_cloture(db: Session):
             operation.alerte_non_cloture = True
             operation.date_alerte_envoyee = datetime.now()
             
-            # Notifier l'employé
-            notification = Notification(
-                matricule=operation.matricule,
-                type_notification=TypeNotificationEnum.CLOTURE_REQUISE,
-                titre="Clôture requise - Alerte J+1",
-                message=f"Vous devez clôturer votre opération. Date de retour: {operation.date_retour}",
-                id_operation=operation.id_operation
+            # Notifier l'employé + co-missionnaires
+            from .notifications import notifier_missionnaires
+            notifier_missionnaires(
+                operation,
+                TypeNotificationEnum.CLOTURE_REQUISE,
+                "Cl\u00f4ture requise - Alerte J+1",
+                f"Vous devez cl\u00f4turer votre op\u00e9ration. Date de retour: {operation.date_retour}",
+                db,
             )
-            db.add(notification)
             
             # Notifier le RH
             _emp_alerte = db.query(Employe).filter(Employe.matricule == operation.matricule).first()

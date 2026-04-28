@@ -146,6 +146,8 @@ export default function CongesPage() {
   const [congeEditMode, setCongeEditMode] = useState(false)
   const [congeEditId, setCongeEditId] = useState(null)
   const [msg, setMsg] = useState(null)
+  // R\u00e8gle B3 : map id_operation -> { peut_modifier, motif_blocage }
+  const [modifiabilites, setModifiabilites] = useState({})
   const [selectedOperationForWorkflow, setSelectedOperationForWorkflow] = useState(null)
   const [detailCongeItem, setDetailCongeItem] = useState(null)
   const [showRemplacantModal, setShowRemplacantModal] = useState(false)
@@ -184,6 +186,21 @@ export default function CongesPage() {
       setWorkflowPcaAg(pcaAgNorm)
       setRowEtat(initRowEtatFromApi([...envoyeNorm, ...aValiderNorm, ...valideNorm, ...refuseNorm, ...pcaAgNorm]))
       setSoldeConges(Number(r3?.data?.solde_conges ?? 0))
+
+      // R\u00e8gle B3 : pr\u00e9-charger les drapeaux de modifiabilit\u00e9 pour les
+      // demandes "en attente" propres (vue envoye), pour afficher tooltip +
+      // d\u00e9sactivation du bouton Modifier sans surcharger la page.
+      try {
+        const pending = envoyeNorm.filter(o => (o.statut || '').toLowerCase() === 'en attente')
+        const flags = await Promise.all(
+          pending.map(o => api.get(`/api/conges/${o.id_operation}/modifiabilite`)
+            .then(r => [o.id_operation, r.data])
+            .catch(() => [o.id_operation, { peut_modifier: true, motif_blocage: null }]))
+        )
+        setModifiabilites(Object.fromEntries(flags))
+      } catch {
+        setModifiabilites({})
+      }
     } finally {
       setLoading(false)
     }
@@ -412,9 +429,18 @@ export default function CongesPage() {
 
     // Envoyé tab (demandeur view)
     if (!isValid) {
+      const flag = modifiabilites[id]
+      const peutModifier = flag ? flag.peut_modifier !== false : true
+      const motif = flag?.motif_blocage || null
+      const editStyle = peutModifier ? primaryBtn : { ...primaryBtn, opacity: 0.5, cursor: 'not-allowed', filter: 'grayscale(0.4)' }
       return (
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <button onClick={(e) => { e.stopPropagation(); handleEditConge(item) }} style={primaryBtn}>{"Modifier"}</button>
+          <button
+            onClick={(e) => { e.stopPropagation(); if (!peutModifier) { setMsg({ type: 'error', text: motif || 'Modification verrouill\u00e9e.' }); return } handleEditConge(item) }}
+            style={editStyle}
+            disabled={!peutModifier}
+            title={peutModifier ? undefined : motif || 'Modification verrouill\u00e9e'}
+          >{"Modifier"}</button>
           <button onClick={(e) => { e.stopPropagation(); handleAnnuler(id) }} style={dangerBtn}>{"Annuler"}</button>
           {eyeBtn}{remplacantBtn}
         </div>
@@ -573,7 +599,8 @@ export default function CongesPage() {
       <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <Tabs active={activeTab} setActive={tab => { setActiveTab(tab); setFilterDate(''); setFilterStatut(''); setFilterSource(''); setFilterEmetteur(''); setFilterEtat('') }} counts={{ envoye: workflowEnvoye.length, recu: recu.length }} />
         <FilterBar date={filterDate} setDate={setFilterDate} statut={filterStatut} setStatut={setFilterStatut} source={filterSource} setSource={setFilterSource} emetteur={filterEmetteur} setEmetteur={setFilterEmetteur} etat={filterEtat} setEtat={setFilterEtat} />
-        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 980 }}>
           <thead>
             <tr>
               <th style={{ ...th, width: '16%' }}>Titre de demande</th>
@@ -590,13 +617,15 @@ export default function CongesPage() {
           </thead>
           <tbody>{renderRows(pagination.pageItems, activeTab === 'recu')}</tbody>
         </table>
+        </div>
         <Pagination {...pagination} />
         {activeTab === 'recu' && estRh && workflowPcaAg.length > 0 && (
           <div style={{ marginTop: 24 }}>
             <div style={{ padding: '10px 14px', background: 'rgba(2,22,46,0.06)', borderLeft: '3px solid var(--bleu)', borderTop: '1px solid rgba(2,22,46,0.15)', borderBottom: '1px solid rgba(2,22,46,0.15)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--bleu)', letterSpacing: '0.02em' }}>
               Pour information — PCA / AG
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 980 }}>
               <thead>
                 <tr>
                   <th style={{ ...th, width: '18%' }}>Titre de demande</th>
@@ -631,6 +660,7 @@ export default function CongesPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

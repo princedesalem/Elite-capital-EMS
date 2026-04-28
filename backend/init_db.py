@@ -486,7 +486,16 @@ def init():
 
         # create organisational structure by city
         elcam, exca, ecg = create_org_structure_by_city(db, localisations_by_city)
-        cleanup_city_specific_org(db, (elcam, exca, ecg), localisations_by_city)
+        # IMPORTANT : `cleanup_city_specific_org` SUPPRIME les directions/départements
+        # absents d'une whitelist hardcodée. Ne l'exécuter QUE si l'admin le demande
+        # explicitement via EMS_SEED_RESET=1, sinon on écrase les données saisies par
+        # les utilisateurs (ex : direction « Conformité et Controle Interne » ajoutée
+        # manuellement à ELCAM disparaissait à chaque redémarrage du conteneur).
+        if os.environ.get('EMS_SEED_RESET') == '1':
+            print('[init_db] EMS_SEED_RESET=1 — running cleanup_city_specific_org (DESTRUCTIVE)')
+            cleanup_city_specific_org(db, (elcam, exca, ecg), localisations_by_city)
+        else:
+            print('[init_db] Skipping cleanup_city_specific_org (set EMS_SEED_RESET=1 to run)')
 
         # Implantations demandées par ville
         allowed_entities_by_city = {

@@ -186,4 +186,48 @@ describe('Employees page', () => {
     expect(image).not.toBeNull()
     expect(image).toHaveAttribute('src', 'https://cdn.example.com/profiles/1001.jpg')
   })
+
+  it('filters employees by sexe (Masculin / Féminin)', async () => {
+    const api = (await import('../services/api')).default
+    api.get.mockImplementation((url) => {
+      if (url === '/employees/scoped') {
+        return Promise.resolve({
+          data: [
+            { ...makeEmployee(1), sexe: 'M' },
+            { ...makeEmployee(2), sexe: 'M' },
+            { ...makeEmployee(3), sexe: 'F' },
+            { ...makeEmployee(4), sexe: 'F' },
+            { ...makeEmployee(5), sexe: 'F' },
+          ],
+        })
+      }
+      if (url === '/employees/') return Promise.resolve({ data: [] })
+      return Promise.resolve({ data: [] })
+    })
+
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByText('5 employés trouvés')).toBeInTheDocument()
+    })
+
+    const sexeSelect = screen.getByLabelText(/filtrer par sexe/i)
+
+    // Filter to Masculin only -> 2 employees
+    fireEvent.change(sexeSelect, { target: { value: 'M' } })
+    await waitFor(() => {
+      expect(screen.getByText('2 employés trouvés')).toBeInTheDocument()
+    })
+
+    // Filter to Féminin only -> 3 employees
+    fireEvent.change(sexeSelect, { target: { value: 'F' } })
+    await waitFor(() => {
+      expect(screen.getByText('3 employés trouvés')).toBeInTheDocument()
+    })
+
+    // Reset
+    fireEvent.change(sexeSelect, { target: { value: '' } })
+    await waitFor(() => {
+      expect(screen.getByText('5 employés trouvés')).toBeInTheDocument()
+    })
+  })
 })

@@ -24,6 +24,7 @@ export default function Employees(){
   const [selectedEntite, setSelectedEntite] = useState('')
   const [selectedDirection, setSelectedDirection] = useState('')
   const [selectedDepartement, setSelectedDepartement] = useState('')
+  const [selectedSexe, setSelectedSexe] = useState('')
   const [paysOptions, setPaysOptions] = useState([])
   const [villeOptions, setVilleOptions] = useState([])
   const [selectedEmployee, setSelectedEmployee] = useState(null)
@@ -196,9 +197,10 @@ export default function Employees(){
       if (selectedEntite && e.entite !== selectedEntite) return false
       if (selectedDirection && e.direction !== selectedDirection) return false
       if (selectedDepartement && e.departement !== selectedDepartement) return false
+      if (selectedSexe && String(e.sexe || '').toUpperCase() !== selectedSexe) return false
       return true
     })
-  }, [list, searchTerm, selectedPays, selectedVille, selectedEntite, selectedDirection, selectedDepartement])
+  }, [list, searchTerm, selectedPays, selectedVille, selectedEntite, selectedDirection, selectedDepartement, selectedSexe])
 
   const canCreateEmployee = ['RH', 'PCA', 'ADMIN'].includes(String(user?.role || '').toUpperCase())
 
@@ -477,6 +479,11 @@ export default function Employees(){
             <option value="">Ville</option>
             {villeOptions.map((v) => <option key={v.id_localisation || v.value} value={v.id_localisation}>{v.label}</option>)}
           </select>
+          <select className="input" aria-label="Filtrer par sexe" value={selectedSexe} onChange={(e) => { setSelectedSexe(e.target.value); setCurrentPage(1) }} style={{flex: '1 1 110px', minWidth: 100, fontSize: '0.85rem'}}>
+            <option value="">Sexe</option>
+            <option value="M">Masculin</option>
+            <option value="F">Féminin</option>
+          </select>
           <select className="input" value={rowsPerPage} onChange={handleRowsPerPageChange} style={{flex: '0 0 100px', width: 100, fontSize: '0.85rem'}}>
             <option value={10}>10 lignes</option>
             <option value={20}>20 lignes</option>
@@ -485,7 +492,7 @@ export default function Employees(){
             <option value={50}>50 lignes</option>
           </select>
           <button
-            onClick={() => { setSearchTerm(''); setSelectedPays(''); setSelectedVille(''); setSelectedEntite(''); setSelectedDirection(''); setSelectedDepartement(''); setSortConfig({key: 'nom', direction: 'asc'}); setCurrentPage(1) }}
+            onClick={() => { setSearchTerm(''); setSelectedPays(''); setSelectedVille(''); setSelectedEntite(''); setSelectedDirection(''); setSelectedDepartement(''); setSelectedSexe(''); setSortConfig({key: 'nom', direction: 'asc'}); setCurrentPage(1) }}
             style={{flex: '0 0 auto', padding: '8px 14px', background: '#e5e7eb', color: '#1f2937', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500', whiteSpace: 'nowrap'}}
           >
             ✕ Réinitialiser
@@ -614,7 +621,7 @@ export default function Employees(){
           }} onClick={(e) => e.stopPropagation()}>
             {/* En-tête */}
             <div style={{
-              background: 'linear-gradient(135deg, #021630 0%, #ce2b2b 100%)',
+              background: 'linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%)',
               color: 'white',
               padding: '20px',
               borderRadius: '12px 12px 0 0',

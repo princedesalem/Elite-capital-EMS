@@ -841,3 +841,98 @@ def obtenir_progression_validation(id_operation: int, db: Session = Depends(get_
         "etapes_validees": validees,
         "etapes_refusees": refusees
     }
+
+
+# ---------------------------------------------------------------------------
+#  Suivi des consultations d'op�rations (qui a vu une demande, et quand).
+#  Migration 058 � table OPERATION_VUE.  On enregistre uniquement la PREMI�RE
+#  consultation par utilisateur (UNIQUE KEY id_operation � matricule).
+# ---------------------------------------------------------------------------
+
+@router.post('/marquer-vu/{id_operation}')
+def marquer_operation_vue(
+    id_operation: int,
+    matricule_observateur: str,
+    db: Session = Depends(get_db),
+):
+    """Enregistre, si absent, la premi�re consultation d'une op�ration par un utilisateur.
+
+    Idempotent : si une trace existe d�j� pour ce couple, on ne fait rien et
+    on renvoie la trace existante.  L'auteur de la demande est ignor�
+    (pas d'auto-marquage de sa propre op�ration).
+    """
+    op = db.query(models.Operation).filter(
+        models.Operation.id_operation == id_operation
+    ).first()
+    if not op:
+        raise HTTPException(status_code=404, detail="Op�ration introuvable")
+
+    matricule = (matricule_observateur or '').strip().upper()
+    if not matricule:
+        raise HTTPException(status_code=400, detail="matricule_observateur requis")
+
+    # On n'enregistre pas la consultation par le demandeur lui-m�me.
+    if op.matricule and str(op.matricule).upper() == matricule:
+        return {"ok": True, "skipped": "demandeur"}
+
+    existing = db.query(models.OperationVue).filter(
+        models.OperationVue.id_operation == id_operation,
+        models.OperationVue.matricule_observateur == matricule,
+    ).first()
+    if existing:
+        return {
+            "ok": True,
+            "already": True,
+            "date_vue": existing.date_vue.isoformat() if existing.date_vue else None,
+        }
+
+    emp = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
+    nom = f"{emp.prenom or ''} {emp.nom or ''}".strip() if emp else None
+    role = emp.role if emp else None
+
+    vue = models.OperationVue(
+        id_operation=id_operation,
+        matricule_observateur=matricule,
+        nom_observateur=nom or None,
+        role_observateur=role,
+        date_vue=datetime.utcnow(),
+    )
+    db.add(vue)
+    try:
+        db.commit()
+        db.refresh(vue)
+    except Exception:
+        # Course inter-requ�tes : la contrainte UNIQUE prot�ge, on relit la trace.
+        db.rollback()
+        vue = db.query(models.OperationVue).filter(
+            models.OperationVue.id_operation == id_operation,
+            models.OperationVue.matricule_observateur == matricule,
+        ).first()
+    return {
+        "ok": True,
+        "already": False,
+        "date_vue": vue.date_vue.isoformat() if vue and vue.date_vue else None,
+    }
+
+
+@router.get('/vues/{id_operation}')
+def lister_vues_operation(id_operation: int, db: Session = Depends(get_db)):
+    """Renvoie la liste des utilisateurs ayant ouvert l'op�ration, par ordre chronologique."""
+    op = db.query(models.Operation).filter(
+        models.Operation.id_operation == id_operation
+    ).first()
+    if not op:
+        raise HTTPException(status_code=404, detail="Op�ration introuvable")
+
+    rows = db.query(models.OperationVue).filter(
+        models.OperationVue.id_operation == id_operation
+    ).order_by(models.OperationVue.date_vue.asc()).all()
+    return [
+        {
+            "matricule_observateur": r.matricule_observateur,
+            "nom_observateur": r.nom_observateur,
+            "role_observateur": r.role_observateur,
+            "date_vue": r.date_vue.isoformat() if r.date_vue else None,
+        }
+        for r in rows
+    ]

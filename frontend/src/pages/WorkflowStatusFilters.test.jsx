@@ -190,7 +190,7 @@ describe('Sorties responsive table structure', () => {
 
   const viewports = [360, 768, 1024, 1440]
 
-  it.each(viewports)('keeps table without horizontal-scroll container at width %spx', async (viewportWidth) => {
+  it.each(viewports)('wraps the operations table in a horizontal-scroll container at width %spx', async (viewportWidth) => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: viewportWidth })
     window.dispatchEvent(new Event('resize'))
 
@@ -201,8 +201,8 @@ describe('Sorties responsive table structure', () => {
     expect(table).toHaveStyle({ tableLayout: 'fixed' })
 
     const wrapper = table.parentElement
-    expect(wrapper?.style?.overflowX).not.toBe('auto')
-    expect(table.style.minWidth).toBe('')
+    expect(wrapper?.style?.overflowX).toBe('auto')
+    expect(parseInt(table.style.minWidth, 10)).toBeGreaterThan(0)
   })
 })
 

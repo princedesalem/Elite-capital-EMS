@@ -271,7 +271,9 @@ export default function EmployeeForm(){
     matricule:'',nom:'',prenom:'',date_naissance:'',sexe:'',telephone:'+237',email:'',
     departement:'',fonction:'',ville:'',id_localisation:'',contact_urgence:'+237',diplome:'',solde_conges:0,
     date_embauche:'',entite:'',role:'',direction:'',categorie:'',n1_fonction:'',
-    annee_experience:0,statut_employe:'ACTIF',statut_matrimonial:'',nombre_enfants:''
+    annee_experience:0,statut_employe:'ACTIF',statut_matrimonial:'',nombre_enfants:'',
+    salaire_brut:'',salaire_devise:'XAF',
+    salaire_brut:'',salaire_devise:'XAF'
   })
   const [err,setErr]=useState(null)
   const [n1Fonctions, setN1Fonctions] = useState([])
@@ -401,6 +403,8 @@ export default function EmployeeForm(){
         ...form,
         id_localisation: toInt(form.id_localisation),
         nombre_enfants: toInt(form.nombre_enfants),
+        salaire_brut: form.salaire_brut === '' || form.salaire_brut == null ? null : Number(form.salaire_brut),
+        salaire_devise: form.salaire_devise || 'XAF',
         annee_experience: toInt(form.annee_experience),
         solde_conges: form.solde_conges !== '' && form.solde_conges !== null ? Number(form.solde_conges) : 0,
       }
@@ -508,6 +512,21 @@ export default function EmployeeForm(){
             <div className="form-group" style={{flex:1}}>
               <label>Nombre d'enfants</label>
               <input className="input" type="number" min="0" placeholder="0" value={form.nombre_enfants ?? ''} onChange={e=>setField('nombre_enfants',e.target.value)} />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group" style={{flex:2}}>
+              <label>Salaire brut <span style={{color:'#94a3b8',fontSize:'0.7rem'}}>(confidentiel — RH/Direction uniquement)</span></label>
+              <input className="input" type="number" min="0" step="0.01" placeholder="0" value={form.salaire_brut ?? ''} onChange={e=>setField('salaire_brut',e.target.value)} />
+            </div>
+            <div className="form-group" style={{flex:1}}>
+              <label>Devise</label>
+              <select className="input" value={form.salaire_devise||'XAF'} onChange={e=>setField('salaire_devise',e.target.value)}>
+                <option value="XAF">XAF</option>
+                <option value="EUR">EUR</option>
+                <option value="USD">USD</option>
+                <option value="XOF">XOF</option>
+              </select>
             </div>
           </div>
           <div className="form-row">
