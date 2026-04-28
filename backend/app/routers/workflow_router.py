@@ -210,41 +210,14 @@ def obtenir_mes_demandes(matricule: str, db: Session = Depends(get_db)):
 def obtenir_demandes_a_valider(matricule: str, db: Session = Depends(get_db)):
     """
     Obtenir toutes les opérations en attente de validation par cet employé.
-    Règle DG (B5) : tous les DG voient simultanément toutes les opérations
-    au stade DG, tant qu'ils n'ont pas encore validé individuellement.
     """
     role_validateur = wf_utils.obtenir_role_validateur(matricule, db)
     operations = db.query(models.Operation).order_by(models.Operation.date_demande.desc()).all()
-
-    # Pour DG : pré-charger la liste complète une seule fois
-    matricules_dg = (
-        wf_utils.obtenir_tous_matricules_dg(db)
-        if role_validateur == 'DG'
-        else []
-    )
-    is_dg = matricule in matricules_dg
 
     _TERMINAUX = {'PCA', 'AG'}
     operations_a_valider = []
     for operation in operations:
         prochain_role, prochain_matricule = wf_utils.obtenir_prochain_validateur(operation.id_operation, db)
-
-        # Cas DG multi — montrer l'opération à TOUS les DG en attente
-        if is_dg and prochain_role == 'DG':
-            # Vérifier que ce DG n'a pas encore validé cette opération
-            deja_valide = db.query(models.Validation).filter(
-                models.Validation.id_operation == operation.id_operation,
-                models.Validation.role_validateur == 'DG',
-                models.Validation.matricule_validateur == matricule,
-                models.Validation.statut_validation == 'validé'
-            ).first()
-            if not deja_valide:
-                data = _serialize_operation_with_demandeur(operation, db)
-                data['role_validateur'] = role_validateur
-                operations_a_valider.append(data)
-            continue
-
-        # Cas standard
         role_ok = (prochain_role == role_validateur) or (
             role_validateur in _TERMINAUX and prochain_role in _TERMINAUX
         )
@@ -451,55 +424,43 @@ def obtenir_mes_demandes_detail(matricule: str, db: Session = Depends(get_db)):
 def obtenir_operations_a_valider(matricule_validateur: str, db: Session = Depends(get_db)):
     """
     Obtenir toutes les opérations en attente de validation par un validateur.
-    Règle DG (B5) : tous les DG voient simultanément les opérations au stade DG.
     """
+    # Obtenir le rôle du validateur
     role_validateur = wf_utils.obtenir_role_validateur(matricule_validateur, db)
+    
+    # Obtenir toutes les opérations (pas de filtre statut - n'existe pas sur Operation)
+    # Le statut est déterminé par les validations workflow
     operations_attente = db.query(models.Operation).all()
-
-    matricules_dg = (
-        wf_utils.obtenir_tous_matricules_dg(db)
-        if role_validateur == 'DG'
-        else []
-    )
-    is_dg = matricule_validateur in matricules_dg
 
     operations_a_valider = []
     
     for op in operations_attente:
+        # Vérifier si c'est le tour de ce validateur
         prochain_role, prochain_matricule = wf_utils.obtenir_prochain_validateur(op.id_operation, db)
-
-        # Cas DG multi
-        if is_dg and prochain_role == 'DG':
-            deja_valide = db.query(models.Validation).filter(
-                models.Validation.id_operation == op.id_operation,
-                models.Validation.role_validateur == 'DG',
-                models.Validation.matricule_validateur == matricule_validateur,
-                models.Validation.statut_validation == 'validé'
-            ).first()
-            if deja_valide:
-                continue
-        elif not (prochain_role == role_validateur and prochain_matricule == matricule_validateur):
+        
+        if not (prochain_role == role_validateur and prochain_matricule == matricule_validateur):
             continue
 
-        employe = db.query(models.Employe).filter(
-            models.Employe.matricule == op.matricule
-        ).first()
-        
-        operations_a_valider.append({
-            "id_operation": op.id_operation,
-            "type_demande": op.type_demande,
-            "date_debut": op.date_debut,
-            "date_fin": op.date_fin,
-            "duree_jours": op.duree_jours,
-            "motif": op.motif,
-            "demandeur": {
-                "matricule": employe.matricule,
-                "nom_complet": f"{employe.prenom} {employe.nom}",
-                "fonction": employe.fonction,
-                "departement_id": employe.dept_id
-            } if employe else None,
-            "date_demande": op.date_demande
-        })
+        if prochain_role:
+            employe = db.query(models.Employe).filter(
+                models.Employe.matricule == op.matricule
+            ).first()
+            
+            operations_a_valider.append({
+                "id_operation": op.id_operation,
+                "type_demande": op.type_demande,
+                "date_debut": op.date_debut,
+                "date_fin": op.date_fin,
+                "duree_jours": op.duree_jours,
+                "motif": op.motif,
+                "demandeur": {
+                    "matricule": employe.matricule,
+                    "nom_complet": f"{employe.prenom} {employe.nom}",
+                    "fonction": employe.fonction,
+                    "departement_id": employe.dept_id
+                } if employe else None,
+                "date_demande": op.date_demande
+            })
     
     return operations_a_valider
 
