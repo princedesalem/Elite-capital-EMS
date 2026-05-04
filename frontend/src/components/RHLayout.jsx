@@ -70,6 +70,7 @@ const MODULES = [
         {label: 'Missions IG',         path: '/rh/missions-ig'},
       ]},
       {label: 'Évaluations',            path: '/rh/evaluations'},
+      {label: 'Fiches de poste',       path: '/rh/fiche-de-poste'},
       {label: 'Calendrier Congés',     path: '/rh/calendrier-conge'},
       {label: 'Workflow',              path: '/rh/workflow'},
       {label: 'Tâches',               path: '/rh/tasks'},

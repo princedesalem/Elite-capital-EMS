@@ -20,6 +20,7 @@ import ChangePassword from './components/ChangePassword'
 import Operations from './pages/Operations'
 import WorkflowPage from './pages/WorkflowPage'
 import EvaluationsPage from './pages/EvaluationsPage'
+import FicheDePostePage from './pages/FicheDePostePage'
 import NotificationsPage from './pages/NotificationsPage'
 import Organisation from './pages/Organisation'
 import Administration from './pages/Administration'
@@ -84,6 +85,7 @@ export default function App(){
             <Route path="workflow" element={<WorkflowPage />} />
             <Route path="missions-ig" element={<MissionsIG />} />
             <Route path="evaluations" element={<EvaluationsPage />} />
+            <Route path="fiche-de-poste" element={<FicheDePostePage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="organisation" element={<Organisation />} />
             <Route path="administration" element={<Administration />} />

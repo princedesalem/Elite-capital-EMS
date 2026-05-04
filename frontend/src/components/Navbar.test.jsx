@@ -91,6 +91,28 @@ describe('Navbar', () => {
       expect(screen.getByText('3')).toBeInTheDocument()
     })
   })
+
+  it('le badge de notification est rouge (#c00000) et non orange', async () => {
+    render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('3')).toBeInTheDocument()
+    })
+
+    // Le badge doit avoir background #c00000 (rouge charte)
+    const badge = screen.getByText('3')
+    const style = badge.style.background || badge.style.backgroundColor || ''
+    // jsdom normalise parfois en rgb — on vérifie soit hex soit rgb(192,0,0)
+    const isRed = style.includes('c00000') ||
+                  style.includes('rgb(192, 0, 0)') ||
+                  style.includes('rgb(192,0,0)') ||
+                  badge.getAttribute('style')?.includes('c00000')
+    expect(isRed).toBe(true)
+  })
 })
 
 

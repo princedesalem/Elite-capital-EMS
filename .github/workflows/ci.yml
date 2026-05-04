@@ -169,3 +169,54 @@ jobs:
           sarif_file: 'trivy-fs.sarif'
           category: 'trivy-fs'
 
+  deploy:
+    name: Deploy to local server (self-hosted)
+    needs: [backend-tests, frontend-tests, backend-lint]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: self-hosted
+    steps:
+      - name: Pull latest code
+        run: git -C C:\EMS\extranet pull origin main
+
+      - name: Auto-increment version and write version file
+        shell: pwsh
+        run: |
+          $current = (Get-Content C:\EMS\extranet\VERSION -Raw).Trim()
+          $parts = $current -split '\.'
+          $major = [int]$parts[0]
+          $minor = [int]$parts[1]
+          $minor += 1
+          $newVer = "$major.$minor"
+          Set-Content C:\EMS\extranet\VERSION -Value $newVer -Encoding UTF8 -NoNewline
+          $date = Get-Date -Format 'yyyy-MM-dd HH:mm'
+          $sha = (git -C C:\EMS\extranet rev-parse --short HEAD).Trim()
+          "VERSION=v$newVer`nDATE=$date`nCOMMIT=$sha" | Set-Content C:\EMS\extranet\VERSION.txt -Encoding UTF8
+          Write-Host "Version bump: $current -> $newVer"
+
+      - name: Commit and push version bump
+        shell: pwsh
+        run: |
+          git -C C:\EMS\extranet config user.email "ci-runner@elitecapital.com"
+          git -C C:\EMS\extranet config user.name "EMS CI Runner"
+          git -C C:\EMS\extranet add VERSION
+          git -C C:\EMS\extranet commit -m "[skip ci] version bump to $(Get-Content C:\EMS\extranet\VERSION -Raw)"
+          git -C C:\EMS\extranet push origin main
+
+      - name: Rebuild and restart containers
+        working-directory: C:\EMS\extranet
+        run: docker compose up --build -d
+
+      - name: Health check backend
+        shell: pwsh
+        run: |
+          $ok = $false
+          for ($i = 0; $i -lt 12; $i++) {
+            Start-Sleep -Seconds 5
+            try {
+              $null = Invoke-RestMethod http://localhost:8000/health -TimeoutSec 3
+              $ok = $true; break
+            } catch {}
+          }
+          if (-not $ok) { Write-Error "Backend health check failed after 60s"; exit 1 }
+          $version = (Get-Content C:\EMS\extranet\VERSION.txt | Select-String "^VERSION=").ToString().Replace("VERSION=","")
+          Write-Host "Deploy OK — $version"

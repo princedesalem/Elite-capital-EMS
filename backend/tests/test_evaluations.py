@@ -59,34 +59,14 @@ def _make_employee(db, matricule=1001):
 
 # ── Fiche de poste ────────────────────────────────────────────────────────────
 
+@pytest.mark.skip(reason='Endpoint POST /api/evaluations/fiche-poste supprimé — système d évaluation refondu (axes fixes)')
 def test_create_fiche_poste_weights_ok(client, db_session):
-    _make_employee(db_session)
-    objectifs = [
-        {'titre': 'Ventes', 'description': 'CA', 'poids': 50},
-        {'titre': 'Client', 'description': 'Satisfaction', 'poids': 50},
-    ]
-    resp = client.post(
-        '/api/evaluations/fiche-poste',
-        params={'matricule': 1001, 'cree_par': 9001},
-        json=objectifs,
-    )
-    # App router has known ORM bug returning int; accept 201 or 500.
-    assert resp.status_code in (201, 500)
+    pass  # obsolète
 
 
+@pytest.mark.skip(reason='Endpoint POST /api/evaluations/fiche-poste supprimé — système d évaluation refondu (axes fixes)')
 def test_create_fiche_poste_invalid_weights(client, db_session):
-    _make_employee(db_session)
-    objectifs = [
-        {'titre': 'A', 'poids': 40},
-        {'titre': 'B', 'poids': 40},
-    ]
-    resp = client.post(
-        '/api/evaluations/fiche-poste',
-        params={'matricule': 1001, 'cree_par': 9001},
-        json=objectifs,
-    )
-    assert resp.status_code == 400
-    assert '100' in resp.json()['detail']
+    pass  # obsolète
 
 
 def test_get_fiche_poste_not_found(client):

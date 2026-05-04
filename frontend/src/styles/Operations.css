@@ -306,6 +306,34 @@
   margin-bottom: 6px;
   font-size: 0.82rem;
   line-height: 1.25;
+  position: relative;
+}
+
+/* Pastille rouge « nouveau » : opération non encore consultée dans la session.
+   Devient verte (.kanban-badge-seen) dès qu'on clique la carte. */
+.kanban-badge-new {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e11d48;
+  box-shadow: 0 0 0 2px #fff, 0 1px 2px rgba(0,0,0,0.15);
+  pointer-events: none;
+}
+
+/* Pastille verte : opération déjà vue dans la session courante */
+.kanban-badge-seen {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 2px #fff, 0 1px 2px rgba(0,0,0,0.15);
+  pointer-events: none;
 }
 
 .kanban-actions {

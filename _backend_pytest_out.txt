@@ -1,0 +1,27 @@
+﻿........................................................................ [  8%]
+....sss................................................................. [ 17%]
+........................................................................ [ 26%]
+........................................................................ [ 35%]
+........................................................................ [ 44%]
+........................................................................ [ 53%]
+........................................................................ [ 61%]
+........................................................................ [ 70%]
+........................................................................ [ 79%]
+........................................................................ [ 88%]
+........................................................................ [ 97%]
+......................                                                   [100%]
+=============================== warnings summary ===============================
+tests/test_mission_segments_granular.py::TestPatchSegment::test_patch_partiel_ville
+  /app/tests/test_mission_segments_granular.py:129: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    seg = db_session.query(models.MissionSegment).get(s['seg2'].id_segment)
+
+tests/test_mission_segments_granular.py::TestPatchSegment::test_patch_dates_recalcule_nombre_nuits
+  /app/tests/test_mission_segments_granular.py:144: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    seg = db_session.query(models.MissionSegment).get(s['seg2'].id_segment)
+
+tests/test_mission_segments_granular.py::TestDeleteSegment::test_supprime_detache_frais_associes
+  /app/tests/test_mission_segments_granular.py:242: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    f = db_session.query(models.FraisMissionnaire).get(frais_id)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+811 passed, 3 skipped, 3 warnings in 797.06s (0:13:17)

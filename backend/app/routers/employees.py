@@ -86,8 +86,14 @@ def _notify_admin_employee_creation(
     creator_role: str,
     creator_matricule: Optional[str],
     background_tasks: Optional[BackgroundTasks],
+    force_notify: bool = False,
 ):
-    if str(creator_role or '').upper() != 'RH':
+    """Notifie tous les admins de la création d'un employé.
+    Appelé lors d'une création manuelle (RH) ou d'un import bulk (force_notify=True).
+    """
+    role_upper = str(creator_role or '').upper()
+    # Notifications : RH créateur ou import forcé. Les admins sont toujours notifiés.
+    if role_upper not in {'RH'} and not force_notify:
         return
 
     admin_role_ids = [
@@ -389,6 +395,9 @@ def _serialize_employee(e: models.Employe, db: Session, *, viewer_matricule: Opt
     entite = db.query(models.Entite).filter(models.Entite.id_entite == e.id_entite).first() if e.id_entite else None
     direction = db.query(models.Direction).filter(models.Direction.id_direction == e.id_direction).first() if e.id_direction else None
     departement = db.query(models.Departement).filter(models.Departement.dept_id == e.dept_id).first() if e.dept_id else None
+    # Priorité: Employe.id_role, sinon Utilisateur.role_id (même table roles)
+    if not (role) and e.utilisateur and e.utilisateur.role:
+        role = e.utilisateur.role
     data['role'] = role.name if role else None
     data['entite'] = entite.nom if entite else None
     data['direction'] = direction.nom if direction else None
@@ -885,12 +894,14 @@ def create_employee(
 @router.post('/import')
 def import_employees(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     table: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """Import employes depuis CSV/XLSX/XLS/Access (admin)."""
     _check_admin_role(request)
+    actor_matricule, actor_role = _get_token_context(request)
 
     df, resolved_table = _read_import_dataframe(file, table)
     if df.empty:
@@ -916,6 +927,11 @@ def import_employees(
 
             created_import = crud.create_employe(db, data)
             _auto_fill_org_head(db, created_import)
+            # Notifier les admins pour chaque employé créé via import
+            _notify_admin_employee_creation(
+                db, created_import, actor_role, actor_matricule,
+                background_tasks, force_notify=True
+            )
             imported += 1
         except Exception as exc:
             db.rollback()
@@ -926,6 +942,38 @@ def import_employees(
             else:
                 detail = str(exc)
             errors.append({'line': idx, 'error': detail})
+
+    # Notification résumé import (une seule notif globale pour les admins)
+    if imported > 0:
+        failed_count = len(errors)
+        admin_role_ids = [
+            role.id for role in db.query(models.Role).all()
+            if str(role.name or '').strip().upper() in {'ADMIN', 'ADMINISTRATEUR'}
+        ]
+        if admin_role_ids:
+            admin_users = db.query(models.Utilisateur).filter(
+                models.Utilisateur.role_id.in_(admin_role_ids)
+            ).all()
+            summary_msg = (
+                f"Import du fichier « {file.filename} » terminé : "
+                f"{imported} employé(s) ajouté(s)"
+                + (f", {failed_count} échec(s)." if failed_count else ".")
+            )
+            for admin in admin_users:
+                notifications_utils.creer_notification(
+                    matricule=admin.matricule,
+                    type_notification=models.TypeNotificationEnum.AUTRE,
+                    titre='Import employés terminé',
+                    message=summary_msg,
+                    id_operation=None,
+                    db=db,
+                )
+
+    log_action(
+        db, actor_matricule, 'EMPLOYEES_IMPORTED', 'employe', None,
+        {'count': imported, 'failed': len(errors), 'file': file.filename},
+        ip_address=request.client.host if request.client else None,
+    )
 
     return {
         'file': file.filename,

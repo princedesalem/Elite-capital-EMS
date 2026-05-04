@@ -31,6 +31,21 @@ export default function WorkflowPage() {
   // Liste des utilisateurs ayant déjà ouvert l'opération sélectionnée.
   // Chaque entrée : { matricule_observateur, nom_observateur, role_observateur, date_vue }
   const [vues, setVues] = useState([])
+  // Opérations déjà consultées dans la SESSION courante (point vert disparaît
+  // au clic). Volontairement non persisté : reset à chaque rechargement de page.
+  const [seenOps, setSeenOps] = useState(() => new Set())
+
+  function handleSelectOp(idOperation, clearComment = false) {
+    setSelectedOperation(idOperation)
+    if (clearComment) setWorkflowDecisionComment('')
+    setSeenOps(prev => {
+      const key = String(idOperation)
+      if (prev.has(key)) return prev
+      const next = new Set(prev)
+      next.add(key)
+      return next
+    })
+  }
 
   useEffect(() => {
     if (!matricule) return
@@ -64,10 +79,11 @@ export default function WorkflowPage() {
     try {
       const boite = await api.get(`/api/workflow/boite/${matricule}`).catch(() => null)
       if (boite?.data && typeof boite.data === 'object') {
-        setMesDemandes(Array.isArray(boite.data.envoye) ? boite.data.envoye : [])
-        setAValider(Array.isArray(boite.data.recu) ? boite.data.recu : [])
-        setMesValidations(Array.isArray(boite.data.valide) ? boite.data.valide : [])
-        setMesRefus(Array.isArray(boite.data.refuse) ? boite.data.refuse : [])
+        const dedup = arr => [...new Map((Array.isArray(arr) ? arr : []).map(o => [o.id_operation, o])).values()]
+        setMesDemandes(dedup(boite.data.envoye))
+        setAValider(dedup(boite.data.recu))
+        setMesValidations(dedup(boite.data.valide))
+        setMesRefus(dedup(boite.data.refuse))
       } else {
         const [mes, valider, validations, refus] = await Promise.all([
           api.get(`/api/workflow/mes-demandes/${matricule}`).catch(() => ({ data: [] })),
@@ -75,10 +91,11 @@ export default function WorkflowPage() {
           api.get(`/api/workflow/mes-validations/${matricule}`).catch(() => ({ data: [] })),
           api.get(`/api/workflow/mes-refus/${matricule}`).catch(() => ({ data: [] }))
         ])
-        setMesDemandes(Array.isArray(mes.data) ? mes.data : [])
-        setAValider(Array.isArray(valider.data) ? valider.data : [])
-        setMesValidations(Array.isArray(validations.data) ? validations.data : [])
-        setMesRefus(Array.isArray(refus.data) ? refus.data : [])
+        const dedup = arr => [...new Map((Array.isArray(arr) ? arr : []).map(o => [o.id_operation, o])).values()]
+        setMesDemandes(dedup(mes.data))
+        setAValider(dedup(valider.data))
+        setMesValidations(dedup(validations.data))
+        setMesRefus(dedup(refus.data))
       }
     } catch (e) {
       setError(e.response?.data?.detail || 'Erreur de chargement du workflow')
@@ -338,7 +355,8 @@ export default function WorkflowPage() {
                   <h3>En attente ({workflowCols.enAttente.length})</h3>
                   {workflowCols.enAttente.length === 0 ? <p className="empty-state">Aucune</p>
                     : workflowCols.enAttente.map(o => (
-                      <div key={`ea-${o.id_operation}`} className="kanban-card" onClick={() => setSelectedOperation(o.id_operation)} style={{ cursor: 'pointer' }}>
+                      <div key={`ea-${o.id_operation}`} className="kanban-card" onClick={() => handleSelectOp(o.id_operation)} style={{ cursor: 'pointer' }}>
+                        <span className={seenOps.has(String(o.id_operation)) ? 'kanban-badge-seen' : 'kanban-badge-new'} aria-label={seenOps.has(String(o.id_operation)) ? 'vu' : 'nouveau'} />
                         <p><strong>#{o.id_operation}</strong> – {o.type_demande}</p>
                         <p style={{ fontSize: '0.8em', color: '#64748b' }}>{o.statut}</p>
                       </div>
@@ -348,7 +366,8 @@ export default function WorkflowPage() {
                   <h3>Validées ({workflowCols.valides.length})</h3>
                   {workflowCols.valides.length === 0 ? <p className="empty-state">Aucune</p>
                     : workflowCols.valides.map(o => (
-                      <div key={`ev-${o.id_operation}`} className="kanban-card" onClick={() => setSelectedOperation(o.id_operation)} style={{ cursor: 'pointer' }}>
+                      <div key={`ev-${o.id_operation}`} className="kanban-card" onClick={() => handleSelectOp(o.id_operation)} style={{ cursor: 'pointer' }}>
+                        <span className={seenOps.has(String(o.id_operation)) ? 'kanban-badge-seen' : 'kanban-badge-new'} aria-label={seenOps.has(String(o.id_operation)) ? 'vu' : 'nouveau'} />
                         <p><strong>#{o.id_operation}</strong> – {o.type_demande}</p>
                       </div>
                     ))}
@@ -357,7 +376,8 @@ export default function WorkflowPage() {
                   <h3>Refusées ({workflowCols.refuses.length})</h3>
                   {workflowCols.refuses.length === 0 ? <p className="empty-state">Aucune</p>
                     : workflowCols.refuses.map(o => (
-                      <div key={`er-${o.id_operation}`} className="kanban-card" onClick={() => setSelectedOperation(o.id_operation)} style={{ cursor: 'pointer' }}>
+                      <div key={`er-${o.id_operation}`} className="kanban-card" onClick={() => handleSelectOp(o.id_operation)} style={{ cursor: 'pointer' }}>
+                        <span className={seenOps.has(String(o.id_operation)) ? 'kanban-badge-seen' : 'kanban-badge-new'} aria-label={seenOps.has(String(o.id_operation)) ? 'vu' : 'nouveau'} />
                         <p><strong>#{o.id_operation}</strong> – {o.type_demande}</p>
                       </div>
                     ))}
@@ -376,7 +396,8 @@ export default function WorkflowPage() {
                       <h3>À valider ({aValider.length})</h3>
                       {aValider.length === 0 ? <p className="empty-state">Aucune validation</p>
                         : aValider.map(o => (
-                          <div key={`ra-${o.id_operation}`} className="kanban-card" onClick={() => { setSelectedOperation(o.id_operation); setWorkflowDecisionComment('') }} style={{ cursor: 'pointer' }}>
+                          <div key={`ra-${o.id_operation}`} className="kanban-card" onClick={() => handleSelectOp(o.id_operation, true)} style={{ cursor: 'pointer' }}>
+                            <span className={seenOps.has(String(o.id_operation)) ? 'kanban-badge-seen' : 'kanban-badge-new'} aria-label={seenOps.has(String(o.id_operation)) ? 'vu' : 'nouveau'} />
                             <p><strong>#{o.id_operation}</strong> – {o.type_demande}</p>
                             <p style={{ fontSize: '0.8em', color: '#64748b', marginBottom: 0 }}>Cliquer pour examiner puis décider</p>
                           </div>
@@ -386,7 +407,8 @@ export default function WorkflowPage() {
                       <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle size={14} /> Validées par moi ({mesValidations.length})</h3>
                       {mesValidations.length === 0 ? <p className="empty-state">Aucune validation</p>
                         : mesValidations.map(o => (
-                          <div key={`rv-${o.id_operation}`} className="kanban-card" onClick={() => setSelectedOperation(o.id_operation)} style={{ cursor: 'pointer' }}>
+                          <div key={`rv-${o.id_operation}`} className="kanban-card" onClick={() => handleSelectOp(o.id_operation)} style={{ cursor: 'pointer' }}>
+                            <span className={seenOps.has(String(o.id_operation)) ? 'kanban-badge-seen' : 'kanban-badge-new'} aria-label={seenOps.has(String(o.id_operation)) ? 'vu' : 'nouveau'} />
                             <p><strong>#{o.id_operation}</strong> – {o.type_demande}</p>
                             <p style={{ fontSize: '0.8em', color: '#666' }}>{o.demandeur?.nom || 'N/A'}</p>
                           </div>
@@ -396,7 +418,8 @@ export default function WorkflowPage() {
                       <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><XCircle size={14} /> Refusées par moi ({mesRefus.length})</h3>
                       {mesRefus.length === 0 ? <p className="empty-state">Aucun refus</p>
                         : mesRefus.map(o => (
-                          <div key={`rr-${o.id_operation}`} className="kanban-card" onClick={() => setSelectedOperation(o.id_operation)} style={{ cursor: 'pointer' }}>
+                          <div key={`rr-${o.id_operation}`} className="kanban-card" onClick={() => handleSelectOp(o.id_operation)} style={{ cursor: 'pointer' }}>
+                            <span className={seenOps.has(String(o.id_operation)) ? 'kanban-badge-seen' : 'kanban-badge-new'} aria-label={seenOps.has(String(o.id_operation)) ? 'vu' : 'nouveau'} />
                             <p><strong>#{o.id_operation}</strong> – {o.type_demande}</p>
                             <p style={{ fontSize: '0.8em', color: '#666' }}>{o.demandeur?.nom || 'N/A'}</p>
                             {o.motif_refus && <p style={{ fontSize: '0.72em', color: '#c0392b', fontStyle: 'italic' }}>Motif: {o.motif_refus}</p>}

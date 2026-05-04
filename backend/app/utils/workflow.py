@@ -600,7 +600,7 @@ def valider_operation(
             Validation.statut_validation == 'validé',
         ).first()
         if deja_valide:
-            return False, "Vous avez déjà validé cette demande en tant que DG"
+            return False, "Vous avez déjà validé cette demande"
 
     # Pour les rôles terminaux interchangeables, stocker le rôle attendu par la séquence
     # (ex: stocker 'AG' quand PCA valide pour un employé ECG, et 'PCA' pour ELCAM/EXCA)

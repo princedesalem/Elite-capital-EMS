@@ -44,7 +44,7 @@ describe('NotificationToast routing', () => {
       />
     )
 
-    fireEvent.click(screen.getByText('Voir #16'))
+    fireEvent.click(screen.getByText(/Voir #16|Voir la demande/))
 
     expect(navigateMock).toHaveBeenCalledWith(expectedRoute)
   })
@@ -64,7 +64,7 @@ describe('NotificationToast routing', () => {
       />
     )
 
-    fireEvent.click(screen.getByText('Voir #16'))
+    fireEvent.click(screen.getByText(/Voir #16|Voir la demande/))
 
     expect(navigateMock).toHaveBeenCalledWith('/rh/operations?operationId=16&tab=demandes')
   })

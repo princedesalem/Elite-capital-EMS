@@ -279,7 +279,7 @@ export default function Navbar(){
                     height: 18,
                     padding: '0 5px',
                     borderRadius: 999,
-                    background: '#d0202b',
+                    background: '#c00000',
                     color: '#fff',
                     fontSize: '0.64rem',
                     fontWeight: 800,
@@ -293,7 +293,7 @@ export default function Navbar(){
                 </span>
               )}
             </Link>
-            <Link to="/rh/profile" style={{color:'#02162e',fontSize:'0.8rem',textDecoration:'none',display:'flex',alignItems:'center',gap:6,minWidth:0,fontWeight:600}}>
+            <Link to="/rh/profile" style={{color:'#02162e',fontSize:'0.8rem',textDecoration:'none',display:'flex',alignItems:'center',gap:6,minWidth:0,fontWeight:600,minWidth:0}}>
               <AvatarCircle
                 photoUrl={employee?.photo_url}
                 letter={(() => { try { return String(user?.matricule || user?.sub || '?')[0].toUpperCase() } catch { return '?' } })()}
@@ -304,7 +304,7 @@ export default function Navbar(){
                 fallbackBackground='rgba(255,255,255,0.78)'
               />
               <span className="hide-on-mobile" style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:180}}>
-                {employee ? `${employee.prenom || ''} ${employee.nom || ''}`.trim() : (user?.matricule || user?.sub)} · <span style={{color:'rgba(2,22,46,0.78)'}}>{user?.role || 'Utilisateur'}</span>
+                {employee ? `${employee.prenom || ''} ${employee.nom || ''}`.trim() : (user?.matricule || user?.sub)} · <span style={{color:'rgba(2,22,46,0.78)'}}>{employee?.role || (user?.role && user.role !== 'Utilisateur' ? user.role : null) || 'Employé'}</span>
               </span>
             </Link>
             <button className="button hide-on-mobile" onClick={logout} style={{padding:'5px 12px',fontSize:'0.78rem'}}>Déconnexion</button>

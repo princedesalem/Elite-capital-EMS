@@ -5,6 +5,7 @@ import api from '../services/api'
 import AvatarCircle from '../components/AvatarCircle'
 import { BarChart2, LogOut, Star, MessageSquare, ThumbsUp, BarChart, Send, Plus, X, ChevronDown, Search, Gift, Users, Briefcase, Clock, MoreVertical, Pencil, Trash2, CheckCircle } from 'lucide-react'
 import { toast, confirmDialog } from '../components/ui/bridge'
+import { BRAND_GRADIENT } from '../theme'
 
 // -- Team Engagement (backend persisted) --
 const WISHES_KEY = 'ems_wishes_v1'
@@ -441,7 +442,7 @@ export default function Home() {
       {/* Hero Banner */}
       <div
         style={{
-          background: 'linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%)',
+          background: BRAND_GRADIENT,
           color: 'white',
           padding: '28px 20px',
           textAlign: 'center',
@@ -638,7 +639,22 @@ export default function Home() {
                 </p>
               </div>
             ))}
-          </div>          </div>        </div>
+          </div>
+          {/* Bouton Ma Fiche de Poste */}
+          <div style={{ padding: '8px 16px 14px', display: 'flex', gap: 8 }}>
+            <Link
+              to="/rh/fiche-de-poste?personal=1"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 16px', background: '#021630', color: '#fff',
+                borderRadius: 8, textDecoration: 'none',
+                fontSize: '0.8rem', fontWeight: 700,
+              }}
+            >
+              <Briefcase size={14} /> Ma Fiche de Poste
+            </Link>
+          </div>
+          </div>        </div>
 
         {/* Create Modal */}
         {createModal && (

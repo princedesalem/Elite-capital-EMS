@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
-import { GitBranch, Search, X, ChevronDown, ChevronUp, Pencil, XCircle, MapPin, Briefcase, AlignLeft, Save, Building2 } from 'lucide-react'
+import { GitBranch, Search, X, ChevronDown, ChevronUp, Pencil, XCircle, MapPin, Briefcase, AlignLeft, Save, Building2, FileDown, Image as ImageIcon, FileSpreadsheet } from 'lucide-react'
+import { toPng } from 'html-to-image'
+import { jsPDF } from 'jspdf'
+import * as XLSX from 'xlsx'
 import { toast } from '../components/ui/bridge'
 
 const ACCENT = '#ce2b2b'
@@ -19,16 +22,18 @@ const CSS = `
 .oc-node > .oc-row { order: 2; }
 .oc-stem   { width: 2px; height: 18px; background: #94a3b8; flex-shrink: 0; }
 .oc-row    { display: flex; flex-wrap: nowrap; }
-.oc-col    { position: relative; display: flex; flex-direction: column; align-items: center; padding: 18px 6px 0; }
+.oc-col    { position: relative; display: flex; flex-direction: column; align-items: center; align-self: flex-start; padding: 18px 6px 0; }
 .oc-col::before { content:''; position:absolute; top:0; height:2px; background:#94a3b8; }
 .oc-col:only-child::before { display:none; }
 .oc-col:first-child:not(:only-child)::before { left:50%; right:0; }
 .oc-col:last-child:not(:only-child)::before  { left:0; right:50%; }
 .oc-col:not(:first-child):not(:last-child)::before { left:0; right:0; }
-.oc-col::after { content:''; position:absolute; top:0; left:50%; transform:translateX(-50%); width:2px; height:18px; background:#94a3b8; }
+.oc-col::after { content:''; position:absolute; top:0; left:50%; transform:translateX(-50%); width:2px; height:var(--oc-col-stem,18px); background:#94a3b8; }
 
 .oc-box {
-  min-width: 100px; max-width: 130px;
+  min-width: 100px; max-width: 160px;
+  height: 96px; box-sizing: border-box; overflow: hidden;
+  display: flex; flex-direction: column;
   background: #fff;
   border: 1.5px solid #cdd5df;
   border-radius: 4px;
@@ -43,15 +48,14 @@ const CSS = `
 }
 .oc-box.oc-clickable { cursor: pointer; }
 .oc-box.oc-clickable:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.15); border-color: #021630; }
-.oc-box.oc-d0 { min-width:120px; max-width:150px; border-color:#021630; border-width:2px; background:#f8f9fb; }
+.oc-box.oc-d0 { min-width:100px; max-width:160px; border-color:#021630; border-width:2px; background:#f8f9fb; }
 .oc-box.oc-d1 { border-top: 3px solid #ce2b2b; }
 .oc-box.oc-hit { border-color:#ce2b2b; box-shadow: 0 0 0 2px rgba(206,43,43,.2); }
 .oc-box.oc-group { border-color:#021630; background:#f0f4fa; }
 
-.oc-label { font-weight: 700; color: #021630; font-size: 0.72rem; line-height: 1.25; margin-bottom: 2px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.oc-d0 .oc-label { font-size: 0.78rem; }
-.oc-sub  { font-size: 0.62rem; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oc-foot { display:flex; align-items:center; justify-content:space-between; margin-top:5px; padding-top:4px; border-top:1px solid #f1f5f9; font-size:0.6rem; color:#94a3b8; }
+.oc-label { font-weight: 700; color: #021630; font-size: 0.72rem; line-height: 1.25; margin-bottom: 2px; word-break: break-word; }
+.oc-sub  { font-size: 0.62rem; color: #64748b; word-break: break-word; }
+.oc-foot { display:flex; align-items:center; justify-content:space-between; margin-top: auto; padding-top:4px; border-top:1px solid #f1f5f9; font-size:0.6rem; color:#94a3b8; }
 
 .oc-edit-btn {
   position: absolute; top: 3px; right: 3px;
@@ -89,6 +93,19 @@ export function niveauFonctionnel(employe) {
   if (/\b(directeur|directrice|dg|pca|président|présidente|presidente|ag|administrateur)\b/.test(f)) return 0
   if (/\b(chef|responsable|manager|superviseur|sup|head|lead)\b/.test(f)) return 1
   return 2
+}
+
+// Calcule la rangée VISUELLE d'un nœud, en alignant les rôles entre branches :
+// tous les Directeurs sur la même ligne, tous les Responsables sur la même
+// ligne, tous les employés sur la même ligne — quel que soit la profondeur
+// dans l'arbre N+1. La règle : row = max(parentRow + 1, niveauFonctionnel + 1).
+// Pour la racine : row = niveauFonctionnel (DG sur la ligne 0).
+export function computeOrgRow(node, parentRow) {
+  if (parentRow == null || parentRow < 0) {
+    return node?._isGroup ? 0 : niveauFonctionnel(node)
+  }
+  const nf = node?._isGroup ? parentRow + 1 : niveauFonctionnel(node) + 1
+  return Math.max(parentRow + 1, nf)
 }
 
 function _sortByHierarchy(list) {
@@ -172,10 +189,14 @@ function nodeHasHit(node, hitSet) {
 }
 
 // --- Box ----------------------------------------------------------------------
-function Box({ node, depth, collapsed, hasChildren, onToggle, hitSet, onEdit, editMode }) {
+function Box({ node, depth, collapsed, hasChildren, onToggle, hitSet, onEdit, editMode, viewMode }) {
+  const personName = `${node.prenom || ''} ${node.nom || ''}`.trim()
   const label = node._isGroup
     ? node.nom
-    : `${node.prenom || ''} ${node.nom || ''}`.trim()
+    : (viewMode === 'fonction' ? (node.fonction || '—') : personName)
+  const subtitle = node._isGroup
+    ? null
+    : (viewMode === 'fonction' ? null : (node.fonction || null))
 
   const isHit = hitSet ? hitSet.has(String(node._key || node.matricule)) : false
   // Niveau visuel : on utilise la fonction (rôle) plutôt que la profondeur dans
@@ -205,7 +226,7 @@ function Box({ node, depth, collapsed, hasChildren, onToggle, hitSet, onEdit, ed
       <div className="oc-label">{label || '—'}</div>
       {node._isGroup
         ? <div className="oc-sub" style={{ color: ACCENT }}>{node.fonction}</div>
-        : node.fonction && <div className="oc-sub">{node.fonction}</div>
+        : subtitle && <div className="oc-sub">{subtitle}</div>
       }
       {!node._isGroup && node.ville && (
         <div className="oc-sub" style={{ color: ACCENT, fontSize: '0.58rem' }}>{node.ville}</div>
@@ -221,7 +242,7 @@ function Box({ node, depth, collapsed, hasChildren, onToggle, hitSet, onEdit, ed
 }
 
 // --- TreeNode -----------------------------------------------------------------
-function TreeNode({ node, depth = 0, hitSet, expandOverride, onEdit, editMode }) {
+function TreeNode({ node, depth = 0, myRow = null, hitSet, expandOverride, onEdit, editMode, viewMode }) {
   const startCollapsed = depth >= 2
   const [collapsed, setCollapsed] = useState(startCollapsed)
   const hasChildren = (node.children || []).length > 0
@@ -231,25 +252,43 @@ function TreeNode({ node, depth = 0, hitSet, expandOverride, onEdit, editMode })
     if (expandOverride === 'reset') setCollapsed(startCollapsed)
   }, [expandOverride])
 
+  // LEVEL_PX = BOX_HEIGHT + 2 × stem (18px each) = 96 + 36 = 132.
+  // Avec des boîtes de hauteur fixe (96px), cette valeur garantit que
+  // les boîtes au même niveau fonctionnel s'alignent parfaitement
+  // entre toutes les branches, quel que soit leur profondeur dans l'arbre.
+  const LEVEL_PX = 132
+  const resolvedRow = myRow == null ? computeOrgRow(node, -1) : myRow
+
   return (
     <div className="oc-node">
       <Box
         node={node} depth={depth} collapsed={collapsed} hasChildren={hasChildren}
         onToggle={() => setCollapsed(c => !c)} hitSet={hitSet}
-        onEdit={onEdit} editMode={editMode}
+        onEdit={onEdit} editMode={editMode} viewMode={viewMode}
       />
       {hasChildren && !collapsed && (
         <>
           <div className="oc-stem" />
           <div className="oc-row">
-            {node.children.map(child => (
-              <div key={child._key || child.matricule} className="oc-col">
-                <TreeNode
-                  node={child} depth={depth + 1} hitSet={hitSet}
-                  expandOverride={expandOverride} onEdit={onEdit} editMode={editMode}
-                />
-              </div>
-            ))}
+            {node.children.map((child) => {
+              const cRow = computeOrgRow(child, resolvedRow)
+              const extra = cRow - (resolvedRow + 1)
+              const stemH = 18 + Math.max(0, extra) * LEVEL_PX
+              // On force toujours --oc-col-stem (m\u00eame quand extra=0) pour
+              // \u00e9viter l'h\u00e9ritage d'une valeur plus grande venant d'un anc\u00eatre :
+              // sinon le trait ::after d'un enfant peut d\u00e9border sous sa bo\u00eete.
+              const colStyle = extra > 0
+                ? { paddingTop: stemH, '--oc-col-stem': `${stemH}px` }
+                : { '--oc-col-stem': '18px' }
+              return (
+                <div key={child._key || child.matricule} className="oc-col" style={colStyle}>
+                  <TreeNode
+                    node={child} depth={depth + 1} myRow={cRow} hitSet={hitSet}
+                    expandOverride={expandOverride} onEdit={onEdit} editMode={editMode} viewMode={viewMode}
+                  />
+                </div>
+              )
+            })}
           </div>
         </>
       )}
@@ -510,6 +549,28 @@ export default function OrgChart() {
   const [editMode, setEditMode]         = useState(false)
   const [editEmp, setEditEmp]           = useState(null)
 
+  // Référence vers la zone scrollable de l'arbre, utilisée par les exports
+  // PDF (impression) et PNG (capture html-to-image).
+  const treeRef = useRef(null)
+  // Menu « ... » d'exports : ouvert/fermé + ref pour détecter clic extérieur
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
+  const exportMenuRef = useRef(null)
+  useEffect(() => {
+    if (!exportMenuOpen) return
+    const onDocClick = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setExportMenuOpen(false)
+      }
+    }
+    const onEsc = (e) => { if (e.key === 'Escape') setExportMenuOpen(false) }
+    document.addEventListener('mousedown', onDocClick)
+    document.addEventListener('keydown', onEsc)
+    return () => {
+      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('keydown', onEsc)
+    }
+  }, [exportMenuOpen])
+
   useEffect(() => {
     api.get('/employees/')
       .then(r => setEmployees(Array.isArray(r.data) ? r.data : []))
@@ -542,6 +603,77 @@ export default function OrgChart() {
     )
   }, [employees, selectedEntity])
 
+  // --- Exports organigramme -------------------------------------------------
+  // PDF : capture le sous-arbre en PNG via html-to-image, puis intègre
+  // l'image dans un PDF A3 paysage avec jsPDF et force le téléchargement.
+  const exportPDF = useCallback(async () => {
+    const node = treeRef.current
+    if (!node) { toast.error?.('Arbre non disponible'); return }
+    try {
+      const dataUrl = await toPng(node, { backgroundColor: '#ffffff', pixelRatio: 2 })
+      const img = new Image()
+      img.src = dataUrl
+      await new Promise(res => { img.onload = res })
+      // A3 paysage en mm : 420 × 297
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' })
+      const pageW = pdf.internal.pageSize.getWidth()
+      const pageH = pdf.internal.pageSize.getHeight()
+      const margin = 10
+      const maxW = pageW - margin * 2
+      const maxH = pageH - margin * 2 - 12  // 12 mm réservé pour le titre
+      const ratio = Math.min(maxW / img.width, maxH / img.height)
+      const drawW = img.width * ratio
+      const drawH = img.height * ratio
+      const x = margin + (maxW - drawW) / 2
+      // Titre
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(13)
+      pdf.text(`Organigramme — ${selectedEntity}`, margin, margin + 7)
+      // Image
+      pdf.addImage(dataUrl, 'PNG', x, margin + 12, drawW, drawH)
+      pdf.save(`organigramme_${selectedEntity}.pdf`.replace(/\s+/g, '_'))
+    } catch (e) {
+      toast.error?.('Échec de l\'export PDF')
+    }
+  }, [selectedEntity])
+
+  // PNG : capture le sous-arbre via html-to-image puis force le téléchargement.
+  const exportPNG = useCallback(async () => {
+    const node = treeRef.current
+    if (!node) { toast.error?.('Arbre non disponible'); return }
+    try {
+      const dataUrl = await toPng(node, { backgroundColor: '#ffffff', pixelRatio: 2 })
+      const a = document.createElement('a')
+      a.href = dataUrl
+      a.download = `organigramme_${selectedEntity}.png`.replace(/\s+/g, '_')
+      a.click()
+    } catch (e) {
+      toast.error?.('Échec de l’export PNG')
+    }
+  }, [selectedEntity])
+
+  // Excel : exporte la liste plate des employés visibles (filtre entité courant).
+  const exportExcel = useCallback(() => {
+    if (!filteredEmps || filteredEmps.length === 0) {
+      toast.error?.('Aucune donnée à exporter'); return
+    }
+    const rows = filteredEmps.map(e => ({
+      Matricule: e.matricule || '',
+      Nom: e.nom || '',
+      Fonction: e.fonction || '',
+      Direction: e.nom_direction || e.direction || '',
+      Entité: e.nom_entite || e.entite || '',
+      Ville: e.ville || '',
+      Email: e.email || '',
+      'Responsable (N+1)': e.n1 || '',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Organigramme')
+    XLSX.writeFile(wb, `organigramme_${selectedEntity}.xlsx`.replace(/\s+/g, '_'))
+  }, [filteredEmps, selectedEntity])
+  // -------------------------------------------------------------------------
+
   // Trees
   const n1Tree = useMemo(() => {
     const withN1 = filteredEmps.filter(e => e.n1 != null && e.n1 !== '').length
@@ -550,7 +682,6 @@ export default function OrgChart() {
     return buildGroupTree(filteredEmps, e => e.nom_direction || e.direction || 'Sans direction')
   }, [filteredEmps])
 
-  const fonctionTree = useMemo(() => buildGroupTree(filteredEmps, e => e.fonction), [filteredEmps])
   const villeTree    = useMemo(() => buildGroupTree(filteredEmps, e => e.ville),    [filteredEmps])
 
   const nomList = useMemo(() =>
@@ -572,7 +703,7 @@ export default function OrgChart() {
 
   const activeTree =
     view === 'hierarchie' ? n1Tree :
-    view === 'fonction'   ? fonctionTree :
+    view === 'fonction'   ? n1Tree :
     view === 'ville'      ? villeTree : []
 
   const visibleRoots = useMemo(() => {
@@ -687,6 +818,31 @@ export default function OrgChart() {
             <button onClick={() => doExpand('reset')} style={{ padding:'5px 10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius:6, cursor:'pointer', fontSize:'0.75rem', color:'#475569', fontWeight:600 }}>
               ↺ {"Réinitialiser"}
             </button>
+            <div ref={exportMenuRef} style={{ position:'relative' }}>
+              <button
+                title="Exporter"
+                aria-label="Exporter"
+                aria-haspopup="menu"
+                aria-expanded={exportMenuOpen}
+                onClick={() => setExportMenuOpen(o => !o)}
+                style={{ padding:'5px 10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius:6, cursor:'pointer', fontSize:'0.85rem', color:'#475569', fontWeight:700, lineHeight:1 }}
+              >
+                ⋯
+              </button>
+              {exportMenuOpen && (
+                <div role="menu" style={{ position:'absolute', top:'calc(100% + 4px)', right:0, background:'var(--card,#fff)', border:'1px solid var(--border,#e2e8f0)', borderRadius:8, boxShadow:'0 6px 20px rgba(0,0,0,0.10)', minWidth:170, zIndex:50, padding:4 }}>
+                  <button role="menuitem" aria-label="Exporter en PDF" onClick={() => { setExportMenuOpen(false); exportPDF() }} style={{ display:'flex', alignItems:'center', gap:8, width:'100%', padding:'7px 10px', background:'none', border:'none', cursor:'pointer', fontSize:'0.8rem', color:'#021630', textAlign:'left', borderRadius:6 }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='none'}>
+                    <FileDown size={14} /> Exporter en PDF
+                  </button>
+                  <button role="menuitem" aria-label="Exporter en PNG" onClick={() => { setExportMenuOpen(false); exportPNG() }} style={{ display:'flex', alignItems:'center', gap:8, width:'100%', padding:'7px 10px', background:'none', border:'none', cursor:'pointer', fontSize:'0.8rem', color:'#021630', textAlign:'left', borderRadius:6 }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='none'}>
+                    <ImageIcon size={14} /> Exporter en PNG
+                  </button>
+                  <button role="menuitem" aria-label="Exporter en Excel" onClick={() => { setExportMenuOpen(false); exportExcel() }} style={{ display:'flex', alignItems:'center', gap:8, width:'100%', padding:'7px 10px', background:'none', border:'none', cursor:'pointer', fontSize:'0.8rem', color:'#021630', textAlign:'left', borderRadius:6 }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='none'}>
+                    <FileSpreadsheet size={14} /> Exporter en Excel
+                  </button>
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -699,7 +855,7 @@ export default function OrgChart() {
               {searchQ ? `Aucun résultat pour « ${searchQ} »` : "Aucune donnée"}
             </div>
           ) : (
-            <div className="oc-scroll">
+            <div className="oc-scroll" ref={treeRef}>
               <div style={{ display:'flex', gap:32, flexWrap:'wrap', justifyContent:'center' }}>
                 {visibleRoots.map(root => (
                   <TreeNode
@@ -707,6 +863,7 @@ export default function OrgChart() {
                     node={root} depth={0}
                     hitSet={hitSet} expandOverride={expandOverride}
                     onEdit={setEditEmp} editMode={editMode}
+                    viewMode={view}
                   />
                 ))}
               </div>

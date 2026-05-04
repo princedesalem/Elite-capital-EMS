@@ -13,8 +13,8 @@ describe('font globale', () => {
     )
     // Doit contenir 'Century Gothic'
     expect(css).toContain("'Century Gothic'")
-    // Ne doit pas contenir d'autre famille de polices dans la règle html/body
-    const fontFamilyRule = css.match(/html,body,#root\{[^}]+\}/)?.[0] ?? ''
+    // Ne doit pas contenir d'autre famille de polices dans la règle body/#root
+    const fontFamilyRule = css.match(/body,#root\{[^}]+\}/)?.[0] ?? ''
     // Pas de virgule après 'Century Gothic' => pas de fallback
     expect(fontFamilyRule).toMatch(/font-family:'Century Gothic'[^,]/)
   })

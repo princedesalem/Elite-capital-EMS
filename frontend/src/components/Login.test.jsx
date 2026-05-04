@@ -78,14 +78,14 @@ describe('Login', () => {
 
   it('bascule vers le formulaire email', () => {
     render(<MemoryRouter><Login /></MemoryRouter>)
-    fireEvent.click(screen.getByText('Connexion par email'))
+    fireEvent.click(screen.getByText(/Mot de passe oublié/))
     expect(screen.getByPlaceholderText('Email')).toBeInTheDocument()
   })
 
   it('revient au formulaire matricule depuis email', () => {
     render(<MemoryRouter><Login /></MemoryRouter>)
-    fireEvent.click(screen.getByText('Connexion par email'))
-    fireEvent.click(screen.getByText('Connexion par matricule'))
+    fireEvent.click(screen.getByText(/Mot de passe oublié/))
+    fireEvent.click(screen.getByText(/Retour à la connexion/))
     expect(screen.getByPlaceholderText('Matricule')).toBeInTheDocument()
   })
 

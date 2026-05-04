@@ -19,6 +19,7 @@ from .routers import (
     commentaires_mission_router, sorties_router, team_space_router, module_store_router,
     events_router, reviews360_router, talent_router, workforce_router, clubs_router,
     admin_router, pdf_router, settings_router, biometrie_router,
+    fiches_poste_router,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request
@@ -165,6 +166,7 @@ app.include_router(missions_router.router)
 app.include_router(remplacants_router.router)
 app.include_router(notifications_router.router)
 app.include_router(evaluations_router.router)
+app.include_router(fiches_poste_router.router)
 app.include_router(workflow_router.router)
 app.include_router(commentaires_mission_router.router)
 app.include_router(sorties_router.router)
@@ -188,4 +190,14 @@ def root():
 
 @app.get('/health')
 def health():
-    return {"status": "ok", "service": "extranet-backend"}
+    import os, pathlib
+    version_file = pathlib.Path('/app/VERSION.txt')
+    version = "unknown"
+    deploy_date = None
+    if version_file.exists():
+        for line in version_file.read_text().splitlines():
+            if line.startswith('VERSION='):
+                version = line.split('=', 1)[1]
+            elif line.startswith('DATE='):
+                deploy_date = line.split('=', 1)[1]
+    return {"status": "ok", "service": "extranet-backend", "version": version, "deployed_at": deploy_date}

@@ -152,7 +152,10 @@ class Employe(Base):
     salaire_devise = Column(String(3), nullable=True, default='XAF')
     # Préférence d'envoi email pour les notifications hors-app (opt-out par employé)
     notif_email_enabled = Column(Boolean, nullable=False, default=True)
+    # Assignation manuelle d'une fiche de poste (FK vers Fiche_poste_template)
+    id_fiche_poste = Column(Integer, ForeignKey('Fiche_poste_template.id_template', ondelete='SET NULL'), nullable=True)
     utilisateur = relationship('Utilisateur', back_populates='employe', uselist=False)
+    fiche_poste = relationship('FichePosteTemplate', back_populates='titulaires', foreign_keys=[id_fiche_poste])
 
 
 class Utilisateur(Base):
@@ -258,18 +261,43 @@ class PeriodeEvaluation(Base):
 class Evaluation(Base):
     __tablename__ = 'Evaluation'
     id_eval = Column(Integer, primary_key=True, autoincrement=True)
-    id_fiche = Column(Integer, ForeignKey('Fiche_de_poste.id_fiche'), nullable=False)
-    id_periode = Column(Integer, ForeignKey('Periode_evaluation.id_periode'), nullable=False)
+    id_fiche = Column(Integer, ForeignKey('Fiche_de_poste.id_fiche'), nullable=True)
+    id_template = Column(Integer, ForeignKey('Fiche_poste_template.id_template', ondelete='SET NULL'), nullable=True)
+    id_periode = Column(Integer, ForeignKey('Periode_evaluation.id_periode'), nullable=True)
     matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
+    evaluateur_matricule = Column(String(32), ForeignKey('EMPLOYE.matricule', ondelete='SET NULL'), nullable=True)
+    evaluateur_role = Column(String(50), nullable=True)
     auto_evaluation = Column(JSON)
     evaluations = Column(JSON)
+    evaluation_n1 = Column(JSON)
+    notes_par_section = Column(JSON)
     note_finale = Column(DECIMAL(5,2))
     statut = Column(Enum(StatutEvaluationEnum), default=StatutEvaluationEnum.EN_ATTENTE_AUTO_EVAL)
     date_creation = Column(DateTime, default=datetime.utcnow)
+    date_soumission_auto = Column(DateTime, nullable=True)
+    date_evaluation_n1 = Column(DateTime, nullable=True)
     date_finalisation = Column(DateTime)
 
 # Alias used by evaluations_router
 EvaluationEmploye = Evaluation
+
+
+class FichePosteTemplate(Base):
+    """
+    Fiche de poste modèle par fonction, alimentée par import .docx.
+    sections : [{titre: str, contenu: [str]}] — structure extraite du document.
+    """
+    __tablename__ = 'Fiche_poste_template'
+    id_template       = Column(Integer, primary_key=True, autoincrement=True)
+    fonction          = Column(String(200), unique=True, nullable=False)
+    fichier_nom       = Column(String(300))          # nom original du .docx
+    sections          = Column(JSON)                 # [{titre, contenu:[str]}]
+    html_content      = Column(Text)                 # rendu HTML fidèle (mammoth) sans signatures
+    cree_par          = Column(String(32), ForeignKey('EMPLOYE.matricule', ondelete='SET NULL'), nullable=True)
+    date_creation     = Column(DateTime, default=datetime.utcnow)
+    date_modification = Column(DateTime)
+    titulaires = relationship('Employe', back_populates='fiche_poste', foreign_keys='Employe.id_fiche_poste')
+
 
 # operations and related tables
 class Operation(Base):
