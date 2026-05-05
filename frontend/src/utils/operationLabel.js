@@ -136,3 +136,47 @@ export function fraisLabel(item) {
   const motif = shortMotif(item.motif || item.mission_comment || item.commentaire || '')
   return buildLabel('Frais mission', dest, motif) || 'Frais de mission'
 }
+
+// ─── fixOlStartAttributes ────────────────────────────────────────────────────
+/**
+ * Fix <ol start="…"> attributes when TipTap generates multiple <ol> elements
+ * that each restart at 1 instead of continuing the sequence.
+ *
+ * Uses document-order traversal: finds every <ol> not nested inside another
+ * <ol> and numbers them continuously, resetting ONLY at heading elements
+ * (h1-h6, hr). Crucially, <ul>, <table>, <p>, <div> do NOT reset the counter
+ * — these commonly separate numbered section headers in TipTap/Word exports.
+ *
+ * @param {string} html - Raw HTML string (from TipTap / DOMPurify)
+ * @returns {string} HTML with corrected <ol start="…"> attributes
+ */
+
+const _OL_RESET_TAGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HR'])
+
+function _inOl(el, root) {
+  let p = el.parentElement
+  while (p && p !== root) {
+    if (p.tagName === 'OL') return true
+    p = p.parentElement
+  }
+  return false
+}
+
+export function fixOlStartAttributes(html) {
+  if (!html || !html.includes('<ol')) return html
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html')
+  const root = doc.body.firstChild
+  let cumulative = 0
+  for (const el of Array.from(root.querySelectorAll('*'))) {
+    if (_OL_RESET_TAGS.has(el.tagName) && !_inOl(el, root)) {
+      cumulative = 0
+    } else if (el.tagName === 'OL' && !_inOl(el, root)) {
+      const directLi = Array.from(el.children).filter(c => c.tagName === 'LI')
+      if (cumulative > 0) {
+        el.setAttribute('start', String(cumulative + 1))
+      }
+      cumulative += directLi.length
+    }
+  }
+  return root.innerHTML
+}

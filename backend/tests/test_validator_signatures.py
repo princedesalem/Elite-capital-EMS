@@ -1,4 +1,149 @@
 from datetime import datetime
+import pytest
+from app.routers.fiches_poste_router import _fix_ol_counters
+
+
+# ── Tests _fix_ol_counters ────────────────────────────────────────────────────
+
+def test_fix_ol_counters_passthrough_no_ol():
+    html = '<p>Bonjour</p><ul><li>A</li></ul>'
+    assert _fix_ol_counters(html) == html
+
+
+def test_fix_ol_counters_passthrough_empty():
+    assert _fix_ol_counters('') == ''
+    assert _fix_ol_counters(None) is None
+
+
+def test_fix_ol_counters_single_ol_unchanged():
+    html = '<ol><li>A</li><li>B</li><li>C</li></ol>'
+    result = _fix_ol_counters(html)
+    assert 'start=' not in result
+
+
+def test_fix_ol_counters_three_consecutive_single_li():
+    """3 <ol> consécutifs 1 li chacun → start 1, 2, 3."""
+    html = '<ol><li>A</li></ol><ol><li>B</li></ol><ol><li>C</li></ol>'
+    result = _fix_ol_counters(html)
+    from bs4 import BeautifulSoup
+    ols = BeautifulSoup(result, 'html.parser').find_all('ol')
+    starts = [int(ol.get('start', 1)) for ol in ols]
+    assert starts == [1, 2, 3]
+
+
+def test_fix_ol_counters_multiple_li_per_ol():
+    """2 li + 3 li → 2e ol doit avoir start=3."""
+    html = '<ol><li>A</li><li>B</li></ol><ol><li>C</li><li>D</li><li>E</li></ol>'
+    result = _fix_ol_counters(html)
+    from bs4 import BeautifulSoup
+    ols = BeautifulSoup(result, 'html.parser').find_all('ol')
+    starts = [int(ol.get('start', 1)) for ol in ols]
+    assert starts == [1, 3]
+
+
+def test_fix_ol_counters_reset_after_h2():
+    """Un <h2> entre deux <ol> remet le compteur à 1."""
+    html = '<ol><li>A</li><li>B</li></ol><h2>Titre</h2><ol><li>C</li></ol>'
+    result = _fix_ol_counters(html)
+    from bs4 import BeautifulSoup
+    ols = BeautifulSoup(result, 'html.parser').find_all('ol')
+    starts = [int(ol.get('start', 1)) for ol in ols]
+    assert starts == [1, 1]
+
+
+def test_fix_ol_counters_no_reset_after_p():
+    """Un <p> entre deux <ol> NE remet PAS le compteur (pas un vrai nouveau groupe)."""
+    html = '<ol><li>A</li></ol><p>Texte séparateur</p><ol><li>B</li></ol>'
+    result = _fix_ol_counters(html)
+    from bs4 import BeautifulSoup
+    ols = BeautifulSoup(result, 'html.parser').find_all('ol')
+    starts = [int(ol.get('start', 1)) for ol in ols]
+    assert starts == [1, 2]
+
+
+def test_fix_ol_counters_no_reset_after_ul():
+    """Un <ul> entre deux <ol> NE remet PAS le compteur (cas TipTap classique)."""
+    html = '<ol><li>Section A</li></ol><ul><li>tâche 1</li></ul><ol><li>Section B</li></ol>'
+    result = _fix_ol_counters(html)
+    from bs4 import BeautifulSoup
+    ols = BeautifulSoup(result, 'html.parser').find_all('ol')
+    starts = [int(ol.get('start', 1)) for ol in ols]
+    assert starts == [1, 2]
+
+
+def test_fix_ol_counters_no_reset_after_table():
+    """Une <table> entre deux <ol> NE remet PAS le compteur."""
+    html = '<ol><li>Section A</li></ol><table><tr><td>x</td></tr></table><ol><li>Section B</li></ol>'
+    result = _fix_ol_counters(html)
+    from bs4 import BeautifulSoup
+    ols = BeautifulSoup(result, 'html.parser').find_all('ol')
+    starts = [int(ol.get('start', 1)) for ol in ols]
+    assert starts == [1, 2]
+
+
+def test_fix_ol_counters_tiptap_table_structure():
+    """Structure réelle Word/TipTap: <ol> dans des <td> d'une grande table."""
+    html = (
+        '<table><tbody>'
+        '<tr><td><ol><li>Administration systèmes</li></ol></td></tr>'
+        '<tr><td>tâche 1</td><td><ul><li>critère</li></ul></td></tr>'
+        '<tr><td>tâche 2</td><td><ul><li>critère</li></ul></td></tr>'
+        '<tr><td><ol><li>Administration réseau</li></ol></td></tr>'
+        '<tr><td>tâche 3</td><td><ul><li>critère</li></ul></td></tr>'
+        '<tr><td><ol><li>Sécurité SI</li></ol></td></tr>'
+        '</tbody></table>'
+    )
+    result = _fix_ol_counters(html)
+    from bs4 import BeautifulSoup
+    ols = BeautifulSoup(result, 'html.parser').find_all('ol')
+    starts = [int(ol.get('start', 1)) for ol in ols]
+    assert starts == [1, 2, 3]
+
+
+def test_fix_ol_counters_nested_ol_independent():
+    """<ol> imbriqué dans un <li> a un compteur indépendant."""
+    html = (
+        '<ol><li>A</li><li>B<ol><li>b1</li><li>b2</li></ol></li></ol>'
+        '<ol><li>C</li></ol>'
+    )
+    result = _fix_ol_counters(html)
+    from bs4 import BeautifulSoup
+    ols = BeautifulSoup(result, 'html.parser').find_all('ol')
+    starts = [int(ol.get('start', 1)) for ol in ols]
+    # outer 1 → no start attr (=1), inner → no start attr (=1), outer 2 → start=3
+    assert starts[0] == 1   # premier ol outer
+    assert starts[1] == 1   # inner ol (indépendant, pas de start)
+    assert starts[2] == 3   # outer 2 continue après 2 items
+
+
+def test_fix_ol_counters_empty_ol_no_error():
+    """Un <ol> vide ne provoque pas d'erreur."""
+    html = '<ol></ol><ol><li>A</li></ol>'
+    result = _fix_ol_counters(html)
+    from bs4 import BeautifulSoup
+    ols = BeautifulSoup(result, 'html.parser').find_all('ol')
+    # L'ol vide compte 0 items → le suivant a start=1 (inchangé)
+    starts = [int(ol.get('start', 1)) for ol in ols]
+    assert starts == [1, 1]
+
+
+def test_fix_ol_counters_realistic_tiptap_output():
+    """Structure TipTap: sections ol séparées par ul de tâches, reset au h2."""
+    html = (
+        '<ol><li><p>Sécurité GPO</p></li></ol>'
+        '<ul><li>tâche 1</li></ul>'
+        '<ol><li><p>Gestion mises à jour</p></li></ol>'
+        '<ul><li>tâche 2</li></ul>'
+        '<h2>Sauvegarde</h2>'
+        '<ol><li><p>Sauvegardes Iperius</p></li></ol>'
+        '<ol><li><p>Tester restaurations</p></li></ol>'
+    )
+    result = _fix_ol_counters(html)
+    from bs4 import BeautifulSoup
+    ols = BeautifulSoup(result, 'html.parser').find_all('ol')
+    starts = [int(ol.get('start', 1)) for ol in ols]
+    # Groupe 1 (avant h2): 1, 2 ; Groupe 2 (après h2): 1, 2
+    assert starts == [1, 2, 1, 2]
 
 
 def test_upload_signature_base64_updates_employee(client, seed_reference_data):

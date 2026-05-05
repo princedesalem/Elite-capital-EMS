@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { operationLabel, missionDestLabel, fraisLabel } from './operationLabel'
+import { operationLabel, missionDestLabel, fraisLabel, fixOlStartAttributes } from './operationLabel'
 
 // ─── Suite 1: Mission ────────────────────────────────────────────────────────
 
@@ -198,5 +198,123 @@ describe('missionDestLabel', () => {
     const label = missionDestLabel({ ville: 'Tunis', mission_comment: 'Rapport stratégique' })
     expect(label).toContain('Tunis')
     expect(label.toLowerCase()).toContain('rapport')
+  })
+})
+
+// ─── Suite 9: fixOlStartAttributes ──────────────────────────────────────────
+
+/** Helper : extract the start attribute of each <ol> in order */
+function extractStarts(html) {
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html')
+  return Array.from(doc.querySelectorAll('ol')).map(ol => {
+    const s = ol.getAttribute('start')
+    return s ? parseInt(s, 10) : 1
+  })
+}
+
+describe('fixOlStartAttributes', () => {
+  it('retourne le HTML inchange si pas de <ol>', () => {
+    const html = '<p>Bonjour</p><ul><li>A</li></ul>'
+    expect(fixOlStartAttributes(html)).toBe(html)
+  })
+
+  it('retourne le HTML inchange si html vide ou null', () => {
+    expect(fixOlStartAttributes('')).toBe('')
+    expect(fixOlStartAttributes(null)).toBe(null)
+  })
+
+  it('ne modifie pas un seul <ol> (deja correct)', () => {
+    const html = '<ol><li>A</li><li>B</li><li>C</li></ol>'
+    const result = fixOlStartAttributes(html)
+    const starts = extractStarts(result)
+    expect(starts).toEqual([1])
+  })
+
+  it('corrige 3 <ol> consecutifs avec 1 li chacun -> start 1, 2, 3', () => {
+    const html = '<ol><li>A</li></ol><ol><li>B</li></ol><ol><li>C</li></ol>'
+    const result = fixOlStartAttributes(html)
+    const starts = extractStarts(result)
+    expect(starts).toEqual([1, 2, 3])
+  })
+
+  it('corrige <ol> avec plusieurs li -> start correct', () => {
+    // 2 li + 3 li → le 2e ol doit avoir start=3
+    const html = '<ol><li>A</li><li>B</li></ol><ol><li>C</li><li>D</li><li>E</li></ol>'
+    const result = fixOlStartAttributes(html)
+    const starts = extractStarts(result)
+    expect(starts).toEqual([1, 3])
+  })
+
+  it('reset le compteur apres un <h2> entre deux <ol>', () => {
+    const html = '<ol><li>A</li><li>B</li></ol><h2>Titre</h2><ol><li>C</li></ol>'
+    const result = fixOlStartAttributes(html)
+    const starts = extractStarts(result)
+    // Apres le h2, nouveau contexte -> start = 1
+    expect(starts).toEqual([1, 1])
+  })
+
+  it('<p> entre deux <ol> NE remet PAS le compteur (pas un vrai nouveau groupe)', () => {
+    const html = '<ol><li>A</li></ol><p>Texte</p><ol><li>B</li></ol>'
+    const result = fixOlStartAttributes(html)
+    const starts = extractStarts(result)
+    expect(starts).toEqual([1, 2])
+  })
+
+  it('<ul> entre deux <ol> NE remet PAS le compteur (cas TipTap classique)', () => {
+    // Structure typique: section ol -> ul de taches -> section ol
+    const html = '<ol><li>Section A</li></ol><ul><li>tache 1</li><li>tache 2</li></ul><ol><li>Section B</li></ol>'
+    const result = fixOlStartAttributes(html)
+    const starts = extractStarts(result)
+    expect(starts).toEqual([1, 2])
+  })
+
+  it('<table> entre deux <ol> NE remet PAS le compteur', () => {
+    const html = '<ol><li>Section A</li></ol><table><tr><td>x</td></tr></table><ol><li>Section B</li></ol>'
+    const result = fixOlStartAttributes(html)
+    const starts = extractStarts(result)
+    expect(starts).toEqual([1, 2])
+  })
+
+  it('pattern TipTap reel: ol dans <td> numerotes en continu', () => {
+    // Structure reelle depuis Word: toute la fiche est dans une table,
+    // les sections numerotees sont dans des <td> de cette table
+    const html = [
+      '<table><tbody>',
+      '  <tr><td><ol><li>Administration systemes</li></ol></td></tr>',
+      '  <tr><td>tache 1</td><td><ul><li>critere</li></ul></td></tr>',
+      '  <tr><td>tache 2</td><td><ul><li>critere</li></ul></td></tr>',
+      '  <tr><td><ol><li>Administration reseau</li></ol></td></tr>',
+      '  <tr><td>tache 3</td><td><ul><li>critere</li></ul></td></tr>',
+      '  <tr><td><ol><li>Securite SI</li></ol></td></tr>',
+      '</tbody></table>',
+    ].join('')
+    const result = fixOlStartAttributes(html)
+    const starts = extractStarts(result)
+    expect(starts).toEqual([1, 2, 3])
+  })
+
+  it('<ol> imbrique dans un <li> a un compteur independant', () => {
+    // Outer: 2 items. Inner (dans li 2): 2 items. Outer continue apres.
+    const html = [
+      '<ol>',
+      '  <li>A</li>',
+      '  <li>B<ol><li>b1</li><li>b2</li></ol></li>',
+      '</ol>',
+      '<ol><li>C</li></ol>',
+    ].join('')
+    const result = fixOlStartAttributes(html)
+    // Outer ol 1 -> start 1, inner ol -> start 1 (independant), outer ol 2 -> start 3
+    const ols = new DOMParser()
+      .parseFromString(`<div>${result}</div>`, 'text/html')
+      .querySelectorAll('ol')
+    const starts = Array.from(ols).map(ol => parseInt(ol.getAttribute('start') || '1', 10))
+    expect(starts[0]).toBe(1)  // outer 1
+    expect(starts[1]).toBe(1)  // inner (independant)
+    expect(starts[2]).toBe(3)  // outer 2 continue apres 2 items
+  })
+
+  it('gere un <ol> vide sans erreur', () => {
+    const html = '<ol></ol><ol><li>A</li></ol>'
+    expect(() => fixOlStartAttributes(html)).not.toThrow()
   })
 })

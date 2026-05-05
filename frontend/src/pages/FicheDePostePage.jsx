@@ -4,6 +4,7 @@ import DOMPurify from 'dompurify'
 import { Upload, FileText, Trash2, Download, Eye, X, Check, UserPlus, ChevronDown, ChevronRight } from 'lucide-react'
 import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
+import { fixOlStartAttributes } from '../utils/operationLabel'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -330,7 +331,7 @@ function FicheListItem({ fiche, selected, onClick, onDelete, onReimported, onRea
       <input
         ref={fileRef}
         type="file"
-        accept=".docx,.doc"
+        accept=".docx,.doc,.pdf"
         style={{ display: 'none' }}
         onChange={handleQuickImport}
       />
@@ -621,7 +622,7 @@ function ImportModal({ onClose, onImported, currentUser }) {
         >
           <Upload size={26} style={{ color: isDragging ? '#3b5fc0' : DARK_BLUE, marginBottom: 8 }} />
           <div style={{ fontSize: '0.85rem', color: '#555', fontWeight: 600 }}>
-            Cliquez ou déposez vos fichiers .docx ici
+            Cliquez ou déposez vos fichiers .docx / .pdf ici
           </div>
           <div style={{ fontSize: '0.75rem', color: '#999', marginTop: 4 }}>
             Plusieurs fichiers acceptés simultanément
@@ -629,7 +630,7 @@ function ImportModal({ onClose, onImported, currentUser }) {
           <input
             ref={fileRef}
             type="file"
-            accept=".docx,.doc"
+            accept=".docx,.doc,.pdf"
             multiple
             style={{ display: 'none' }}
             onChange={e => { addFiles(e.target.files); e.target.value = '' }}
@@ -867,7 +868,8 @@ export default function FicheDePostePage() {
   .fiche-html-content td, .fiche-html-content th { border: 1px solid #b7c0d4; padding: 5px 8px; }
   .fiche-html-content th { background: #021630; color: #fff; font-weight: 700; }
   .fiche-html-content tr:nth-child(even) td { background: #f4f6fb; }
-  .fiche-html-content ul, .fiche-html-content ol { margin: 4px 0 6px 20px; }
+  .fiche-html-content ul, .fiche-html-content ol { margin: 4px 0 6px 20px; list-style-type: disc; padding-left: 20px; }
+  .fiche-html-content ol { list-style-type: decimal; }
   .fiche-html-content .fp-red, .fiche-html-content span[style*="c00000"] { color: #c00000 !important; font-weight: 600; }
   .fiche-html-content .fp-red *, .fiche-html-content span[style*="c00000"] * { color: #c00000 !important; }
   .fiche-html-content img { display: none; }
@@ -921,9 +923,10 @@ export default function FicheDePostePage() {
     // Sanitize HTML mammoth (depuis le backend) si pr\u00e9sent
     const sanitizedHtml = useMemo(() => {
       if (!fiche?.html_content) return ''
-      return DOMPurify.sanitize(fiche.html_content, {
-        ADD_ATTR: ['colspan', 'rowspan', 'style', 'align', 'valign', 'class'],
+      const clean = DOMPurify.sanitize(fiche.html_content, {
+        ADD_ATTR: ['colspan', 'rowspan', 'style', 'align', 'valign', 'class', 'start'],
       })
+      return fixOlStartAttributes(clean)
     }, [fiche?.html_content])
 
     return (
@@ -1178,7 +1181,8 @@ export default function FicheDePostePage() {
         }
         .fiche-html-content table tr:nth-child(even) td { background:#f4f6fb; }
         .fiche-html-content table tr:nth-child(even):first-child td { background:${DARK_BLUE}; }
-        .fiche-html-content ul, .fiche-html-content ol { margin:6px 0 8px 22px; }
+        .fiche-html-content ul, .fiche-html-content ol { margin:6px 0 8px 22px; list-style-type: disc; padding-left: 22px; }
+        .fiche-html-content ol { list-style-type: decimal; }
         .fiche-html-content li { margin:3px 0; }
         .fiche-html-content strong { color:${DARK_BLUE}; }
         .fiche-html-content .fp-red, .fiche-html-content span.fp-red { color:#c00000 !important; font-weight:600; }

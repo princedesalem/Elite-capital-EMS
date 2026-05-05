@@ -479,6 +479,126 @@ def _inject_fp_red_style(file_bytes: bytes) -> bytes:
     return buf.getvalue()
 
 
+def _pdf_to_clean_html(file_bytes: bytes) -> str:
+    """Extrait le texte d'un PDF et le convertit en HTML structuré.
+
+    Détecte automatiquement :
+    - Titres : lignes courtes en MAJUSCULES
+    - Listes numérotées : lignes commençant par "1.", "2.", etc.
+    - Puces : lignes commençant par •, -, *
+    - Texte courant : paragraphes normaux
+    """
+    try:
+        from pdfminer.high_level import extract_pages
+        from pdfminer.layout import LTTextContainer, LTChar, LTTextLine
+    except ImportError:
+        return '<p><em>pdfminer.six non installé.</em></p>'
+
+    import re as _re
+
+    # Extraction ligne par ligne avec taille de police
+    lines_with_size: list[tuple[str, float]] = []
+    try:
+        for page_layout in extract_pages(io.BytesIO(file_bytes)):
+            for element in page_layout:
+                if not isinstance(element, LTTextContainer):
+                    continue
+                for text_line in element:
+                    if not hasattr(text_line, 'get_text'):
+                        continue
+                    text = text_line.get_text().strip()
+                    if not text:
+                        continue
+                    # Taille de police dominante sur cette ligne
+                    sizes = [
+                        c.size for c in text_line
+                        if isinstance(c, LTChar) and c.size > 0
+                    ]
+                    avg_size = sum(sizes) / len(sizes) if sizes else 10.0
+                    lines_with_size.append((text, avg_size))
+    except Exception:
+        return '<p><em>Erreur lors de la lecture du PDF.</em></p>'
+
+    if not lines_with_size:
+        return '<p><em>Aucun texte extractible dans ce PDF.</em></p>'
+
+    # Taille de corps "normale" (médiane)
+    sorted_sizes = sorted(s for _, s in lines_with_size)
+    median_size = sorted_sizes[len(sorted_sizes) // 2] if sorted_sizes else 10.0
+
+    html_parts: list[str] = []
+    # Liste courante en cours de construction
+    list_type: str | None = None  # 'ol' | 'ul' | None
+    list_items: list[str] = []
+
+    def _flush_list():
+        nonlocal list_type, list_items
+        if not list_items:
+            list_type = None
+            return
+        tag = list_type
+        html_parts.append(f'<{tag}>')
+        for item in list_items:
+            html_parts.append(f'<li>{item}</li>')
+        html_parts.append(f'</{tag}>')
+        list_type = None
+        list_items = []
+
+    _num_re = _re.compile(r'^(\d+)\.\s+(.+)$', _re.DOTALL)
+    _bullet_chars = ('•', '·', '◦', '▪', '▸', '–', '-', '*', '►', '○')
+
+    for raw_text, size in lines_with_size:
+        text = raw_text.strip()
+        if not text:
+            continue
+
+        # Détecter type de ligne
+        num_match = _num_re.match(text)
+        is_bullet = any(text.startswith(c) for c in _bullet_chars)
+        is_big = size > median_size * 1.15
+        is_heading = (
+            is_big
+            or (text.isupper() and 3 < len(text) < 120)
+        )
+        # Supprimer le "fiche de validation" et lignes d'entête tableau Word
+        lower = text.lower()
+        if any(kw in lower for kw in ('fiche de validation', 'rubrique', "l'employé", 'l\'employe', 'signature')):
+            continue
+
+        if is_heading and not num_match and not is_bullet:
+            _flush_list()
+            escaped = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            html_parts.append(f'<h3><span class="fp-red" style="color:#c00000;font-weight:600">{escaped}</span></h3>')
+
+        elif num_match:
+            content = num_match.group(2).strip()
+            escaped = content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            if list_type == 'ol':
+                list_items.append(escaped)
+            else:
+                _flush_list()
+                list_type = 'ol'
+                list_items = [escaped]
+
+        elif is_bullet:
+            content = text.lstrip('•·◦▪▸–-*►○').strip()
+            escaped = content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            if list_type == 'ul':
+                list_items.append(escaped)
+            else:
+                _flush_list()
+                list_type = 'ul'
+                list_items = [escaped]
+
+        else:
+            _flush_list()
+            escaped = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            html_parts.append(f'<p>{escaped}</p>')
+
+    _flush_list()
+    return '\n'.join(html_parts)
+
+
 def _docx_to_clean_html(file_bytes: bytes) -> str:
     """Convertit le .docx en HTML fidèle (mammoth) et supprime les 2 dernières
     parties (tableau de signatures + fiche de validation).
@@ -782,19 +902,29 @@ def fonctions_sans_fiche(db: Session = Depends(get_db)):
     return {'fonctions': manquantes}
 
 
-@router.post('/preview-import', summary='Prévisualiser le contenu d\'un .docx sans l\'enregistrer')
+_ACCEPTED_EXTENSIONS = ('.docx', '.doc', '.pdf')
+
+
+@router.post('/preview-import', summary='Prévisualiser le contenu d\'un .docx/.pdf sans l\'enregistrer')
 async def preview_import(fichier: UploadFile = File(...)):
     """
-    Reçoit un fichier .docx, détecte la fonction depuis le nom du fichier
+    Reçoit un fichier .docx ou .pdf, détecte la fonction depuis le nom du fichier
     et retourne les sections parsées sans rien écrire en base.
     """
-    if not fichier.filename.lower().endswith(('.docx', '.doc')):
-        raise HTTPException(status_code=400, detail='Seuls les fichiers .docx sont acceptés')
+    fname = (fichier.filename or '').lower()
+    if not fname.endswith(_ACCEPTED_EXTENSIONS):
+        raise HTTPException(status_code=400, detail='Seuls les fichiers .docx et .pdf sont acceptés')
 
     file_bytes = await fichier.read()
     fonction_detectee = _detecter_fonction(fichier.filename)
-    sections = _parse_docx(file_bytes)
-    html_content = _docx_to_clean_html(file_bytes)
+    is_pdf = fname.endswith('.pdf')
+
+    if is_pdf:
+        sections = []
+        html_content = _pdf_to_clean_html(file_bytes)
+    else:
+        sections = _parse_docx(file_bytes)
+        html_content = _docx_to_clean_html(file_bytes)
 
     return {
         'fonction_detectee': fonction_detectee,
@@ -805,7 +935,7 @@ async def preview_import(fichier: UploadFile = File(...)):
     }
 
 
-@router.post('/import', status_code=status.HTTP_201_CREATED, summary='Importer une fiche de poste depuis un .docx')
+@router.post('/import', status_code=status.HTTP_201_CREATED, summary='Importer une fiche de poste depuis un .docx ou .pdf')
 async def importer_fiche(
     fichier: UploadFile = File(...),
     fonction: str = Form(...),
@@ -813,18 +943,24 @@ async def importer_fiche(
     db: Session = Depends(get_db),
 ):
     """
-    Importe un fichier .docx et crée (ou met à jour) la fiche de poste pour la fonction donnée.
+    Importe un fichier .docx ou .pdf et crée (ou met à jour) la fiche de poste pour la fonction donnée.
     - Si une fiche existe déjà pour cette fonction, elle est remplacée.
     - La fonction peut être modifiée par le RH par rapport à la détection automatique.
     """
-    if not fichier.filename.lower().endswith(('.docx', '.doc')):
-        raise HTTPException(status_code=400, detail='Seuls les fichiers .docx sont acceptés')
+    fname = (fichier.filename or '').lower()
+    if not fname.endswith(_ACCEPTED_EXTENSIONS):
+        raise HTTPException(status_code=400, detail='Seuls les fichiers .docx et .pdf sont acceptés')
     if not fonction.strip():
         raise HTTPException(status_code=400, detail='Le nom de la fonction est obligatoire')
 
     file_bytes = await fichier.read()
-    sections = _parse_docx(file_bytes)
-    html_content = _docx_to_clean_html(file_bytes)
+    is_pdf = fname.endswith('.pdf')
+    if is_pdf:
+        sections = []
+        html_content = _pdf_to_clean_html(file_bytes)
+    else:
+        sections = _parse_docx(file_bytes)
+        html_content = _docx_to_clean_html(file_bytes)
     fonction = fonction.strip()
 
     # Upsert
@@ -1017,9 +1153,52 @@ def reassigner_fiche(
     return _fiche_to_dict(fiche)
 
 
+# ── OL counter fix ────────────────────────────────────────────────────────────
+
+_OL_RESET_TAGS = {'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr'}
+
+
+def _in_ol(el, root) -> bool:
+    """Return True if el is nested inside an <ol> element (not counting root)."""
+    from bs4 import Tag as _Tag
+    p = el.parent
+    while p and p is not root:
+        if isinstance(p, _Tag) and p.name == 'ol':
+            return True
+        p = p.parent
+    return False
+
+
+def _fix_ol_counters(html: str) -> str:
+    """Fix <ol start="…"> so TipTap-generated split lists count 1 2 3 instead of 1 1 1.
+
+    Uses document-order traversal: finds every <ol> not nested inside another
+    <ol> and numbers them continuously, resetting ONLY at heading elements
+    (h1-h6, hr). <ul>, <table>, <p>, <div> do NOT reset the counter.
+    """
+    if not html or '<ol' not in html:
+        return html
+    from bs4 import BeautifulSoup, Tag
+    soup = BeautifulSoup(f'<div>{html}</div>', 'html.parser')
+    root = soup.find('div')
+    cumulative = 0
+    for el in root.descendants:
+        if not isinstance(el, Tag):
+            continue
+        if el.name in _OL_RESET_TAGS and not _in_ol(el, root):
+            cumulative = 0
+        elif el.name == 'ol' and not _in_ol(el, root):
+            direct_li = [c for c in el.children if isinstance(c, Tag) and c.name == 'li']
+            if cumulative > 0:
+                el['start'] = str(cumulative + 1)
+            cumulative += len(direct_li)
+    return root.decode_contents()
+
+
 def _build_pdf_html(fiche: models.FichePosteTemplate, titulaires: list, logo_path: Optional[str] = None) -> str:
     """Construit l'HTML complet pour l'export PDF (en-tête + html_content)."""
     html_body = (fiche.html_content or '').strip()
+    html_body = _fix_ol_counters(html_body)
     if not html_body:
         # Fallback : reconstruire depuis sections JSON
         parts = []
@@ -1068,7 +1247,9 @@ def _build_pdf_html(fiche: models.FichePosteTemplate, titulaires: list, logo_pat
   td, th {{ border: 1px solid #d1d5db; padding: 6px 9px; vertical-align: top; }}
   h1, h2, h3 {{ color: #021630; }}
   h2 {{ font-size: 11.5pt; border-bottom: 1px solid #c00000; padding-bottom: 3px; margin: 14px 0 6px; }}
-  ul {{ padding-left: 18px; }}
+  ul {{ padding-left: 18px; list-style-type: disc; }}
+  ol {{ padding-left: 22px; margin: 4px 0; list-style-type: decimal; }}
+  li {{ margin: 2px 0; }}
   p {{ margin: 4px 0; }}
   .fp-red {{ color: #c00000 !important; font-weight: 600; }}
   .fp-red * {{ color: #c00000 !important; }}
