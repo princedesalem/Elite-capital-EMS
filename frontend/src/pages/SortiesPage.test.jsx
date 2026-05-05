@@ -31,7 +31,7 @@ vi.mock('../contexts/AuthContext', () => ({
 }))
 
 vi.mock('../components/WorkflowModal', () => ({
-  default: () => null,
+  default: ({ isOpen, operationId }) => (isOpen ? <div data-testid="workflow-modal" data-op-id={String(operationId)} /> : null),
 }))
 
 function setupApiForSorties(details = []) {
@@ -153,5 +153,29 @@ describe('SortiesPage single-day flow', () => {
       expect(apiPutMock).toHaveBeenCalledWith('/api/sorties/7/annuler')
     })
     expect(apiDeleteMock).not.toHaveBeenCalledWith('/api/operations/7')
+  })
+
+  it('ouvre WorkflowModal avec le bon operationId au clic sur une ligne (premier vu)', async () => {
+    setupApiForSorties([
+      {
+        id_operation: 9001,
+        date_sortie: '2026-03-20',
+        heure_sortie: '08:00:00',
+        heure_retour: '10:30:00',
+        commentaire: 'Sortie test',
+      },
+    ])
+
+    render(<MemoryRouter><SortiesPage /></MemoryRouter>)
+
+    const cancelBtn = await screen.findByRole('button', { name: 'Annuler' })
+    const row = cancelBtn.closest('tr')
+    expect(row).toBeTruthy()
+    fireEvent.click(row)
+
+    await waitFor(() => {
+      const modal = screen.getByTestId('workflow-modal')
+      expect(modal.getAttribute('data-op-id')).toBe('9001')
+    })
   })
 })

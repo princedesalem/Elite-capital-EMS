@@ -25,30 +25,55 @@ function StatusIcon({ type, size = 22 }) {
   return <svg {...common}>{icons[type]}</svg>;
 }
 
-const ProgressionValidation = ({ idOperation, typeDefault = null, onClose = null }) => {
+const ProgressionValidation = ({ idOperation, typeDefault = null, onClose = null, refreshTrigger = 0 }) => {
   const [progression, setProgression] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const loadProgression = async () => {
+    if (!idOperation) return;
+    let cancelled = false;
+    const timers = [];
+
+    const fetchOnce = async (silent) => {
       try {
-        setLoading(true);
         const res = await api.get(`/api/workflow/progression/${idOperation}`);
+        if (cancelled) return;
         setProgression(res.data);
         setError(null);
+        // Arrêter les retries dès que date_vue est trouvée
+        if (silent && res.data?.etapes?.some(e => e.date_vue)) {
+          timers.forEach(clearTimeout);
+        }
       } catch (err) {
         console.error('Erreur chargement progression:', err);
-        setError('Impossible de charger la progression');
+        if (!silent && !cancelled) setError('Impossible de charger la progression');
       } finally {
-        setLoading(false);
+        // !cancelled évite le flash "Impossible" quand l'effet est nettoyé avant la fin du fetch
+        if (!silent && !cancelled) setLoading(false);
       }
     };
 
-    if (idOperation) {
-      loadProgression();
+    // Toujours faire un fetch (silencieux si on a déjà des données, sinon afficher loading)
+    // Cela couvre aussi le remontage de la modal avec refreshTrigger > 0
+    const alreadyHasData = progression !== null;
+    if (!alreadyHasData) setLoading(true);
+    fetchOnce(alreadyHasData);
+
+    // Après un marquer-vu : retries silencieux pour couvrir la latence DB
+    if (refreshTrigger > 0) {
+      [350, 900, 1500].forEach((delay) => {
+        const t = setTimeout(() => { if (!cancelled) fetchOnce(true); }, delay);
+        timers.push(t);
+      });
     }
-  }, [idOperation]);
+
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idOperation, refreshTrigger]);
 
   if (loading) {
     return (
@@ -212,14 +237,38 @@ const ProgressionValidation = ({ idOperation, typeDefault = null, onClose = null
                     </div>
                   </div>
 
-                  {(etape.validateur || etape.date || etape.commentaire) && (
-                    <div className="step-tooltip">
-                      {etape.validateur && <div className="tooltip-line"><strong>{etape.validateur}</strong></div>}
-                      {etape.date && <div className="tooltip-line tooltip-date">{formatDate(etape.date)}</div>}
-                      {etape.commentaire && <div className="tooltip-line tooltip-comment">{etape.commentaire}</div>}
-                      {etape.statut === 'en attente' && <div className="tooltip-line tooltip-pending">En attente</div>}
+                  {/* Tooltip toujours affiché pour chaque étape */}
+                  <div className="step-tooltip">
+                    {etape.validateur && <div className="tooltip-line"><strong>{etape.validateur}</strong></div>}
+
+                    {/* Reçu le — toujours affiché */}
+                    <div className="tooltip-line tooltip-date">
+                      <span style={{ color: '#64748b' }}>Reçu le :</span>{' '}
+                      {etape.date_recu
+                        ? formatDate(etape.date_recu)
+                        : <em style={{ color: '#94a3b8' }}>En attente</em>}
                     </div>
-                  )}
+
+                    {/* Vu le — toujours affiché, pour tous les statuts */}
+                    <div className="tooltip-line tooltip-date">
+                      <span style={{ color: '#64748b' }}>Vu le :</span>{' '}
+                      {etape.date_vue
+                        ? formatDate(etape.date_vue)
+                        : <em style={{ color: '#94a3b8' }}>Pas encore vue</em>}
+                    </div>
+
+                    {/* Validé/Refusé le — affiché quand une décision a été prise */}
+                    {(etape.statut === 'validé' || etape.statut === 'refusé') && etape.date && (
+                      <div className="tooltip-line tooltip-date">
+                        <span style={{ color: '#64748b' }}>
+                          {etape.statut === 'validé' ? 'Validé le :' : 'Refusé le :'}
+                        </span>{' '}
+                        {formatDate(etape.date)}
+                      </div>
+                    )}
+
+                    {etape.commentaire && <div className="tooltip-line tooltip-comment">{etape.commentaire}</div>}
+                  </div>
                 </div>
               )
 

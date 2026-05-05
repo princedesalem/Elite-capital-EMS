@@ -404,9 +404,9 @@ export default function Dashboard(){
               <h3 style={{ margin: '0 0 10px 0', fontSize: '0.78rem', color: '#6b7280', borderBottom: '2px solid #1b4f9e', paddingBottom: '6px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{"Organisation"}</h3>
               <div style={{ fontSize: '0.75rem', lineHeight: '1.6' }}>
                 <div><strong>{"Fonction"}</strong> {employe.fonction || 'N/A'}</div>
-                <div><strong>{"Département"}</strong> {employe.dept_id || 'N/A'}</div>
-                <div><strong>{"Direction"}</strong> {employe.id_direction || 'N/A'}</div>
-                <div><strong>{"Entité"}</strong> {employe.id_entite || 'N/A'}</div>
+                <div><strong>{"Département"}</strong> {employe.departement || 'N/A'}</div>
+                <div><strong>{"Direction"}</strong> {employe.direction || 'N/A'}</div>
+                <div><strong>{"Entité"}</strong> {employe.entite || 'N/A'}</div>
                 <div><strong>{"Rôle"}</strong> {employe.role || user?.role || 'N/A'}</div>
                 <div><strong>{"Statut"}</strong> <span style={{ color: employe.statut_employe === 'ACTIF' ? '#27ae60' : '#e74c3c' }}>{employe.statut_employe || 'N/A'}</span></div>
               </div>

@@ -46,6 +46,7 @@ async function subscribeToPush(matricule) {
 
 export function AuthProvider({children}){
   const [user,setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [sessionId, setSessionId] = useState(null)
   const navigate = useNavigate()
 
@@ -79,6 +80,8 @@ export function AuthProvider({children}){
         }
       }catch(e){localStorage.removeItem('ec_token'); localStorage.removeItem('access_token')}
     }
+    // Auth check terminé — autoriser les ProtectedRoute à décider
+    setLoading(false)
   },[])
 
   async function login({matricule,password,mfaCode}){
@@ -164,7 +167,7 @@ export function AuthProvider({children}){
   }
 
   return (
-    <AuthContext.Provider value={{user,login,loginWithToken,logout,silentLogout,sessionId}}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{user,loading,login,loginWithToken,logout,silentLogout,sessionId}}>{children}</AuthContext.Provider>
   )
 }
 

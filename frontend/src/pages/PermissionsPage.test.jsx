@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import PermissionsPage from './PermissionsPage'
 
@@ -27,6 +27,10 @@ vi.mock('../contexts/AuthContext', () => ({
 
 vi.mock('../components/RemplacantModal', () => ({
   default: () => null,
+}))
+
+vi.mock('../components/WorkflowModal', () => ({
+  default: ({ isOpen, operationId }) => (isOpen ? <div data-testid="workflow-modal" data-op-id={String(operationId)} /> : null),
 }))
 
 describe('PermissionsPage', () => {
@@ -92,4 +96,43 @@ describe('PermissionsPage', () => {
 
     expect(screen.queryByTitle('Remplaçant')).not.toBeInTheDocument()
   })
-})
+  it('ouvre WorkflowModal avec le bon operationId au clic sur une ligne (premier vu)', async () => {
+    apiGetMock.mockImplementation((url) => {
+      if (url.includes('/api/permissions/mes-permissions/')) return Promise.resolve({ data: [] })
+      if (url.includes('/api/workflow/boite/')) {
+        return Promise.resolve({
+          data: {
+            envoye: [{
+              id_operation: 7777,
+              type_demande: 'permission',
+              statut: 'en attente',
+              motif: 'Permission test',
+              date_debut: '2026-05-01',
+              date_fin: '2026-05-01',
+              date_demande: '2026-04-20',
+            }],
+            recu: [], valide: [], refuse: [],
+          },
+        })
+      }
+      if (url.includes('/api/conges/solde/')) return Promise.resolve({ data: { solde_conges: 20 } })
+      return Promise.resolve({ data: {} })
+    })
+
+    await act(async () => {
+      render(<MemoryRouter><PermissionsPage /></MemoryRouter>)
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      const rows = document.querySelectorAll('tr[style*="cursor"]')
+      expect(rows.length).toBeGreaterThan(0)
+    })
+    const row = document.querySelector('tr[style*="cursor"]')
+    fireEvent.click(row)
+
+    await waitFor(() => {
+      const modal = screen.getByTestId('workflow-modal')
+      expect(modal.getAttribute('data-op-id')).toBe('7777')
+    })
+  })})

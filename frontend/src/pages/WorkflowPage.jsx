@@ -31,8 +31,11 @@ export default function WorkflowPage() {
   // Liste des utilisateurs ayant déjà ouvert l'opération sélectionnée.
   // Chaque entrée : { matricule_observateur, nom_observateur, role_observateur, date_vue }
   const [vues, setVues] = useState([])
-  // Opérations déjà consultées dans la SESSION courante (point vert disparaît
-  // au clic). Volontairement non persisté : reset à chaque rechargement de page.
+  // Opérations déjà consultées — double persistance :
+  //   1. localStorage  → synchrone, instantané au refresh, couvre demandeur ET validateur
+  //   2. OPERATION_VUE → persistance cross-device, source de vérité pour l'audit
+  // Les deux sources sont fusionnées (merge) pour ne jamais perdre un état « vu ».
+  const seenOpsStorageKey = matricule ? `seenOps_${matricule}` : null
   const [seenOps, setSeenOps] = useState(() => new Set())
 
   function handleSelectOp(idOperation, clearComment = false) {
@@ -46,6 +49,51 @@ export default function WorkflowPage() {
       return next
     })
   }
+
+  // ── Étape 1 : initialisation instantanée depuis localStorage (synchrone, pas de flash) ──
+  // Couvre aussi le demandeur dont les vues ne sont pas sauvées en DB (skip côté backend).
+  useEffect(() => {
+    if (!seenOpsStorageKey) return
+    try {
+      const saved = localStorage.getItem(seenOpsStorageKey)
+      if (saved) {
+        const ids = JSON.parse(saved)
+        if (Array.isArray(ids)) {
+          setSeenOps(prev => {
+            const merged = new Set(prev)
+            ids.forEach(id => merged.add(String(id)))
+            return merged
+          })
+        }
+      }
+    } catch {}
+  }, [seenOpsStorageKey])
+
+  // ── Étape 2 : fusion avec la base (cross-device, source de vérité pour l'audit) ──
+  // IMPORTANT : merge (pas overwrite) pour éviter la race condition entre
+  // handleSelectOp et le retour du GET.
+  useEffect(() => {
+    if (!matricule) return
+    api.get(`/api/workflow/mes-vues/${matricule}`)
+      .then(res => {
+        if (Array.isArray(res.data)) {
+          setSeenOps(prev => {
+            const merged = new Set(prev)
+            res.data.forEach(id => merged.add(String(id)))
+            return merged
+          })
+        }
+      })
+      .catch(() => {})
+  }, [matricule])
+
+  // ── Étape 3 : persistance dans localStorage à chaque changement de seenOps ──
+  useEffect(() => {
+    if (!seenOpsStorageKey) return
+    try {
+      localStorage.setItem(seenOpsStorageKey, JSON.stringify([...seenOps]))
+    } catch {}
+  }, [seenOps, seenOpsStorageKey])
 
   useEffect(() => {
     if (!matricule) return
@@ -63,10 +111,24 @@ export default function WorkflowPage() {
       .catch(() => setSelectedOperationDetails(null))
     // Suivi des consultations (B1=tout le monde, B2=première vue uniquement).
     // Le POST est idempotent côté serveur : on l'envoie sans vérifier le rôle.
+    // Le .then() garantit que seenOps est à jour même en cas de re-render
+    // intercalé entre handleSelectOp et la résolution de ce POST.
     if (matricule) {
+      const opId = String(selectedOperation)
       api.post(`/api/workflow/marquer-vu/${selectedOperation}`, null, {
         params: { matricule_observateur: matricule }
-      }).catch(() => {})
+      })
+        .then(res => {
+          setSeenOps(prev => {
+            if (prev.has(opId)) return prev
+            const next = new Set(prev)
+            next.add(opId)
+            return next
+          })
+          // Re-fetch silencieux pour afficher la date_vue dans le tooltip
+          if (!res?.data?.already) setValidationRefreshKey(k => k + 1)
+        })
+        .catch(() => {})
     }
     api.get(`/api/workflow/vues/${selectedOperation}`)
       .then(res => setVues(Array.isArray(res.data) ? res.data : []))
@@ -268,7 +330,7 @@ export default function WorkflowPage() {
                     <button type="button" onClick={() => setShowWorkflowInDetail(false)}
                       style={{ width: '24px', height: '24px', borderRadius: '999px', border: 'none', background: '#ce2b2b', color: '#fff', fontWeight: 700, cursor: 'pointer', lineHeight: 1, fontSize: '0.85rem', padding: 0 }}>×</button>
                   </div>
-                  <ProgressionValidation key={`${selectedOperation}-${validationRefreshKey}`} idOperation={selectedOperation} typeDefault="Demande opération" />
+                  <ProgressionValidation idOperation={selectedOperation} typeDefault="Demande opération" refreshTrigger={validationRefreshKey} />
                 </div>
               )}
 

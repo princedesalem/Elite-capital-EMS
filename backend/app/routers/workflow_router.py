@@ -680,6 +680,11 @@ def obtenir_progression_validation(id_operation: int, db: Session = Depends(get_
     # Cas spécial : séquence vide (PCA/AG) et opération validée → 100%
     if not sequence and (operation.statut or '').lower() in ('validé', 'valide'):
         role_dem = wf_utils.obtenir_role_validateur(operation.matricule, db)
+        # date_vue du demandeur lui-même pour ce cas PCA/AG auto-validé
+        _vue_self = db.query(models.OperationVue).filter(
+            models.OperationVue.id_operation == id_operation,
+            models.OperationVue.matricule_observateur == str(operation.matricule).upper(),
+        ).first()
         return {
             'id_operation': id_operation,
             'type_demande': operation.type_demande,
@@ -697,7 +702,9 @@ def obtenir_progression_validation(id_operation: int, db: Session = Depends(get_
                 'validateur': f'{employe.prenom} {employe.nom}' if employe else 'Inconnu',
                 'matricule_validateur': operation.matricule,
                 'date': operation.date_demande.isoformat() if operation.date_demande else None,
-                'commentaire': None, 'icone': '✅'
+                'commentaire': None, 'icone': '✅',
+                'date_recu': operation.date_demande.isoformat() if operation.date_demande else None,
+                'date_vue': _vue_self.date_vue.isoformat() if _vue_self else None,
             }],
             'progression': 100, 'statut_final': 'APPROUVÉE',
             'total_etapes': 1, 'etapes_validees': 1, 'etapes_refusees': 0
@@ -795,13 +802,20 @@ def obtenir_progression_validation(id_operation: int, db: Session = Depends(get_
                 "groupe": None,
             })
         else:
-            # Étape non encore effectuée
+            # Étape non encore effectuée.
+            # On cherche le matricule du validateur ATTENDU pour pouvoir lire
+            # sa date_vue dans OPERATION_VUE même avant qu'il ait validé.
+            mat_attendu = wf_utils.obtenir_validateur_pour_role(employe, role, db)
+            emp_attendu = db.query(models.Employe).filter(
+                models.Employe.matricule == mat_attendu
+            ).first() if mat_attendu else None
             etapes.append({
                 "numero": numero_courant,
                 "role": role,
                 "statut": "en attente",
-                "validateur": None,
+                "validateur": f"{emp_attendu.prenom} {emp_attendu.nom}" if emp_attendu else None,
                 "matricule_validateur": None,
+                "matricule_validateur_attendu": mat_attendu,
                 "date": None,
                 "commentaire": None,
                 "icone": "⏳",
@@ -813,6 +827,37 @@ def obtenir_progression_validation(id_operation: int, db: Session = Depends(get_
     validees = len([e for e in etapes if e['statut'] == 'validé'])
     refusees = len([e for e in etapes if e['statut'] == 'refusé'])
     progression = round((validees / len(etapes) * 100) if etapes else 0, 0) if refusees == 0 else 0
+
+    # ── Enrichir chaque étape avec date_recu et date_vue ──────────────────────
+    # La liste etapes est en ordre inversé (AG en tête, RESPONSABLE en dernier).
+    # date_recu[i] = date_demande pour la dernière étape (premier validateur dans
+    # la chaîne originale), sinon timestamp_action de l'étape suivante (i+1).
+    # date_vue = date de consultation depuis OPERATION_VUE.
+    vues_map: dict = {}
+    all_vues = db.query(models.OperationVue).filter(
+        models.OperationVue.id_operation == id_operation
+    ).all()
+    for v in all_vues:
+        if v.matricule_observateur:
+            vues_map[str(v.matricule_observateur).upper()] = v.date_vue
+
+    for i, etape in enumerate(etapes):
+        # date_recu : quand le validateur a reçu la demande
+        if i == len(etapes) - 1:
+            # Dernier dans la liste inversée = premier validateur de la chaîne
+            etape['date_recu'] = operation.date_demande.isoformat() if operation.date_demande else None
+        else:
+            # Reçu quand l'étape suivante (dans l'ordre inversé = l'étape précédente
+            # dans la chaîne originale) a été validée
+            etape['date_recu'] = etapes[i + 1].get('date')
+
+        # date_vue : quand ce validateur a ouvert l'opération
+        mat_key = str(
+            etape.get('matricule_validateur') or etape.get('matricule_validateur_attendu') or ''
+        ).upper()
+        dv = vues_map.get(mat_key)
+        etape['date_vue'] = dv.isoformat() if dv else None
+    # ─────────────────────────────────────────────────────────────────────────
     
     # Déterminer le statut final
     if refusees > 0:
@@ -855,25 +900,21 @@ def marquer_operation_vue(
     matricule_observateur: str,
     db: Session = Depends(get_db),
 ):
-    """Enregistre, si absent, la premi�re consultation d'une op�ration par un utilisateur.
+    """Enregistre, si absent, la première consultation d'une opération par un utilisateur.
 
-    Idempotent : si une trace existe d�j� pour ce couple, on ne fait rien et
-    on renvoie la trace existante.  L'auteur de la demande est ignor�
-    (pas d'auto-marquage de sa propre op�ration).
+    Idempotent : si une trace existe déjà pour ce couple, on ne fait rien et
+    on renvoie la trace existante.  Tout le monde est enregistré, y compris
+    le demandeur lui-même (traçabilité complète).
     """
     op = db.query(models.Operation).filter(
         models.Operation.id_operation == id_operation
     ).first()
     if not op:
-        raise HTTPException(status_code=404, detail="Op�ration introuvable")
+        raise HTTPException(status_code=404, detail="Opération introuvable")
 
     matricule = (matricule_observateur or '').strip().upper()
     if not matricule:
         raise HTTPException(status_code=400, detail="matricule_observateur requis")
-
-    # On n'enregistre pas la consultation par le demandeur lui-m�me.
-    if op.matricule and str(op.matricule).upper() == matricule:
-        return {"ok": True, "skipped": "demandeur"}
 
     existing = db.query(models.OperationVue).filter(
         models.OperationVue.id_operation == id_operation,
@@ -888,7 +929,7 @@ def marquer_operation_vue(
 
     emp = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
     nom = f"{emp.prenom or ''} {emp.nom or ''}".strip() if emp else None
-    role = emp.role if emp else None
+    role = emp.fonction if emp else None
 
     vue = models.OperationVue(
         id_operation=id_operation,
@@ -913,6 +954,18 @@ def marquer_operation_vue(
         "already": False,
         "date_vue": vue.date_vue.isoformat() if vue and vue.date_vue else None,
     }
+
+
+@router.get('/mes-vues/{matricule}')
+def lister_mes_vues(matricule: str, db: Session = Depends(get_db)):
+    """Retourne la liste des id_operation que cet utilisateur a déjà consultés.
+    Utilisé par le frontend pour initialiser l'état 'vu' persistant au chargement.
+    """
+    mat = (matricule or '').strip().upper()
+    rows = db.query(models.OperationVue.id_operation).filter(
+        models.OperationVue.matricule_observateur == mat
+    ).all()
+    return [r.id_operation for r in rows]
 
 
 @router.get('/vues/{id_operation}')

@@ -64,4 +64,49 @@ describe('ProtectedRoute', () => {
     )
     expect(screen.getByText('Open page')).toBeInTheDocument()
   })
+
+  // ── Tests fix : loading state — ne pas rediriger pendant la vérification auth ──
+
+  it('ne redirige pas vers /login quand loading=true (même si user est null)', () => {
+    useAuth.mockReturnValue({ user: null, loading: true })
+    render(
+      <MemoryRouter initialEntries={['/protected']}>
+        <Routes>
+          <Route path="/protected" element={<ProtectedRoute><div>Protected content</div></ProtectedRoute>} />
+          <Route path="/login" element={<div>Login page</div>} />
+        </Routes>
+      </MemoryRouter>
+    )
+    // Pendant le chargement : ni le contenu protégé ni la page login ne doit s'afficher
+    expect(screen.queryByText('Login page')).not.toBeInTheDocument()
+    expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
+  })
+
+  it('redirige vers /login quand loading=false et user=null', () => {
+    useAuth.mockReturnValue({ user: null, loading: false })
+    render(
+      <MemoryRouter initialEntries={['/protected']}>
+        <Routes>
+          <Route path="/protected" element={<ProtectedRoute><div>Protected content</div></ProtectedRoute>} />
+          <Route path="/login" element={<div>Login page</div>} />
+        </Routes>
+      </MemoryRouter>
+    )
+    expect(screen.getByText('Login page')).toBeInTheDocument()
+    expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
+  })
+
+  it('affiche le contenu quand loading=false et user renseigné', () => {
+    useAuth.mockReturnValue({ user: { role: 'EMPLOYE' }, loading: false })
+    render(
+      <MemoryRouter initialEntries={['/protected']}>
+        <Routes>
+          <Route path="/protected" element={<ProtectedRoute><div>Protected content</div></ProtectedRoute>} />
+          <Route path="/login" element={<div>Login page</div>} />
+        </Routes>
+      </MemoryRouter>
+    )
+    expect(screen.getByText('Protected content')).toBeInTheDocument()
+    expect(screen.queryByText('Login page')).not.toBeInTheDocument()
+  })
 })

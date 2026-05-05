@@ -23,7 +23,9 @@ vi.mock('../contexts/AuthContext', () => ({
   }),
 }))
 
-vi.mock('../components/WorkflowModal', () => ({ default: () => null }))
+vi.mock('../components/WorkflowModal', () => ({
+  default: ({ isOpen, operationId }) => (isOpen ? <div data-testid="workflow-modal" data-op-id={String(operationId)} /> : null),
+}))
 
 const baseMission = {
   id_operation: 55,
@@ -296,6 +298,33 @@ describe('FraisPage supprimer-preuve', () => {
         `/api/missions/frais/${FRAIS_ID}/supprimer-preuve`,
         expect.objectContaining({ params: expect.objectContaining({ matricule: 1001, index: 0 }) }),
       )
+    })
+  })
+})
+
+describe('FraisPage row click', () => {
+  beforeEach(() => {
+    apiGetMock.mockReset()
+    apiPostMock.mockReset()
+    setupMocks()
+  })
+
+  it('ouvre WorkflowModal avec le bon operationId au clic sur une ligne (premier vu)', async () => {
+    await act(async () => {
+      render(<MemoryRouter><FraisPage /></MemoryRouter>)
+    })
+
+    // Attendre qu'au moins une ligne s'affiche dans le tableau
+    await waitFor(() => {
+      const rows = document.querySelectorAll('tr[style*="cursor"]')
+      expect(rows.length).toBeGreaterThan(0)
+    })
+    const row = document.querySelector('tr[style*="cursor"]')
+    fireEvent.click(row)
+
+    await waitFor(() => {
+      const modal = screen.getByTestId('workflow-modal')
+      expect(modal.getAttribute('data-op-id')).toBe('55')
     })
   })
 })

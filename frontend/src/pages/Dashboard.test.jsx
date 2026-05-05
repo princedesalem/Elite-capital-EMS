@@ -249,3 +249,62 @@ describe('Dashboard — état de chargement', () => {
     expect(screen.getByText(/Accès refusé/i)).toBeInTheDocument()
   })
 })
+
+// ─── Suite 6: Gradient header (charte graphique) ─────────────────────────────
+
+describe('Dashboard — gradient header (charte graphique)', () => {
+  const BRAND_GRADIENT = 'linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%)'
+
+  beforeEach(() => {
+    api.get.mockImplementation((url) => {
+      if (url.includes('/employees/')) return Promise.resolve({ data: mockEmploye })
+      if (url.includes('/dashboard/analytics/')) return Promise.resolve({ data: mockAnalytics })
+      return Promise.resolve({ data: null })
+    })
+  })
+
+  afterEach(() => { vi.clearAllMocks() })
+
+  it('le header du profil utilise le BRAND_GRADIENT navy (pas de rouge)', async () => {
+    const { container } = await renderDashboard()
+    // Le header compact est le premier div enfant avec un background gradient
+    const allDivs = container.querySelectorAll('div[style]')
+    const headerDiv = Array.from(allDivs).find(
+      d => d.style.background && d.style.background.includes('02162e')
+    )
+    expect(headerDiv).toBeTruthy()
+    expect(headerDiv.style.background).toBe(BRAND_GRADIENT)
+  })
+
+  it('le header du profil ne contient pas #ce2b2b (rouge foncé)', async () => {
+    const { container } = await renderDashboard()
+    const allDivs = container.querySelectorAll('div[style]')
+    const gradientDivs = Array.from(allDivs).filter(
+      d => d.style.background && d.style.background.includes('02162e')
+    )
+    gradientDivs.forEach(d => {
+      expect(d.style.background).not.toContain('ce2b2b')
+    })
+  })
+
+  it('le header du profil ne contient pas #1b4f9e (gradient incorrect utilisé précédemment)', async () => {
+    const { container } = await renderDashboard()
+    const allDivs = container.querySelectorAll('div[style]')
+    const gradientDivs = Array.from(allDivs).filter(
+      d => d.style.background && d.style.background.includes('02162e')
+    )
+    gradientDivs.forEach(d => {
+      expect(d.style.background).not.toContain('1b4f9e')
+    })
+  })
+
+  it('le gradient termine avec la teinte navy #274a73', async () => {
+    const { container } = await renderDashboard()
+    const allDivs = container.querySelectorAll('div[style]')
+    const headerDiv = Array.from(allDivs).find(
+      d => d.style.background && d.style.background.includes('02162e')
+    )
+    expect(headerDiv).toBeTruthy()
+    expect(headerDiv.style.background).toContain('274a73')
+  })
+})

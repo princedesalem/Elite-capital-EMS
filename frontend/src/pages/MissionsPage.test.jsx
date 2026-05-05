@@ -24,7 +24,7 @@ vi.mock('../contexts/AuthContext', () => ({
 }))
 
 vi.mock('../components/WorkflowModal', () => ({
-  default: () => null,
+  default: ({ isOpen, operationId }) => (isOpen ? <div data-testid="workflow-modal" data-op-id={String(operationId)} /> : null),
 }))
 
 describe('MissionsPage cancellation', () => {
@@ -78,6 +78,22 @@ describe('MissionsPage cancellation', () => {
 
     await waitFor(() => {
       expect(apiDeleteMock).toHaveBeenCalledWith('/api/operations/42')
+    })
+  })
+
+  it('ouvre WorkflowModal avec le bon operationId au clic sur une ligne (premier vu)', async () => {
+    await act(async () => {
+      render(<MemoryRouter><MissionsPage /></MemoryRouter>)
+    })
+
+    const cancelBtn = await screen.findByRole('button', { name: 'Annuler' })
+    const row = cancelBtn.closest('tr')
+    expect(row).toBeTruthy()
+    fireEvent.click(row)
+
+    await waitFor(() => {
+      const modal = screen.getByTestId('workflow-modal')
+      expect(modal.getAttribute('data-op-id')).toBe('42')
     })
   })
 })

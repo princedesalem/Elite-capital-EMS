@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import CongesPage from './CongesPage'
 
@@ -9,13 +9,16 @@ const apiGetMock = vi.fn((url) => {
   if (url.includes('/api/conges/historique/')) return Promise.resolve({ data: [] })
   if (url.includes('/api/workflow/boite/')) return Promise.resolve({ data: {} })
   if (url.includes('/api/conges/solde/')) return Promise.resolve({ data: { solde_conges: 12 } })
+  if (url.includes('/api/workflow/progression/')) return Promise.resolve({ data: { etapes: [], progression: 0, statut_final: 'EN COURS', demandeur: '', type_demande: '', date_demande: '' } })
   return Promise.resolve({ data: {} })
 })
+
+const apiPostMock = vi.fn(() => Promise.resolve({ data: {} }))
 
 vi.mock('../services/api', () => ({
   default: {
     get: (...args) => apiGetMock(...args),
-    post: vi.fn(() => Promise.resolve({ data: {} })),
+    post: (...args) => apiPostMock(...args),
     put: vi.fn(() => Promise.resolve({ data: {} })),
     delete: vi.fn(() => Promise.resolve({ data: {} })),
   },
@@ -39,8 +42,11 @@ describe('CongesPage', () => {
       if (url.includes('/api/conges/historique/')) return Promise.resolve({ data: [] })
       if (url.includes('/api/workflow/boite/')) return Promise.resolve({ data: {} })
       if (url.includes('/api/conges/solde/')) return Promise.resolve({ data: { solde_conges: 12 } })
+      if (url.includes('/api/workflow/progression/')) return Promise.resolve({ data: { etapes: [], progression: 0, statut_final: 'EN COURS', demandeur: '', type_demande: '', date_demande: '' } })
       return Promise.resolve({ data: {} })
     })
+    apiPostMock.mockReset()
+    apiPostMock.mockResolvedValue({ data: {} })
   })
 
   it('calcule la duree ouvrable en excluant samedi et dimanche', async () => {
@@ -439,4 +445,51 @@ describe('CongesPage', () => {
     expect(screen.getByTitle('Remplaçant')).toBeInTheDocument()
     expect(screen.getByTitle('Télécharger PDF')).toBeInTheDocument()
   })
-})
+  it('appelle marquer-vu au clic sur une ligne du tableau (premier vu)', async () => {
+    apiGetMock.mockImplementation((url) => {
+      if (url.includes('/api/conges/historique/')) return Promise.resolve({ data: [] })
+      if (url.includes('/api/workflow/boite/')) {
+        return Promise.resolve({
+          data: {
+            envoye: [],
+            recu: [{
+              id_operation: 4242,
+              type_demande: 'conge',
+              statut: 'en attente',
+              motif: 'Repos',
+              date_debut: '2026-07-01',
+              date_fin: '2026-07-05',
+              date_demande: '2026-06-20',
+              demandeur_matricule: '2002',
+              demandeur_nom: 'Dupont Paul',
+            }],
+            valide: [], refuse: [],
+          },
+        })
+      }
+      if (url.includes('/api/conges/solde/')) return Promise.resolve({ data: { solde_conges: 12 } })
+      if (url.includes('/api/workflow/progression/')) return Promise.resolve({ data: { etapes: [], progression: 0, statut_final: 'EN COURS', demandeur: '', type_demande: '', date_demande: '' } })
+      return Promise.resolve({ data: {} })
+    })
+
+    await act(async () => {
+      render(<MemoryRouter><CongesPage /></MemoryRouter>)
+      await Promise.resolve()
+    })
+
+    fireEvent.click(screen.getByText(/Re[çc]u/i))
+
+    // La ligne du tableau a un onClick qui ouvre WorkflowModal
+    const row = await screen.findByText(/Dupont Paul/i)
+    fireEvent.click(row.closest('tr'))
+
+    await waitFor(() => {
+      expect(apiPostMock).toHaveBeenCalledWith(
+        '/api/workflow/marquer-vu/4242',
+        null,
+        expect.objectContaining({
+          params: { matricule_observateur: '1001' },
+        })
+      )
+    })
+  })})

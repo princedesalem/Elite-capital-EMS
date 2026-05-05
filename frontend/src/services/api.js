@@ -28,13 +28,19 @@ api.interceptors.request.use(config => {
 
 const MUTATING_METHODS = new Set(['post', 'put', 'patch', 'delete'])
 
+// URLs dont les mutations ne doivent pas déclencher un rechargement des pages.
+// Ex: marquer-vu est un POST de traçage (audit) qui ne change pas les données affichées.
+const SILENT_URL_PATTERNS = [/\/marquer-vu\//]
+
 api.interceptors.response.use(
   response => {
     try {
       const method = String(response?.config?.method || '').toLowerCase()
-      if (MUTATING_METHODS.has(method)) {
+      const url = response?.config?.url || ''
+      const isSilent = SILENT_URL_PATTERNS.some(p => p.test(url))
+      if (MUTATING_METHODS.has(method) && !isSilent) {
         emit(DATA_CHANGED, {
-          url: response?.config?.url,
+          url,
           method,
           status: response?.status,
         })
