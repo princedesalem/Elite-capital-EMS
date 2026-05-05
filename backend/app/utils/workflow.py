@@ -57,6 +57,10 @@ def determiner_sequence_validation(
             is_ecg = True
             dernier_validateur = 'AG'
 
+    # Court-circuit : Assistante Administrateur Général → seul le terminal valide
+    if 'assistante administrateur' in (employe.fonction or '').lower():
+        return [dernier_validateur]
+
     def _dept_rh_shortcut_active() -> bool:
         if not employe.dept_id:
             return False

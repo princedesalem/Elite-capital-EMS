@@ -2,6 +2,7 @@
 Router pour l'export PDF des opérations avec résumé et historique de workflow.
 """
 import os
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -17,6 +18,27 @@ _CG_REGULAR = os.path.join(_FONTS_DIR, 'GOTHIC.TTF')
 _CG_BOLD = os.path.join(_FONTS_DIR, 'GOTHICB.TTF')
 _CG_ITALIC = os.path.join(_FONTS_DIR, 'GOTHICI.TTF')
 # NOTE: checked dynamically per-request in PDFReport.__init__ so no restart needed
+
+# ── Logos entités ──────────────────────────────────────────────────────────
+_LOGOS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logos')
+_ENTITY_LOGOS = {
+    'ELCAM': os.path.join(_LOGOS_DIR, 'elcam.jpg'),
+    'EXCA':  os.path.join(_LOGOS_DIR, 'exca.jpg'),
+    'ECG':   os.path.join(_LOGOS_DIR, 'ecg.jpg'),
+}
+
+
+def _get_logo_path(matricule: str, db: Session) -> Optional[str]:
+    """Retourne le chemin absolu du logo de l'entité de l'employé, ou None si absent."""
+    emp = db.query(models.Employe).filter(models.Employe.matricule == str(matricule)).first()
+    if not emp or not emp.id_entite:
+        return None
+    entite = db.query(models.Entite).filter(models.Entite.id_entite == emp.id_entite).first()
+    if not entite:
+        return None
+    path = _ENTITY_LOGOS.get((entite.nom or '').upper())
+    return path if path and os.path.exists(path) else None
+
 
 router = APIRouter(prefix='/api/pdf', tags=['pdf'])
 
@@ -36,9 +58,10 @@ STATUS_COLORS = {
 
 
 class PDFReport(FPDF):
-    def __init__(self, title=''):
+    def __init__(self, title='', logo_path=None):
         super().__init__()
         self._title = title
+        self._logo_path = logo_path
         self.set_auto_page_break(auto=True, margin=20)
         # Evaluate at generation time so fonts copied after startup work immediately
         has_cg = os.path.exists(_CG_REGULAR) and os.path.exists(_CG_BOLD)
@@ -51,6 +74,11 @@ class PDFReport(FPDF):
         self._body_font_italic = 'I' if (not has_cg or os.path.exists(_CG_ITALIC)) else ''
 
     def header(self):
+        if self._logo_path and os.path.exists(self._logo_path):
+            self.image(self._logo_path, x=10, y=8, w=28)
+            self.set_xy(42, 8)
+        else:
+            self.set_xy(10, 8)
         self.set_font(self._body_font, 'B', 18)
         self.set_text_color(*BRAND_COLOR)
         self.cell(0, 8, 'ELITE CAPITAL GROUP', new_x='LMARGIN', new_y='NEXT')
@@ -195,7 +223,7 @@ def export_mission_pdf(id_mission: int, db: Session = Depends(get_db)):
 
     demandeur = _get_employee_info(operation.matricule, db)
 
-    pdf = PDFReport(title='ORDRE DE MISSION')
+    pdf = PDFReport(title='ORDRE DE MISSION', logo_path=_get_logo_path(operation.matricule, db))
     pdf.alias_nb_pages()
     pdf.add_page()
 
@@ -318,7 +346,7 @@ def export_frais_pdf(id_mission: int, db: Session = Depends(get_db)):
         d = _get_employee_info(operation.matricule, db)
         missionnaires_str = f"{d['prenom']} {d['nom']}"
 
-    pdf = PDFReport(title='FRAIS DE MISSION')
+    pdf = PDFReport(title='FRAIS DE MISSION', logo_path=_get_logo_path(operation.matricule, db))
     pdf.alias_nb_pages()
     pdf.add_page()
 
@@ -421,7 +449,7 @@ def export_conge_pdf(id_operation: int, db: Session = Depends(get_db)):
     demandeur = _get_employee_info(operation.matricule, db)
     employe = db.query(models.Employe).filter(models.Employe.matricule == operation.matricule).first()
 
-    pdf = PDFReport(title='DEMANDE DE CONGÉ')
+    pdf = PDFReport(title='DEMANDE DE CONGÉ', logo_path=_get_logo_path(operation.matricule, db))
     pdf.alias_nb_pages()
     pdf.add_page()
 
@@ -482,7 +510,7 @@ def export_permission_pdf(id_operation: int, db: Session = Depends(get_db)):
     perm = db.query(models.Permission).filter(models.Permission.id_permission == id_operation).first()
     perm_conv = db.query(models.PermConventionelle).filter(models.PermConventionelle.id_perm_c == id_operation).first()
 
-    pdf = PDFReport(title='DEMANDE DE PERMISSION')
+    pdf = PDFReport(title='DEMANDE DE PERMISSION', logo_path=_get_logo_path(operation.matricule, db))
     pdf.alias_nb_pages()
     pdf.add_page()
 
@@ -544,7 +572,7 @@ def export_sortie_pdf(id_operation: int, db: Session = Depends(get_db)):
     demandeur = _get_employee_info(operation.matricule, db)
     sortie = db.query(models.Sortie).filter(models.Sortie.id_operation == id_operation).first()
 
-    pdf = PDFReport(title='DEMANDE DE SORTIE')
+    pdf = PDFReport(title='DEMANDE DE SORTIE', logo_path=_get_logo_path(operation.matricule, db))
     pdf.alias_nb_pages()
     pdf.add_page()
 

@@ -4,11 +4,12 @@ Les fiches sont importées depuis des fichiers .docx, parsées et stockées en D
 Chaque fiche est associée à une fonction (poste) unique.
 """
 import io
+import os
 import re
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body, Request, Response, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -17,6 +18,27 @@ from .. import models
 from ..utils import security
 
 router = APIRouter(prefix='/api/fiches-poste', tags=['fiches-poste'])
+
+
+# ── Logos entités (dupliqué depuis pdf_router pour éviter import circulaire) ───────────
+_LOGOS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logos')
+_ENTITY_LOGOS = {
+    'ELCAM': os.path.join(_LOGOS_DIR, 'elcam.jpg'),
+    'EXCA':  os.path.join(_LOGOS_DIR, 'exca.jpg'),
+    'ECG':   os.path.join(_LOGOS_DIR, 'ecg.jpg'),
+}
+
+
+def _get_logo_path(matricule: str, db: Session) -> Optional[str]:
+    """Retourne le chemin absolu du logo de l'entité de l'employé, ou None si absent."""
+    emp = db.query(models.Employe).filter(models.Employe.matricule == str(matricule)).first()
+    if not emp or not emp.id_entite:
+        return None
+    entite = db.query(models.Entite).filter(models.Entite.id_entite == emp.id_entite).first()
+    if not entite:
+        return None
+    path = _ENTITY_LOGOS.get((entite.nom or '').upper())
+    return path if path and os.path.exists(path) else None
 
 
 # Rôles ayant l'accès complet (toutes les fiches)
@@ -995,7 +1017,7 @@ def reassigner_fiche(
     return _fiche_to_dict(fiche)
 
 
-def _build_pdf_html(fiche: models.FichePosteTemplate, titulaires: list) -> str:
+def _build_pdf_html(fiche: models.FichePosteTemplate, titulaires: list, logo_path: Optional[str] = None) -> str:
     """Construit l'HTML complet pour l'export PDF (en-tête + html_content)."""
     html_body = (fiche.html_content or '').strip()
     if not html_body:
@@ -1050,7 +1072,8 @@ def _build_pdf_html(fiche: models.FichePosteTemplate, titulaires: list) -> str:
   p {{ margin: 4px 0; }}
   .fp-red {{ color: #c00000 !important; font-weight: 600; }}
   .fp-red * {{ color: #c00000 !important; }}
-  img {{ display: none; }}
+  .entity-logo {{ height: 40px; float: left; margin-right: 14px; margin-top: 4px; }}
+  .body img {{ display: none; }}
 </style></head>
 <body>
   <div class=\"head\">
@@ -1064,7 +1087,7 @@ def _build_pdf_html(fiche: models.FichePosteTemplate, titulaires: list) -> str:
 
 
 @router.get('/{id_template}/pdf', summary='Exporter une fiche de poste en PDF')
-def exporter_pdf(id_template: int, request: Request, db: Session = Depends(get_db)):
+def exporter_pdf(id_template: int, request: Request, matricule: Optional[str] = Query(None), db: Session = Depends(get_db)):
     """Génère un PDF du rendu HTML mammoth (sans les sections de signatures)."""
     fiche = db.query(models.FichePosteTemplate).filter(
         models.FichePosteTemplate.id_template == id_template
@@ -1099,7 +1122,8 @@ def exporter_pdf(id_template: int, request: Request, db: Session = Depends(get_d
         for t in titulaires_rows
     ]
 
-    full_html = _build_pdf_html(fiche, titulaires_data)
+    logo_path = _get_logo_path(matricule, db) if matricule else None
+    full_html = _build_pdf_html(fiche, titulaires_data, logo_path)
 
     # Tenter WeasyPrint
     try:
