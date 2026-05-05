@@ -20,7 +20,7 @@ _CG_ITALIC = os.path.join(_FONTS_DIR, 'GOTHICI.TTF')
 # NOTE: checked dynamically per-request in PDFReport.__init__ so no restart needed
 
 # ── Logos entités ──────────────────────────────────────────────────────────
-_LOGOS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logos')
+_LOGOS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logos')
 _ENTITY_LOGOS = {
     'ELCAM': os.path.join(_LOGOS_DIR, 'elcam.jpg'),
     'EXCA':  os.path.join(_LOGOS_DIR, 'exca.jpg'),

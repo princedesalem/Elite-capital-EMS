@@ -21,7 +21,7 @@ router = APIRouter(prefix='/api/fiches-poste', tags=['fiches-poste'])
 
 
 # ── Logos entités (dupliqué depuis pdf_router pour éviter import circulaire) ───────────
-_LOGOS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logos')
+_LOGOS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logos')
 _ENTITY_LOGOS = {
     'ELCAM': os.path.join(_LOGOS_DIR, 'elcam.jpg'),
     'EXCA':  os.path.join(_LOGOS_DIR, 'exca.jpg'),
