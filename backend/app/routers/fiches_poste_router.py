@@ -1054,11 +1054,11 @@ def _build_pdf_html(fiche: models.FichePosteTemplate, titulaires: list, logo_pat
   @font-face {{ font-family: 'Century Gothic'; font-weight: 400; font-style: normal;  src: url('file://{_font_regular}'); }}
   @font-face {{ font-family: 'Century Gothic'; font-weight: 700; font-style: normal;  src: url('file://{_font_bold}'); }}
   @font-face {{ font-family: 'Century Gothic'; font-weight: 400; font-style: italic;  src: url('file://{_font_italic}'); }}
-  @page {{ size: A4; margin: 18mm 14mm; }}
+  @page {{ size: A4; margin: 6mm 14mm 18mm 14mm; }}
+  html, body {{ margin: 0; padding: 0; }}
   body {{ font-family: 'Century Gothic', CenturyGothic, 'AppleGothic', sans-serif; font-size: 10.5pt; color: #1a1a1a; }}
-  .head {{ background: #021630; color: #fff; padding: 14px 18px; border-bottom: 3px solid #c00000; }}
-  .head .org {{ font-size: 8pt; letter-spacing: 0.18em; opacity: 0.7; text-transform: uppercase; }}
-  .head h1 {{ margin: 4px 0 2px 0; font-size: 14pt; letter-spacing: 0.02em; }}
+  .head {{ background: #021630; color: #fff; padding: 14px 18px; border-bottom: 3px solid #c00000; overflow: hidden; }}
+  .head h1 {{ color: #fff !important; margin: 4px 0 2px 0; font-size: 14pt; letter-spacing: 0.02em; }}
   .head .fct {{ font-size: 11pt; font-weight: 600; color: #c9d8f0; }}
   .titulaires {{ margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.18); font-size: 9pt; }}
   .titulaires .lbl {{ opacity: 0.7; }}
@@ -1072,15 +1072,17 @@ def _build_pdf_html(fiche: models.FichePosteTemplate, titulaires: list, logo_pat
   p {{ margin: 4px 0; }}
   .fp-red {{ color: #c00000 !important; font-weight: 600; }}
   .fp-red * {{ color: #c00000 !important; }}
-  .entity-logo {{ height: 40px; float: left; margin-right: 14px; margin-top: 4px; }}
-  .body img {{ display: none; }}
+  .head-logo {{ height: 60px; width: auto; display: block; margin: 0 0 24px 0; }}
+  img:not(.head-logo) {{ display: none !important; }}
 </style></head>
 <body>
+  {f'<img src="file://{logo_path}" class="head-logo" alt="logo" />' if logo_path else ''}
   <div class=\"head\">
-    <div class=\"org\">ELITE CAPITAL GROUP S.A.</div>
-    <h1>FICHE DE POSTE</h1>
-    <div class=\"fct\">{fiche.fonction}</div>
-    {titulaires_html}
+    <div class=\"head-text\">
+      <h1>FICHE DE POSTE</h1>
+      <div class=\"fct\">{fiche.fonction}</div>
+      {titulaires_html}
+    </div>
   </div>
   <div class=\"body\">{html_body}</div>
 </body></html>"""

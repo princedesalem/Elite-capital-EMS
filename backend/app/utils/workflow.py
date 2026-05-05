@@ -613,6 +613,10 @@ def valider_operation(
         role_validation_effectif = prochain_role
     else:
         role_validation_effectif = role_validateur
+
+    validateur_emp = db.query(Employe).filter(
+        Employe.matricule == matricule_validateur
+    ).first()
     
     # Créer la validation
     validation = Validation(
@@ -621,6 +625,7 @@ def valider_operation(
         role_validateur=role_validation_effectif,
         statut_validation=statut,
         commentaire=commentaire,
+        signature_url=(validateur_emp.signature_url if validateur_emp else None),
         timestamp_action=datetime.now()
     )
     db.add(validation)

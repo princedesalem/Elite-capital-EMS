@@ -144,6 +144,7 @@ class Employe(Base):
     n1 = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
     n1_fonction = Column(String(255), nullable=True)
     photo_url = Column(String(500), nullable=True)
+    signature_url = Column(String(500), nullable=True)
     contact_urgence = Column(String(30), nullable=True)
     statut_matrimonial = Column(Enum(StatutMatrimonialEnum), nullable=True)
     nombre_enfants = Column(Integer, nullable=True, default=0)
@@ -496,6 +497,7 @@ class Validation(Base):
     role_validateur = Column(String(50))  # RESPONSABLE, DIRECTEUR, DFC, RH, DG, PCA, AG
     statut_validation = Column(String(20))
     commentaire = Column(Text)
+    signature_url = Column(String(500), nullable=True)
     timestamp_action = Column(DateTime, default=datetime.utcnow)
 
 class Creation(Base):

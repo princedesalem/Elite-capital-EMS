@@ -9,9 +9,11 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState(null)
-  const [uploading, setUploading] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [uploadingSignature, setUploadingSignature] = useState(false)
   const [success, setSuccess] = useState(null)
   const fileRef = useRef(null)
+  const signatureRef = useRef(null)
 
   useEffect(() => {
     if (!user?.matricule) return
@@ -26,7 +28,7 @@ export default function ProfilePage() {
     if (!file) return
     if (!file.type.startsWith('image/')) { setErr("Format d'image invalide"); return }
     if (file.size > 5 * 1024 * 1024) { setErr("L'image est trop volumineuse"); return }
-    setUploading(true)
+    setUploadingPhoto(true)
     setErr(null)
     setSuccess(null)
     try {
@@ -40,7 +42,7 @@ export default function ProfilePage() {
     } catch {
       setErr("Erreur lors de l'upload de la photo")
     } finally {
-      setUploading(false)
+      setUploadingPhoto(false)
       if (fileRef.current) fileRef.current.value = ''
     }
   }
@@ -48,7 +50,7 @@ export default function ProfilePage() {
   async function handleDeletePhoto() {
     const ok = await confirmDialog({ title: 'Supprimer la photo', message: 'Êtes-vous sûr de vouloir supprimer cette photo ?', variant: 'danger', confirmLabel: 'Supprimer' })
     if (!ok) return
-    setUploading(true)
+    setUploadingPhoto(true)
     setErr(null)
     setSuccess(null)
     try {
@@ -58,7 +60,77 @@ export default function ProfilePage() {
     } catch {
       setErr("Erreur lors de la suppression de la photo")
     } finally {
-      setUploading(false)
+      setUploadingPhoto(false)
+    }
+  }
+
+  function _cropSignatureToBlob(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onerror = reject
+      reader.onload = (ev) => {
+        const img = new Image()
+        img.onerror = reject
+        img.onload = () => {
+          const CANVAS_W = 400
+          const CANVAS_H = 120
+          const canvas = document.createElement('canvas')
+          canvas.width = CANVAS_W
+          canvas.height = CANVAS_H
+          const ctx = canvas.getContext('2d')
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+          const ratio = Math.min(CANVAS_W / img.width, CANVAS_H / img.height)
+          const w = img.width * ratio
+          const h = img.height * ratio
+          ctx.drawImage(img, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h)
+          canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('toBlob failed')), 'image/png')
+        }
+        img.src = ev.target.result
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  async function handleSignatureChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) { setErr("Format de signature invalide"); return }
+    if (file.size > 5 * 1024 * 1024) { setErr("La signature est trop volumineuse"); return }
+    setUploadingSignature(true)
+    setErr(null)
+    setSuccess(null)
+    try {
+      const blob = await _cropSignatureToBlob(file)
+      const form = new FormData()
+      form.append('signature', blob, 'signature.png')
+      const res = await api.post(`/employees/${user.matricule}/signature`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setProfile(prev => ({ ...prev, signature_url: res.data.signature_url }))
+      setSuccess("Signature mise à jour avec succès")
+    } catch {
+      setErr("Erreur lors de l'upload de la signature")
+    } finally {
+      setUploadingSignature(false)
+      if (signatureRef.current) signatureRef.current.value = ''
+    }
+  }
+
+  async function handleDeleteSignature() {
+    const ok = await confirmDialog({ title: 'Supprimer la signature', message: 'Êtes-vous sûr de vouloir supprimer cette signature ?', variant: 'danger', confirmLabel: 'Supprimer' })
+    if (!ok) return
+    setUploadingSignature(true)
+    setErr(null)
+    setSuccess(null)
+    try {
+      await api.delete(`/employees/${user.matricule}/signature`)
+      setProfile(prev => ({ ...prev, signature_url: null }))
+      setSuccess("Signature supprimée avec succès")
+    } catch {
+      setErr("Erreur lors de la suppression de la signature")
+    } finally {
+      setUploadingSignature(false)
     }
   }
 
@@ -101,7 +173,7 @@ export default function ProfilePage() {
             )}
             <button
               onClick={() => fileRef.current?.click()}
-              disabled={uploading}
+              disabled={uploadingPhoto}
               style={{
                 position: 'absolute', bottom: 2, right: 2,
                 width: 30, height: 30, borderRadius: '50%',
@@ -113,27 +185,63 @@ export default function ProfilePage() {
             >✎</button>
           </div>
 
-          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} />
+          <input data-testid="photo-input" ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} />
 
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
             <button
               className="button"
               onClick={() => fileRef.current?.click()}
-              disabled={uploading}
+              disabled={uploadingPhoto}
               style={{ padding: '5px 14px', fontSize: '0.8rem' }}
             >
-              {uploading ? "Envoi en cours..." : profile?.photo_url ? "Changer la photo" : "Ajouter une photo"}
+              {uploadingPhoto ? "Envoi en cours..." : profile?.photo_url ? "Changer la photo" : "Ajouter une photo"}
             </button>
             {profile?.photo_url && (
               <button
                 className="button"
                 onClick={handleDeletePhoto}
-                disabled={uploading}
+                disabled={uploadingPhoto}
                 style={{ padding: '5px 14px', fontSize: '0.8rem', background: 'rgb(208,32,43)' }}
               >
                 {"Supprimer"}
               </button>
             )}
+          </div>
+
+          <div style={{ marginTop: 18, width: '100%', maxWidth: 360, borderTop: '1px solid #e5e7eb', paddingTop: 14 }}>
+            <p style={{ margin: '0 0 8px 0', color: '#334155', fontWeight: 600, fontSize: '0.86rem' }}>
+              Signature manuscrite
+            </p>
+            <div style={{ height: 92, border: '1px dashed #cbd5e1', borderRadius: 10, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+              {profile?.signature_url ? (
+                <img src={profile.signature_url} alt="Signature de profil" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+              ) : (
+                <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Aucune signature enregistrée</span>
+              )}
+            </div>
+
+            <input data-testid="signature-input" ref={signatureRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleSignatureChange} />
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button
+                className="button"
+                onClick={() => signatureRef.current?.click()}
+                disabled={uploadingSignature}
+                style={{ padding: '5px 14px', fontSize: '0.8rem' }}
+              >
+                {uploadingSignature ? "Envoi en cours..." : profile?.signature_url ? "Changer la signature" : "Ajouter une signature"}
+              </button>
+              {profile?.signature_url && (
+                <button
+                  className="button"
+                  onClick={handleDeleteSignature}
+                  disabled={uploadingSignature}
+                  style={{ padding: '5px 14px', fontSize: '0.8rem', background: 'rgb(208,32,43)' }}
+                >
+                  {"Supprimer"}
+                </button>
+              )}
+            </div>
           </div>
 
           {err && <p style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: 8 }}>{err}</p>}

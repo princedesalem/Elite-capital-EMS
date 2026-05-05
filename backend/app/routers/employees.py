@@ -406,6 +406,7 @@ def _serialize_employee(e: models.Employe, db: Session, *, viewer_matricule: Opt
     data['id_direction'] = e.id_direction
     data['dept_id'] = e.dept_id
     data['photo_url'] = e.photo_url
+    data['signature_url'] = e.signature_url
     localisation = _resolve_employee_localisation(e, db)
     data['id_localisation'] = localisation.id_localisation if localisation else None
     data['ville'] = localisation.ville if localisation else None
@@ -482,7 +483,7 @@ def _prepare_employee_payload(payload: schemas.EmployeBase, db: Session):
     valid_fields = {
         'matricule', 'nom', 'prenom', 'date_naissance', 'sexe', 'telephone', 'email',
         'diplome', 'solde_conges', 'date_embauche', 'fonction', 'annee_experience', 'n1', 'n1_fonction',
-        'statut_employe', 'photo_url', 'contact_urgence', 'statut_matrimonial', 'nombre_enfants'
+        'statut_employe', 'photo_url', 'signature_url', 'contact_urgence', 'statut_matrimonial', 'nombre_enfants'
     }
     cleaned = {k: v for k, v in source.items() if k in valid_fields}
 
@@ -1365,6 +1366,62 @@ def delete_photo(matricule: str, db: Session = Depends(get_db)):
     e.photo_url = None
     db.commit()
     return {'photo_url': None}
+
+
+@router.post('/{matricule}/signature')
+async def upload_signature(matricule: str, request: Request, db: Session = Depends(get_db)):
+    """Upload or update handwritten signature for an employee (base64 or multipart)."""
+    import base64, os, uuid
+    e = crud.get_employe(db, matricule)
+    if not e:
+        raise HTTPException(status_code=404, detail='Employé introuvable')
+    content_type = request.headers.get('content-type', '')
+    upload_dir = '/app/uploads/signatures'
+    os.makedirs(upload_dir, exist_ok=True)
+    if 'multipart' in content_type:
+        form = await request.form()
+        file = form.get('signature')
+        if not file:
+            raise HTTPException(status_code=400, detail='Champ signature manquant')
+        ext = (file.filename or 'png').rsplit('.', 1)[-1].lower()
+        if ext not in {'jpg', 'jpeg', 'png', 'webp'}:
+            raise HTTPException(status_code=400, detail='Format non supporté')
+        filename = f"{matricule}_{uuid.uuid4().hex[:8]}.{ext}"
+        path = os.path.join(upload_dir, filename)
+        contents = await file.read()
+        with open(path, 'wb') as fp:
+            fp.write(contents)
+        e.signature_url = f'/uploads/signatures/{filename}'
+    else:
+        body = await request.json()
+        data_url = body.get('signature_url', '')
+        if data_url.startswith('data:image'):
+            header, b64 = data_url.split(',', 1)
+            ext = header.split(';')[0].split('/')[-1]
+            if ext not in {'jpg', 'jpeg', 'png', 'webp'}:
+                ext = 'png'
+            filename = f"{matricule}_{uuid.uuid4().hex[:8]}.{ext}"
+            path = os.path.join(upload_dir, filename)
+            raw = base64.b64decode(b64)
+            with open(path, 'wb') as fp:
+                fp.write(raw)
+            e.signature_url = f'/uploads/signatures/{filename}'
+        else:
+            e.signature_url = data_url
+    db.commit()
+    db.refresh(e)
+    return {'signature_url': e.signature_url}
+
+
+@router.delete('/{matricule}/signature')
+def delete_signature(matricule: str, db: Session = Depends(get_db)):
+    """Remove handwritten signature from profile."""
+    e = crud.get_employe(db, matricule)
+    if not e:
+        raise HTTPException(status_code=404, detail='Employé introuvable')
+    e.signature_url = None
+    db.commit()
+    return {'signature_url': None}
 
 
 

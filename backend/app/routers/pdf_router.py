@@ -18,6 +18,7 @@ _CG_REGULAR = os.path.join(_FONTS_DIR, 'GOTHIC.TTF')
 _CG_BOLD = os.path.join(_FONTS_DIR, 'GOTHICB.TTF')
 _CG_ITALIC = os.path.join(_FONTS_DIR, 'GOTHICI.TTF')
 # NOTE: checked dynamically per-request in PDFReport.__init__ so no restart needed
+_BACKEND_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 # ── Logos entités ──────────────────────────────────────────────────────────
 _LOGOS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logos')
@@ -75,17 +76,21 @@ class PDFReport(FPDF):
 
     def header(self):
         if self._logo_path and os.path.exists(self._logo_path):
-            self.image(self._logo_path, x=10, y=8, w=28)
-            self.set_xy(42, 8)
+            self.image(self._logo_path, x=10, y=6, w=60)
+            self.set_xy(10, 26)
+            self.set_font(self._body_font, '', 9)
+            self.set_text_color(120, 120, 120)
+            self.cell(0, 5, 'EMS Platform - Document officiel', new_x='LMARGIN', new_y='NEXT')
+            self.ln(2)
         else:
             self.set_xy(10, 8)
-        self.set_font(self._body_font, 'B', 18)
-        self.set_text_color(*BRAND_COLOR)
-        self.cell(0, 8, 'ELITE CAPITAL GROUP', new_x='LMARGIN', new_y='NEXT')
-        self.set_font(self._body_font, '', 9)
-        self.set_text_color(120, 120, 120)
-        self.cell(0, 5, 'EMS Platform - Document officiel', new_x='LMARGIN', new_y='NEXT')
-        self.ln(2)
+            self.set_font(self._body_font, 'B', 18)
+            self.set_text_color(*BRAND_COLOR)
+            self.cell(0, 8, 'ELITE CAPITAL GROUP', new_x='LMARGIN', new_y='NEXT')
+            self.set_font(self._body_font, '', 9)
+            self.set_text_color(120, 120, 120)
+            self.cell(0, 5, 'EMS Platform - Document officiel', new_x='LMARGIN', new_y='NEXT')
+            self.ln(2)
         # Title bar
         self.set_fill_color(*ACCENT_COLOR)
         self.set_text_color(255, 255, 255)
@@ -151,6 +156,112 @@ class PDFReport(FPDF):
                 self.cell(col_widths[i], 6, str(cell_val or '-'), border=1, fill=fill)
             self.ln()
 
+    def history_table(self, history: list):
+        """Rend le tableau Historique de validation avec colonne Signature avant Commentaire.
+
+        Colonnes : Rôle | Matricule | Validateur | Décision | Date | Signature | Commentaire
+        Largeurs  : 20   | 18        | 35         | 20       | 30   | 42        | 25  = 190 mm
+        """
+        col_widths = [20, 18, 35, 20, 30, 42, 25]
+        headers = ['Rôle', 'Matricule', 'Validateur', 'Décision', 'Date', 'Signature', 'Commentaire']
+        ROW_H = 16  # hauteur de ligne — assez grande pour l'image
+
+        def _draw_header():
+            self.set_fill_color(*TABLE_HEADER_BG)
+            self.set_text_color(*TABLE_HEADER_FG)
+            self.set_font(self._body_font, 'B', 8)
+            for i, h in enumerate(headers):
+                self.cell(col_widths[i], 7, h, border=1, fill=True)
+            self.ln()
+
+        _draw_header()
+
+        for row_idx, h in enumerate(history):
+            if self.get_y() + ROW_H > self.page_break_trigger:
+                self.add_page()
+                _draw_header()
+
+            if row_idx % 2 == 1:
+                self.set_fill_color(*TABLE_ALT_BG)
+            else:
+                self.set_fill_color(255, 255, 255)
+
+            self.set_text_color(0, 0, 0)
+            self.set_font(self._body_font, '', 8)
+            y = self.get_y()
+
+            # Colonnes texte
+            self.cell(col_widths[0], ROW_H, str(h.get('role') or '-'), border=1, fill=True)
+            self.cell(col_widths[1], ROW_H, str(h.get('matricule') or '-'), border=1, fill=True)
+            self.cell(col_widths[2], ROW_H, str(h.get('nom') or '-'), border=1, fill=True)
+
+            # Colonne Décision — colorée selon statut
+            statut_val = str(h.get('statut') or '-')
+            color = STATUS_COLORS.get(statut_val.lower(), (60, 60, 60))
+            self.set_text_color(*color)
+            self.set_font(self._body_font, 'B', 8)
+            self.cell(col_widths[3], ROW_H, statut_val, border=1, fill=True)
+            self.set_text_color(0, 0, 0)
+            self.set_font(self._body_font, '', 8)
+
+            self.cell(col_widths[4], ROW_H, str(h.get('date') or '-'), border=1, fill=True)
+
+            # Colonne Signature — image si disponible
+            sig_x = self.get_x()
+            sig_w = col_widths[5]
+            self.cell(sig_w, ROW_H, '', border=1, fill=True)
+            signature_path = h.get('signature_path')
+            if signature_path and os.path.exists(signature_path):
+                try:
+                    self.image(signature_path, x=sig_x + 2, y=y + 2, h=ROW_H - 4)
+                except Exception:
+                    self.set_xy(sig_x + 2, y + (ROW_H - 6) / 2)
+                    self.set_font(self._body_font, self._body_font_italic, 7)
+                    self.cell(sig_w - 4, 6, 'Illisible')
+                    self.set_font(self._body_font, '', 8)
+            else:
+                self.set_xy(sig_x + 2, y + (ROW_H - 6) / 2)
+                self.set_text_color(160, 160, 160)
+                self.cell(sig_w - 4, 6, '-')
+                self.set_text_color(0, 0, 0)
+
+            # Colonne Commentaire — tronquée proprement
+            com = str(h.get('commentaire') or '-')
+            if len(com) > 25:
+                com = com[:23] + '…'
+            self.set_xy(sig_x + sig_w, y)
+            self.cell(col_widths[6], ROW_H, com, border=1, fill=True)
+
+            self.set_y(y + ROW_H)
+            self.set_x(self.l_margin)
+
+
+def _resolve_upload_path(upload_url: Optional[str]) -> Optional[str]:
+    if not upload_url:
+        return None
+    raw = str(upload_url).strip()
+    if not raw:
+        return None
+
+    candidates = []
+    if raw.startswith('/uploads/'):
+        rel = raw.lstrip('/')
+        candidates.append(os.path.join('/app', rel))
+        candidates.append(os.path.join(_BACKEND_ROOT, rel))
+    elif raw.startswith('uploads/'):
+        candidates.append(os.path.join('/app', raw))
+        candidates.append(os.path.join(_BACKEND_ROOT, raw))
+    elif raw.startswith('/app/uploads/'):
+        candidates.append(raw)
+        candidates.append(os.path.join(_BACKEND_ROOT, raw.replace('/app/', '', 1)))
+    elif os.path.isabs(raw):
+        candidates.append(raw)
+
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+    return None
+
 
 def _get_workflow_history(id_operation: int, db: Session):
     """Get full validation workflow history for an operation."""
@@ -170,6 +281,7 @@ def _get_workflow_history(id_operation: int, db: Session):
             'statut': val.statut_validation or '-',
             'date': val.timestamp_action.strftime('%d/%m/%Y %H:%M') if val.timestamp_action else '-',
             'commentaire': val.commentaire or '',
+            'signature_path': _resolve_upload_path(getattr(val, 'signature_url', None)),
         })
     return history
 
@@ -300,12 +412,7 @@ def export_mission_pdf(id_mission: int, db: Session = Depends(get_db)):
     history = _get_workflow_history(id_mission, db)
     pdf.section_title('Historique de validation')
     if history:
-        wf_rows = [[h['role'], h['matricule'], h['nom'], h['statut'], h['date'], h['commentaire'][:30]] for h in history]
-        pdf.table(
-            ['Rôle', 'Matricule', 'Validateur', 'Décision', 'Date', 'Commentaire'],
-            wf_rows,
-            col_widths=[25, 20, 35, 22, 30, 38]
-        )
+        pdf.history_table(history)
     else:
         pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
         pdf.cell(0, 7, 'Aucune validation enregistrée.', new_x='LMARGIN', new_y='NEXT')
@@ -417,12 +524,7 @@ def export_frais_pdf(id_mission: int, db: Session = Depends(get_db)):
     history = _get_workflow_history(id_mission, db)
     pdf.section_title('Historique de validation')
     if history:
-        wf_rows = [[h['role'], h['matricule'], h['nom'], h['statut'], h['date'], h['commentaire'][:30]] for h in history]
-        pdf.table(
-            ['Rôle', 'Matricule', 'Validateur', 'Décision', 'Date', 'Commentaire'],
-            wf_rows,
-            col_widths=[25, 20, 35, 22, 30, 38]
-        )
+        pdf.history_table(history)
     else:
         pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
         pdf.cell(0, 7, 'Aucune validation enregistrée.', new_x='LMARGIN', new_y='NEXT')
@@ -475,12 +577,7 @@ def export_conge_pdf(id_operation: int, db: Session = Depends(get_db)):
     history = _get_workflow_history(id_operation, db)
     pdf.section_title('Historique de validation')
     if history:
-        wf_rows = [[h['role'], h['matricule'], h['nom'], h['statut'], h['date'], h['commentaire'][:30]] for h in history]
-        pdf.table(
-            ['Rôle', 'Matricule', 'Validateur', 'Décision', 'Date', 'Commentaire'],
-            wf_rows,
-            col_widths=[25, 20, 35, 22, 30, 38]
-        )
+        pdf.history_table(history)
     else:
         pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
         pdf.cell(0, 7, 'Aucune validation enregistrée.', new_x='LMARGIN', new_y='NEXT')
@@ -538,12 +635,7 @@ def export_permission_pdf(id_operation: int, db: Session = Depends(get_db)):
     history = _get_workflow_history(id_operation, db)
     pdf.section_title('Historique de validation')
     if history:
-        wf_rows = [[h['role'], h['matricule'], h['nom'], h['statut'], h['date'], h['commentaire'][:30]] for h in history]
-        pdf.table(
-            ['Rôle', 'Matricule', 'Validateur', 'Décision', 'Date', 'Commentaire'],
-            wf_rows,
-            col_widths=[25, 20, 35, 22, 30, 38]
-        )
+        pdf.history_table(history)
     else:
         pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
         pdf.cell(0, 7, 'Aucune validation enregistrée.', new_x='LMARGIN', new_y='NEXT')
@@ -612,12 +704,7 @@ def export_sortie_pdf(id_operation: int, db: Session = Depends(get_db)):
     history = _get_workflow_history(id_operation, db)
     pdf.section_title('Historique de validation')
     if history:
-        wf_rows = [[h['role'], h['matricule'], h['nom'], h['statut'], h['date'], h['commentaire'][:30]] for h in history]
-        pdf.table(
-            ['Rôle', 'Matricule', 'Validateur', 'Décision', 'Date', 'Commentaire'],
-            wf_rows,
-            col_widths=[25, 20, 35, 22, 30, 38]
-        )
+        pdf.history_table(history)
     else:
         pdf.set_font(pdf._body_font, pdf._body_font_italic, 9)
         pdf.cell(0, 7, 'Aucune validation enregistrée.', new_x='LMARGIN', new_y='NEXT')

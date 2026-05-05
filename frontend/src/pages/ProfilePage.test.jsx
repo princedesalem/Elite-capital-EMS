@@ -30,6 +30,7 @@ const mockProfile = {
   date_embauche: '2022-01-01',
   statut_employe: 'ACTIF',
   photo_url: null,
+  signature_url: null,
 }
 
 const renderPage = () =>
@@ -111,7 +112,7 @@ describe('ProfilePage', () => {
     await waitFor(() => screen.getByRole('button', { name: /ajouter une photo/i }))
 
     // Simulate file input change
-    const input = document.querySelector('input[type="file"]')
+    const input = screen.getByTestId('photo-input')
     const file = new File([new Uint8Array([137, 80, 78, 71])], 'test.png', { type: 'image/png' })
     Object.defineProperty(input, 'files', { value: [file] })
     fireEvent.change(input)
@@ -128,7 +129,7 @@ describe('ProfilePage', () => {
     renderPage()
     await waitFor(() => screen.getByRole('button', { name: /ajouter une photo/i }))
 
-    const input = document.querySelector('input[type="file"]')
+    const input = screen.getByTestId('photo-input')
     const file = new File([new Uint8Array([137, 80, 78, 71])], 'test.png', { type: 'image/png' })
     Object.defineProperty(input, 'files', { value: [file] })
     fireEvent.change(input)
@@ -136,5 +137,53 @@ describe('ProfilePage', () => {
     await waitFor(() => {
       expect(screen.getByText(/erreur lors de l'upload/i)).toBeInTheDocument()
     })
+  })
+  it('renders Ajouter une signature button when no signature', async () => {
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /ajouter une signature/i })).toBeInTheDocument()
+    })
+  })
+
+  it('shows success message after signature upload', async () => {
+    // Mock FileReader + HTMLCanvasElement (jsdom does not implement them fully)
+    const mockBlob = new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' })
+
+    const mockFileReader = {
+      readAsDataURL: vi.fn(function () { this.onload({ target: { result: 'data:image/png;base64,abc' } }) }),
+      onerror: null,
+      onload: null,
+    }
+    vi.spyOn(window, 'FileReader').mockImplementation(() => mockFileReader)
+
+    const mockCtx = { fillStyle: '', fillRect: vi.fn(), drawImage: vi.fn() }
+    const mockCanvas = { width: 0, height: 0, getContext: () => mockCtx, toBlob: vi.fn((cb) => cb(mockBlob)) }
+    const origCreateElement = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tag) =>
+      tag === 'canvas' ? mockCanvas : origCreateElement(tag)
+    )
+
+    // Mock Image so onload fires synchronously
+    vi.stubGlobal('Image', class {
+      set src(_) { this.width = 1; this.height = 1; this.onload && this.onload() }
+    })
+
+    const api = (await import('../services/api')).default
+    api.post.mockResolvedValueOnce({ data: { signature_url: '/uploads/signatures/EMP01_sign.png' } })
+
+    renderPage()
+    await waitFor(() => screen.getByRole('button', { name: /ajouter une signature/i }))
+
+    const input = screen.getByTestId('signature-input')
+    const file = new File([new Uint8Array([137, 80, 78, 71])], 'signature.png', { type: 'image/png' })
+    Object.defineProperty(input, 'files', { value: [file] })
+    fireEvent.change(input)
+
+    await waitFor(() => {
+      expect(screen.getByText(/signature mise à jour/i)).toBeInTheDocument()
+    })
+
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 })

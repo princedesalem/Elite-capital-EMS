@@ -822,8 +822,9 @@ export default function FicheDePostePage() {
     setExporting(true)
     try {
       const token = localStorage.getItem('ec_token') || localStorage.getItem('access_token')
+      const matriculePdf = user?.matricule || user?.sub || ''
       const resp = await fetch(
-        `${API}/api/fiches-poste/${fiche.id_template}/pdf`,
+        `${API}/api/fiches-poste/${fiche.id_template}/pdf${matriculePdf ? `?matricule=${encodeURIComponent(matriculePdf)}` : ''}`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
       const ct = resp.headers.get('content-type') || ''
