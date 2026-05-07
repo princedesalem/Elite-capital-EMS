@@ -10,12 +10,13 @@ from ..db import get_db
 
 router = APIRouter(prefix='/api/team-space', tags=['team-space'])
 
-VALID_TYPES = {'shoutout', 'kudos', 'poll'}
+VALID_TYPES = {'shoutout', 'kudos', 'poll', 'annonce'}
 
 POST_TYPE_LABELS = {
     'shoutout': 'Shout-out',
     'kudos': 'Kudos',
     'poll': 'Sondage',
+    'annonce': 'Annonce',
 }
 
 
@@ -113,6 +114,9 @@ def _notify_post_created(post: models.TeamSpacePost, db: Session) -> None:
     elif post.post_type == 'poll':
         titre = f'Nouveau sondage de {author}'
         message = (post.question or '').strip() or 'Un nouveau sondage est disponible.'
+    elif post.post_type == 'annonce':
+        titre = f'📢 Annonce de {author}'
+        message = (post.message or '').strip() or 'Nouvelle annonce dans l’Espace Équipe.'
     else:
         titre = f'Nouvelle publication ({label})'
         message = (post.message or post.question or '').strip() or 'Nouvelle publication dans l’Espace Équipe.'
@@ -142,6 +146,7 @@ def _serialize(post: models.TeamSpacePost) -> Dict[str, Any]:
         'date': post.date_creation.strftime('%d/%m/%Y') if post.date_creation else None,
         'destinataire': post.destinataire or '',
         'message': post.message or '',
+        'titre': post.valeur if post.post_type == 'annonce' else '',
         'valeur': post.valeur or '',
         'raison': post.raison or '',
         'question': post.question or '',
@@ -200,7 +205,8 @@ def create_post(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_d
         author_name=author_name,
         destinataire=(str(payload.get('destinataire') or '').strip() or None),
         message=(str(payload.get('message') or '').strip() or None),
-        valeur=(str(payload.get('valeur') or '').strip() or None),
+        # For annonce: store titre in valeur field (reused); for others: use valeur directly
+        valeur=(str(payload.get('titre') or payload.get('valeur') or '').strip() or None),
         raison=(str(payload.get('raison') or '').strip() or None),
         question=(str(payload.get('question') or '').strip() or None),
         poll_options=payload.get('options') if isinstance(payload.get('options'), list) else None,

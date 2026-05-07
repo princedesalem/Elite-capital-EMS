@@ -58,6 +58,7 @@ class EmployeBase(BaseModel):
     id_entite: Optional[int] = None
     id_direction: Optional[int] = None
     dept_id: Optional[int] = None
+    nouvelle_recrue: Optional[bool] = None
 
     @field_validator('matricule', mode='before')
     @classmethod

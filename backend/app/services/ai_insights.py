@@ -173,8 +173,9 @@ def _count_operations_by_status(db: Session, d1: date, d2: date, type_demande: O
 
 
 def _count_new_hires(db: Session, annee: int, direction_id: Optional[int] = None, entite_id: Optional[int] = None) -> int:
-    """Compte les nouvelles embauches pour une année donnée."""
+    """Compte les nouvelles recrues marquées manuellement (nouvelle_recrue=True) pour une année d'embauche."""
     q = db.query(func.count(models.Employe.matricule)).filter(
+        models.Employe.nouvelle_recrue == True,  # noqa: E712
         models.Employe.date_embauche >= date(annee, 1, 1),
         models.Employe.date_embauche <= date(annee, 12, 31),
     )

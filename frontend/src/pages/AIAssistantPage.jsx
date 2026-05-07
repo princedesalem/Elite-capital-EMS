@@ -118,10 +118,10 @@ export default function AIAssistantPage() {
           </div>
           <div>
             <h1 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 700, color: '#02162e' }}>
-              Assistant IA RH
+              EMS Chat
             </h1>
             <p style={{ margin: '2px 0 0', fontSize: '0.83rem', color: '#64748b' }}>
-              Données temps réel · Moteur intégré ELITE CAPITAL
+              Données temps réel · Moteur IA ELITE CAPITAL
             </p>
           </div>
         </div>
@@ -172,7 +172,7 @@ export default function AIAssistantPage() {
             <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
               <Bot size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
               <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: 6 }}>
-                Bonjour, comment puis-je vous aider ?
+                Bonjour, je suis EMS Chat. Comment puis-je vous aider ?
               </div>
               <div style={{ fontSize: '0.85rem', marginBottom: 24 }}>
                 Posez vos questions RH, analysez les données ou demandez des recommandations.

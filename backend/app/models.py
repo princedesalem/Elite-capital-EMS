@@ -137,6 +137,7 @@ class Employe(Base):
     id_entite = Column(Integer, ForeignKey('ENTITE.id_entite'))
     id_direction = Column(Integer, ForeignKey('DIRECTION.id_direction'))
     statut_employe = Column(Enum(StatutEmployeEnum), default=StatutEmployeEnum.ACTIF)
+    nouvelle_recrue = Column(Boolean, default=False, nullable=True)
     # absence / backup fields (garder pour compatibilité)
     absent = Column(Boolean, default=False)
     absence_until = Column(Date, nullable=True)
@@ -887,3 +888,19 @@ class InscriptionEvenement(Base):
     __table_args__ = (
         UniqueConstraint('id_evenement', 'matricule', name='uq_inscription_evenement'),
     )
+
+
+# ── Documentation interne ─────────────────────────────────────────────────────
+class DocumentInterne(Base):
+    __tablename__ = 'document_interne'
+    id_doc = Column(Integer, primary_key=True, autoincrement=True)
+    titre = Column(String(300), nullable=False)
+    contenu = Column(Text, nullable=True)
+    categorie = Column(String(100), nullable=True, default='Général')
+    auteur_matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
+    auteur_nom = Column(String(200), nullable=True)
+    fichier_url = Column(String(500), nullable=True)
+    fichier_nom = Column(String(300), nullable=True)
+    type_doc = Column(String(20), nullable=False, default='article')  # article | fichier
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

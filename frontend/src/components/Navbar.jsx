@@ -244,6 +244,7 @@ export default function Navbar(){
             <NavLink to="/rh/home" style={topNavLinkStyle}>Accueil</NavLink>
             <NavLink to="/rh/dashboard" style={topNavLinkStyle}>Dashboard</NavLink>
             <NavLink to="/rh/organisation" style={topNavLinkStyle}>Organisation</NavLink>
+            <NavLink to="/rh/documentation" style={topNavLinkStyle}>Documentation</NavLink>
           </div>
         )}
       </div>
@@ -279,7 +280,7 @@ export default function Navbar(){
                     height: 18,
                     padding: '0 5px',
                     borderRadius: 999,
-                    background: '#c00000',
+                    background: '#f97316',
                     color: '#fff',
                     fontSize: '0.64rem',
                     fontWeight: 800,

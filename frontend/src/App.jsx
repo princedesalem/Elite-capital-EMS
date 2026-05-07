@@ -49,6 +49,7 @@ import DemandeExplicationPage from './pages/DemandeExplicationPage'
 import AIAssistantPage from './pages/AIAssistantPage'
 import DisciplinairePage from './pages/DisciplinairePage'
 import ScoreComportementalPage from './pages/ScoreComportementalPage'
+import DocumentationPage from './pages/DocumentationPage'
 import RemplacantsPage from './pages/RemplacantsPage'
 import { ToastProvider, ConfirmProvider } from './components/ui'
 import './index.css'
@@ -119,6 +120,7 @@ export default function App(){
             <Route path="ai-assistant" element={<AIAssistantPage />} />
             <Route path="disciplinaire" element={<DisciplinairePage />} />
             <Route path="score-comportemental" element={<ScoreComportementalPage />} />
+            <Route path="documentation" element={<DocumentationPage />} />
           </Route>
 
           <Route path="/home" element={<Navigate to="/rh/home" replace />} />

@@ -317,13 +317,50 @@ def chat_rh(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    # Extrait le dernier message utilisateur
     last_user_msg = ''
     for m in reversed(body.messages):
         if m.role == 'user':
             last_user_msg = m.content
             break
-    reply = _engine_chat(last_user_msg, db)
-    return {'role': 'assistant', 'content': reply}
+
+    # Réponse déterministe comme fallback et contexte
+    fallback_reply = _engine_chat(last_user_msg, db)
+
+    # Construit le contexte RH pour le system prompt
+    rh_summary = _engine_summary(db)
+    system_prompt = (
+        "Tu es EMS Chat, l'assistant RH intelligent d'ELITE CAPITAL GROUP S.A. "
+        "Tu réponds toujours en français, de manière professionnelle, claire et concise. "
+        "Tu as accès aux données RH en temps réel. Voici la situation RH actuelle :\n\n"
+        f"{rh_summary}\n\n"
+        "Réponds à la question de l'utilisateur en t'appuyant sur ce contexte. "
+        "Si la question dépasse ce contexte, utilise tes connaissances générales RH."
+    )
+
+    # Tentative Ollama avec l'historique complet
+    base_url = os.environ.get('OLLAMA_BASE_URL', 'http://ollama:11434')
+    try:
+        # Construction des messages pour l'API Ollama chat
+        ollama_messages = [{'role': 'system', 'content': system_prompt}]
+        for m in body.messages:
+            if m.role in ('user', 'assistant'):
+                ollama_messages.append({'role': m.role, 'content': m.content})
+
+        resp = httpx.post(
+            f'{base_url}/api/chat',
+            json={'model': 'mistral', 'messages': ollama_messages, 'stream': False},
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        ollama_reply = (data.get('message') or {}).get('content', '').strip()
+        if ollama_reply:
+            return {'role': 'assistant', 'content': ollama_reply}
+    except Exception:
+        pass  # Fallback silencieux vers le moteur déterministe
+
+    return {'role': 'assistant', 'content': fallback_reply}
 
 
 @router.get('/dashboard-summary')

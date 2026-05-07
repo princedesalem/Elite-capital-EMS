@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import AvatarCircle from '../components/AvatarCircle'
-import { BarChart2, LogOut, Star, MessageSquare, ThumbsUp, BarChart, Send, Plus, X, ChevronDown, Search, Gift, Users, Briefcase, Clock, MoreVertical, Pencil, Trash2, CheckCircle } from 'lucide-react'
+import { BarChart2, LogOut, Star, MessageSquare, ThumbsUp, BarChart, Send, Plus, X, ChevronDown, Search, Gift, Users, Briefcase, Clock, MoreVertical, Pencil, Trash2, CheckCircle, Megaphone } from 'lucide-react'
 import { toast, confirmDialog } from '../components/ui/bridge'
 import { BRAND_GRADIENT } from '../theme'
 
@@ -64,9 +64,16 @@ export default function Home() {
   const [showShoutoutForm, setShowShoutoutForm] = useState(false)
   const [showKudosForm, setShowKudosForm] = useState(false)
   const [showPollForm, setShowPollForm] = useState(false)
+  const [showAnnonceForm, setShowAnnonceForm] = useState(false)
   const [shoutoutForm, setShoutoutForm] = useState({ destinataire: '', message: '' })
   const [kudosForm, setKudosForm] = useState({ destinataire: '', raison: '', valeur: 'Excellence' })
   const [pollForm, setPollForm] = useState({ question: '', options: ['', ''] })
+  const [annonceForm, setAnnonceForm] = useState({ titre: '', message: '' })
+  // Annonces feed
+  const [annonces, setAnnonces] = useState([])
+  // Animation pulse pour nouveaux messages non vus
+  const [hasNewPosts, setHasNewPosts] = useState(false)
+  const lastSeenPostIdRef = useRef(() => { try { return Number(sessionStorage.getItem('ems_lastSeenPostId') || 0) } catch { return 0 } })
 
   const [allEmployees, setAllEmployees] = useState([])
   const [operations, setOperations] = useState([])
@@ -115,6 +122,7 @@ export default function Home() {
     const nextShoutouts = []
     const nextKudos = []
     const nextPolls = []
+    const nextAnnonces = []
     ;(Array.isArray(posts) ? posts : []).forEach((p) => {
       const base = {
         id: p.id,
@@ -134,10 +142,22 @@ export default function Home() {
       if (p.type === 'shoutout') nextShoutouts.push(base)
       if (p.type === 'kudos') nextKudos.push(base)
       if (p.type === 'poll') nextPolls.push(base)
+      if (p.type === 'annonce') nextAnnonces.push(base)
     })
     setShoutouts(nextShoutouts)
     setKudos(nextKudos)
     setPolls(nextPolls)
+    setAnnonces(nextAnnonces)
+
+    // Vérifier s'il y a de nouveaux posts non vus
+    const allPosts = [...nextShoutouts, ...nextKudos, ...nextPolls, ...nextAnnonces]
+    if (allPosts.length > 0) {
+      const maxId = Math.max(...allPosts.map(p => p.id || 0))
+      const lastSeen = Number(sessionStorage.getItem('ems_lastSeenPostId') || 0)
+      if (maxId > lastSeen) {
+        setHasNewPosts(true)
+      }
+    }
   }
 
   const loadTeamSpacePosts = async () => {
@@ -148,8 +168,24 @@ export default function Home() {
       setShoutouts([])
       setKudos([])
       setPolls([])
+      setAnnonces([])
     }
   }
+
+  // Polling 30s — détecte les nouveaux posts non vus pour l'animation
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get('/api/team-space/posts', { params: { limit: 1 } })
+        const posts = Array.isArray(res.data) ? res.data : []
+        if (posts.length === 0) return
+        const maxId = Math.max(...posts.map(p => p.id || 0))
+        const lastSeen = Number(sessionStorage.getItem('ems_lastSeenPostId') || 0)
+        if (maxId > lastSeen) setHasNewPosts(true)
+      } catch (_) {}
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   const calculateAnciennete = (dateEmbauche) => {
     if (!dateEmbauche) return 'N/A'
@@ -290,6 +326,7 @@ export default function Home() {
       ...shoutouts.map(s => ({ ...s, _type: 'shoutout' })),
       ...kudos.map(k => ({ ...k, _type: 'kudos' })),
       ...polls.map(p => ({ ...p, _type: 'poll' })),
+      ...annonces.map(a => ({ ...a, _type: 'annonce' })),
     ].sort((a, b) => b.id - a.id)
     if (filterType !== 'all') feed = feed.filter(f => f._type === filterType)
     if (filterSearch.trim()) {
@@ -302,7 +339,7 @@ export default function Home() {
       )
     }
     return feed.slice(0, 20)
-  }, [shoutouts, kudos, polls, filterType, filterSearch])
+  }, [shoutouts, kudos, polls, annonces, filterType, filterSearch])
 
   // -- Birthday wishes --
   const sendWishes = (matricule) => {
@@ -353,6 +390,8 @@ export default function Home() {
         setKudos((prev) => prev.map((k) => k.id === updated.id ? { ...k, likes: updated.likes } : k))
       } else if (type === 'poll') {
         setPolls((prev) => prev.map((p) => p.id === updated.id ? { ...p, likes: updated.likes } : p))
+      } else if (type === 'annonce') {
+        setAnnonces((prev) => prev.map((a) => a.id === updated.id ? { ...a, likes: updated.likes } : a))
       }
     } catch (_) {}
   }
@@ -394,6 +433,27 @@ export default function Home() {
       await loadTeamSpacePosts()
       setPollForm({ question: '', options: ['', ''] })
       setShowPollForm(false)
+      resetAudience()
+    } catch (_) {}
+  }
+  const submitAnnonce = async (e) => {
+    e.preventDefault()
+    const titre = annonceForm.titre.trim()
+    const message = annonceForm.message.trim()
+    if (!titre || !message) return
+    try {
+      await api.post('/api/team-space/posts', {
+        type: 'annonce',
+        from: employe?.prenom ? `${employe.prenom} ${employe.nom || ''}`.trim() : String(user?.matricule || 'Moi'),
+        from_matricule: Number(user?.matricule || user?.sub || 0) || null,
+        message,
+        titre,
+        likes: 0,
+        audience: { type: audienceType, selected: [...audienceSelected] }
+      })
+      await loadTeamSpacePosts()
+      setAnnonceForm({ titre: '', message: '' })
+      setShowAnnonceForm(false)
       resetAudience()
     } catch (_) {}
   }
@@ -714,7 +774,23 @@ export default function Home() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 18, alignItems: 'start' }}>
         <div>
         {/* Espace Équipe */}
-        <div style={{ background: 'var(--card)', borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.07)', border: '1px solid var(--border)', overflow: 'hidden', marginBottom: 18 }}>
+        <style>{`
+@keyframes teamSpacePulse {
+  0%   { box-shadow: 0 0 0 0 rgba(206,43,43,0.55); }
+  60%  { box-shadow: 0 0 0 16px rgba(206,43,43,0); }
+  100% { box-shadow: 0 0 0 0 rgba(206,43,43,0); }
+}
+        `}</style>
+        <div
+          onClick={() => {
+            if (hasNewPosts) {
+              setHasNewPosts(false)
+              const allFeedIds = [...shoutouts,...kudos,...polls,...annonces].map(p=>p.id||0)
+              const maxId = allFeedIds.length > 0 ? Math.max(...allFeedIds) : 0
+              sessionStorage.setItem('ems_lastSeenPostId', String(maxId))
+            }
+          }}
+          style={{ background: 'var(--card)', borderRadius: 12, boxShadow: hasNewPosts ? '0 0 0 0 rgba(206,43,43,0.55)' : '0 2px 12px rgba(0,0,0,0.07)', border: hasNewPosts ? '2px solid #ce2b2b' : '1px solid var(--border)', overflow: 'hidden', marginBottom: 18, animation: hasNewPosts ? 'teamSpacePulse 1.8s ease-out infinite' : 'none', cursor: hasNewPosts ? 'pointer' : 'default', transition: 'border 0.3s' }}>
           <div style={{ background: '#ce2b2b', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <MessageSquare size={14} color="white" />
             <h2 style={{ margin: 0, color: 'white', fontSize: '0.88rem', fontWeight: 700 }}>Espace Équipe</h2>
@@ -723,16 +799,16 @@ export default function Home() {
 
           {/* -- Compose bar -- */}
           <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: (showShoutoutForm || showKudosForm || showPollForm) ? 14 : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: (showShoutoutForm || showKudosForm || showPollForm || showAnnonceForm) ? 14 : 0 }}>
               <AvatarCircle photoUrl={employe?.photo_url} letter={(employe?.prenom || user?.prenom || 'U')[0]} size={38} />
-              {!showShoutoutForm && !showKudosForm && !showPollForm && (
+              {!showShoutoutForm && !showKudosForm && !showPollForm && !showAnnonceForm && (
                 <div
                   onClick={() => { setShowShoutoutForm(true); setShowKudosForm(false); setShowPollForm(false) }}
                   style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 24, padding: '9px 18px', cursor: 'pointer', fontSize: '0.85rem', color: '#94a3b8', userSelect: 'none' }}>
                   Écrire un shoutout...
                 </div>
               )}
-              {(showShoutoutForm || showKudosForm || showPollForm) && (
+              {(showShoutoutForm || showKudosForm || showPollForm || showAnnonceForm) && (
                 <div style={{ flex: 1 }} />
               )}
               {/* Audience Picker — inline next to avatar */}
@@ -787,17 +863,21 @@ export default function Home() {
             </div>
 
             {/* Quick action buttons */}
-            {!showShoutoutForm && !showKudosForm && !showPollForm && (
+            {!showShoutoutForm && !showKudosForm && !showPollForm && !showAnnonceForm && (
               <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
-                <button onClick={() => { setShowShoutoutForm(true); setShowKudosForm(false); setShowPollForm(false) }}
+                <button onClick={() => { setShowAnnonceForm(true); setShowShoutoutForm(false); setShowKudosForm(false); setShowPollForm(false) }}
+                  style={{ flex: 1, padding: '7px 6px', background: 'none', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                  <Megaphone size={13} /> Annonce
+                </button>
+                <button onClick={() => { setShowShoutoutForm(true); setShowKudosForm(false); setShowPollForm(false); setShowAnnonceForm(false) }}
                   style={{ flex: 1, padding: '7px 6px', background: 'none', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                   <MessageSquare size={13} /> Féliciter
                 </button>
-                <button onClick={() => { setShowKudosForm(true); setShowShoutoutForm(false); setShowPollForm(false) }}
+                <button onClick={() => { setShowKudosForm(true); setShowShoutoutForm(false); setShowPollForm(false); setShowAnnonceForm(false) }}
                   style={{ flex: 1, padding: '7px 6px', background: 'none', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                   <Star size={13} /> Kudos
                 </button>
-                <button onClick={() => { setShowPollForm(true); setShowShoutoutForm(false); setShowKudosForm(false) }}
+                <button onClick={() => { setShowPollForm(true); setShowShoutoutForm(false); setShowKudosForm(false); setShowAnnonceForm(false) }}
                   style={{ flex: 1, padding: '7px 6px', background: 'none', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                   <BarChart size={13} /> Sondage
                 </button>
@@ -850,11 +930,23 @@ export default function Home() {
                 </div>
               </form>
             )}
+
+            {/* Annonce Form */}
+            {showAnnonceForm && (
+              <form onSubmit={submitAnnonce} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <input style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', fontSize: '0.78rem' }} placeholder="Titre de l'annonce..." value={annonceForm.titre} onChange={e => setAnnonceForm({ ...annonceForm, titre: e.target.value })} required autoFocus />
+                <textarea style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', fontSize: '0.78rem', resize: 'vertical', minHeight: 64 }} placeholder="Contenu de l'annonce..." value={annonceForm.message} onChange={e => setAnnonceForm({ ...annonceForm, message: e.target.value })} required />
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                  <button type="button" onClick={() => { setShowAnnonceForm(false); resetAudience() }} style={{ padding: '5px 10px', background: 'var(--bg)', border: 'none', borderRadius: 6, cursor: 'pointer', color: '#64748b', fontSize: '0.78rem' }}>Annuler</button>
+                  <button type="submit" style={{ padding: '5px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: 5 }}><Megaphone size={12} /> Diffuser</button>
+                </div>
+              </form>
+            )}
           </div>
 
           {/* -- Filter Bar -- */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-            {[{ key: 'all', label: 'Tout' }, { key: 'shoutout', label: 'Félicitations' }, { key: 'kudos', label: 'Kudos' }, { key: 'poll', label: 'Sondages' }].map(f => (
+            {[{ key: 'all', label: 'Tout' }, { key: 'annonce', label: 'Annonces' }, { key: 'shoutout', label: 'Félicitations' }, { key: 'kudos', label: 'Kudos' }, { key: 'poll', label: 'Sondages' }].map(f => (
               <button key={f.key} onClick={() => setFilterType(f.key)}
                 style={{ padding: '5px 12px', borderRadius: 20, border: filterType === f.key ? '2px solid #021630' : '1px solid #e2e8f0', background: filterType === f.key ? '#021630' : 'white', color: filterType === f.key ? 'white' : '#475569', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
                 {f.label}
@@ -908,8 +1000,8 @@ export default function Home() {
                           )}
                         </div>
                       </div>
-                      <span style={{ fontSize: '0.67rem', fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: item._type === 'kudos' ? '#fef2f2' : item._type === 'poll' ? '#f1f5f9' : '#f0f4ff', color: item._type === 'kudos' ? '#ce2b2b' : item._type === 'poll' ? '#475569' : '#021630', border: `1px solid ${item._type === 'kudos' ? '#fecaca' : '#e2e8f0'}` }}>
-                        {item._type === 'kudos' ? 'Kudos' : item._type === 'poll' ? 'Sondage' : item._type === 'shoutout' ? 'Félicitations' : 'Post'}
+                      <span style={{ fontSize: '0.67rem', fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: item._type === 'kudos' ? '#fef2f2' : item._type === 'poll' ? '#f1f5f9' : item._type === 'annonce' ? '#f5f3ff' : '#f0f4ff', color: item._type === 'kudos' ? '#ce2b2b' : item._type === 'poll' ? '#475569' : item._type === 'annonce' ? '#7c3aed' : '#021630', border: `1px solid ${item._type === 'kudos' ? '#fecaca' : item._type === 'annonce' ? '#ddd6fe' : '#e2e8f0'}` }}>
+                        {item._type === 'kudos' ? 'Kudos' : item._type === 'poll' ? 'Sondage' : item._type === 'shoutout' ? 'Félicitations' : item._type === 'annonce' ? '📢 Annonce' : 'Post'}
                       </span>
                       <div style={{ position: 'relative' }} data-post-menu>
                         <button
@@ -984,6 +1076,14 @@ export default function Home() {
                           </div>
                         </div>
                       </>
+                    )}
+
+                    {/* Annonce body */}
+                    {item._type === 'annonce' && (
+                      <div style={{ margin: '0 16px 14px', borderRadius: 10, background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)', padding: '14px 18px' }}>
+                        {item.titre && <div style={{ fontWeight: 700, color: 'white', fontSize: '0.92rem', marginBottom: 6 }}>{item.titre}</div>}
+                        <p style={{ margin: 0, color: 'rgba(255,255,255,0.9)', fontSize: '0.85rem', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{item.message}</p>
+                      </div>
                     )}
 
                     {/* Poll body */}
