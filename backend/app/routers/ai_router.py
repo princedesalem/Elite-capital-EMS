@@ -62,6 +62,37 @@ def _engine_chat(question: str, db: Session) -> str:
     q = question.strip()
     today = datetime.utcnow().date()
 
+    # Salutations conversationnelles
+    if _kw(q, 'bonjour', 'bonsoir', 'salut', 'hello', 'hi', 'coucou', 'bonne journée', 'bonne nuit'):
+        return (
+            "Bonjour ! Je suis **EMS Chat**, votre assistant RH ELITE CAPITAL. 👋\n\n"
+            "Je peux vous aider avec :\n"
+            "   • 👥  Effectif et liste des employés\n"
+            "   • 🕐  Demandes de congé en attente\n"
+            "   • 🌍  Missions en cours\n"
+            "   • 📨  Demandes d'explication\n"
+            "   • 📊  Résumé de la situation RH\n\n"
+            "Que souhaitez-vous savoir ?"
+        )
+
+    if _kw(q, 'merci', 'thanks', 'parfait', 'super', 'génial', 'excellent', 'bravo'):
+        return "Avec plaisir ! 😊 N'hésitez pas si vous avez d'autres questions."
+
+    if _kw(q, 'comment tu vas', 'ça va', 'comment vas-tu', 'comment allez-vous'):
+        return "Je suis opérationnel et prêt à vous aider ! 🚀 Comment puis-je vous assister ?"
+
+    if _kw(q, 'qui es-tu', 'qui êtes-vous', 'tu es qui', 'c\'est quoi ems chat', 'présente-toi', 'présentation'):
+        return (
+            "Je suis **EMS Chat**, l'assistant IA intégré d'ELITE CAPITAL GROUP S.A. 🤖\n\n"
+            "Je suis connecté en temps réel à la base de données RH et je peux vous fournir "
+            "des informations sur les employés, congés, missions, et bien plus encore.\n\n"
+            "Basé sur Ollama (modèle IA local), je traite vos questions de façon sécurisée "
+            "sans envoyer vos données vers l'extérieur."
+        )
+
+    if _kw(q, 'au revoir', 'bye', 'à bientôt', 'bonne soirée', 'bonne continuation'):
+        return "À bientôt ! Bonne continuation. 👋"
+
     # Employés
     if _kw(q, 'combien', 'nombre', 'total', 'effectif') and _kw(q, 'employ', 'personnel', 'staff'):
         total = db.query(func.count(models.Employe.matricule)).scalar() or 0
@@ -236,8 +267,10 @@ def _engine_chat(question: str, db: Session) -> str:
             return "Employés correspondants :\n" + "\n".join(lines)
 
     return (
-        "🤔  Je n'ai pas compris votre demande.\nEssayez par exemple :\n"
-        "   • Congés en attente\n"
+        "Je n'ai pas pu répondre précisément à votre question avec les données RH disponibles. 🤔\n\n"
+        "Je suis spécialisé dans les données RH d'ELITE CAPITAL. Essayez par exemple :\n"
+        "   • Combien d'employés actifs ?\n"
+        "   • Congés en attente de validation\n"
         "   • Résumé de la situation RH\n"
         "   • Aide — pour voir toutes les commandes disponibles."
     )
@@ -341,26 +374,48 @@ def chat_rh(
     # Tentative Ollama avec l'historique complet
     base_url = os.environ.get('OLLAMA_BASE_URL', 'http://ollama:11434')
     try:
-        # Construction des messages pour l'API Ollama chat
-        ollama_messages = [{'role': 'system', 'content': system_prompt}]
-        for m in body.messages:
-            if m.role in ('user', 'assistant'):
-                ollama_messages.append({'role': m.role, 'content': m.content})
+        # Détection automatique du modèle disponible
+        model_name = _get_ollama_model(base_url)
+        if model_name:
+            ollama_messages = [{'role': 'system', 'content': system_prompt}]
+            for m in body.messages:
+                if m.role in ('user', 'assistant'):
+                    ollama_messages.append({'role': m.role, 'content': m.content})
 
-        resp = httpx.post(
-            f'{base_url}/api/chat',
-            json={'model': 'mistral', 'messages': ollama_messages, 'stream': False},
-            timeout=60.0,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        ollama_reply = (data.get('message') or {}).get('content', '').strip()
-        if ollama_reply:
-            return {'role': 'assistant', 'content': ollama_reply}
+            resp = httpx.post(
+                f'{base_url}/api/chat',
+                json={'model': model_name, 'messages': ollama_messages, 'stream': False},
+                timeout=120.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            ollama_reply = (data.get('message') or {}).get('content', '').strip()
+            if ollama_reply:
+                return {'role': 'assistant', 'content': ollama_reply}
     except Exception:
         pass  # Fallback silencieux vers le moteur déterministe
 
     return {'role': 'assistant', 'content': fallback_reply}
+
+
+def _get_ollama_model(base_url: str) -> str | None:
+    """Retourne le premier modèle disponible dans Ollama, ou None si aucun."""
+    # Ordre de préférence
+    PREFERRED = ['mistral', 'llama3', 'llama2', 'tinyllama', 'phi', 'gemma']
+    try:
+        resp = httpx.get(f'{base_url}/api/tags', timeout=5.0)
+        resp.raise_for_status()
+        models = [m.get('name', '').split(':')[0] for m in resp.json().get('models', [])]
+        if not models:
+            return None
+        for pref in PREFERRED:
+            for m in models:
+                if pref in m.lower():
+                    return m
+        # Retourne n'importe quel modèle dispo
+        return resp.json()['models'][0]['name']
+    except Exception:
+        return None
 
 
 @router.get('/dashboard-summary')
