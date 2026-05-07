@@ -450,6 +450,105 @@ function EvalCard({ ev, onSoumettre, onEvaluer, isEvaluateur }) {
 }
 
 // ---------------------------------------------------------------------------
+// Autocomplete employé
+// ---------------------------------------------------------------------------
+function EmployeeAutocomplete({ value, onChange }) {
+  const [query, setQuery] = useState('')
+  const [suggestions, setSuggestions] = useState([])
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const ref = useRef()
+
+  // fermer si clic extérieur
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const fetchSuggestions = useCallback(async (q) => {
+    setLoading(true)
+    try {
+      const token = localStorage.getItem('ec_token') || localStorage.getItem('access_token')
+        const r = await axios.get(`${API}/employees/autocomplete/employes`, {
+        params: { q: q || '', limit: 20 },
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setSuggestions(Array.isArray(r.data) ? r.data : [])
+      setOpen(true)
+    } catch { setSuggestions([]) }
+    finally { setLoading(false) }
+  }, [])
+
+  // recherche avec debounce à chaque frappe — ne rien faire si champ vide
+  useEffect(() => {
+    if (!query.trim()) { setSuggestions([]); setOpen(false); return }
+    const timer = setTimeout(() => fetchSuggestions(query), 180)
+    return () => clearTimeout(timer)
+  }, [query, fetchSuggestions])
+
+  const select = (emp) => {
+    onChange(emp.matricule)
+    setQuery(`${emp.matricule} — ${(emp.nom || '').toUpperCase()} ${emp.prenom || ''}`.trim())
+    setOpen(false)
+  }
+
+  const handleInput = (e) => {
+    setQuery(e.target.value)
+    if (!e.target.value) onChange('')
+  }
+
+  const handleFocus = () => {
+    if (suggestions.length > 0) setOpen(true)
+  }
+
+  return (
+    <div ref={ref} style={{ flex: 1, minWidth: 220, position: 'relative' }}>
+      <input
+        value={query}
+        onChange={handleInput}
+        onFocus={handleFocus}
+        placeholder="Nom ou matricule de l'employé"
+        autoComplete="off"
+        style={{
+          width: '100%', boxSizing: 'border-box',
+          padding: '7px 10px', borderRadius: 7,
+          border: '1.5px solid #cbd5e1', fontSize: '0.88rem',
+        }}
+      />
+      {loading && (
+        <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: '0.75rem', color: '#94a3b8' }}>…</span>
+      )}
+      {open && suggestions.length > 0 && (
+        <ul style={{
+          position: 'absolute', top: '110%', left: 0, right: 0, zIndex: 100,
+          background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.10)', margin: 0, padding: 0,
+          listStyle: 'none', maxHeight: 260, overflowY: 'auto',
+        }}>
+          {suggestions.map((emp) => (
+            <li
+              key={emp.matricule}
+              onMouseDown={() => select(emp)}
+              style={{
+                padding: '9px 14px', cursor: 'pointer', fontSize: '0.85rem',
+                borderBottom: '1px solid #f1f5f9',
+                display: 'flex', flexDirection: 'column', gap: 2,
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#f0f9ff'}
+              onMouseLeave={e => e.currentTarget.style.background = ''}
+            >
+              <span style={{ color: '#021630' }}>{emp.nom?.toUpperCase()} {emp.prenom}</span>
+              <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>{emp.matricule}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Page principale
 // ---------------------------------------------------------------------------
 export default function EvaluationsPage() {
@@ -564,14 +663,9 @@ export default function EvaluationsPage() {
         }}>
           <Plus size={15} style={{ color: '#475569', flexShrink: 0 }} />
           <span style={{ fontSize: '0.88rem', color: '#475569', flexShrink: 0 }}>Initier une évaluation :</span>
-          <input
+          <EmployeeAutocomplete
             value={initTarget}
-            onChange={e => setInitTarget(e.target.value)}
-            placeholder="Matricule de l'employé"
-            style={{
-              flex: 1, minWidth: 160, padding: '7px 10px', borderRadius: 7,
-              border: '1.5px solid #cbd5e1', fontSize: '0.88rem',
-            }}
+            onChange={setInitTarget}
           />
           <button
             onClick={handleInitier}

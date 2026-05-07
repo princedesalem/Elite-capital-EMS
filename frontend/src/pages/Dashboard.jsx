@@ -1,7 +1,8 @@
 import React, {useEffect, useState} from 'react'
 import {useAuth} from '../contexts/AuthContext'
 import api from '../services/api'
-import {Settings, FileDown} from 'lucide-react'
+import {Settings, FileDown, Download} from 'lucide-react'
+import AIInsightPanel from '../components/AIInsightPanel'
 
 
 export const STATUT_COLORS_MAP = {
@@ -293,6 +294,13 @@ export default function Dashboard(){
           >
             <FileDown size={14} /> Rapport RH
           </button>
+          <button
+            onClick={() => { api.get(`/api/analytics/export-dashboard/${user?.matricule}`, { responseType: 'blob' }).then(res => { const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `dashboard_${user?.matricule}_${new Date().toISOString().slice(0,10)}.xlsx`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url) }).catch(() => alert('Erreur export Excel.')) }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text)' }}
+            title="Exporter mon tableau de bord en Excel"
+          >
+            <Download size={14} /> Export Excel
+          </button>
         </>)}
         <button
           onClick={() => setShowWidgetConfig(p => !p)}
@@ -412,6 +420,24 @@ export default function Dashboard(){
               </div>
             </div>
           </div>}
+
+          {/* Panneau IA — Insights & Recommandations (contextuel par onglet + filtres) */}
+          {employe && (
+            <div style={{ marginBottom: 12 }}>
+              <AIInsightPanel
+                page="dashboard"
+                tab={activeTab}
+                filters={{
+                  matricule: employe.matricule,
+                  annee: filterAnnee,
+                  mois: filterMois,
+                }}
+                label="Insights & Recommandations IA"
+                lang="fr"
+                depth="détaillé"
+              />
+            </div>
+          )}
 
           {/* CONGÉS + MISSIONS + CHARTS WIDGETS */}
           {(widgets.conges !== false || widgets.missions !== false || widgets.charts !== false) && analytics && (

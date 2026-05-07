@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
-from jose import jwt
+from jose import jwt, JWTError
 import os
 import pyotp
 import re
 import bcrypt
+from fastapi import Request, HTTPException, status
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret')
 ALGORITHM = 'HS256'
@@ -63,3 +64,34 @@ def validate_password_policy(password: str) -> tuple[bool,str]:
     if not re.search(r'[!@#$%^&*()_+\-=[\]{};:\"\\|,.<>/?]', password):
         return False, 'Doit contenir un caractère spécial.'
     return True, ''
+
+
+def get_current_user(request: Request) -> dict:
+    """FastAPI dependency — extrait l'utilisateur courant depuis le Bearer JWT.
+
+    Returns a dict with keys: matricule, role, sub (and any other JWT claims).
+    Raises HTTP 401 if the token is missing or invalid.
+    """
+    auth = request.headers.get("authorization", "")
+    if not auth.lower().startswith("bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token d'authentification manquant.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = auth.split(None, 1)[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token invalide ou expiré.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # Normalise matricule field (may be stored as 'sub' or 'matricule')
+    matricule = payload.get("matricule") or payload.get("sub") or ""
+    return {
+        **payload,
+        "matricule": str(matricule),
+        "role": (payload.get("role") or "EMPLOYE").upper(),
+    }

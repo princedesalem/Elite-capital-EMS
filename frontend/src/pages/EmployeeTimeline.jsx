@@ -3,26 +3,36 @@ import { useAuth } from '../contexts/AuthContext'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import AvatarCircle from '../components/AvatarCircle'
-import { Clock, User, Calendar, Briefcase, Award, ArrowRight, Search, TrendingUp, FileText, MapPin } from 'lucide-react'
+import { Clock, User, Calendar, Briefcase, Award, ArrowRight, Search, TrendingUp, FileText, MapPin, BarChart2 } from 'lucide-react'
 
 const ACCENT = '#ce2b2b'
 const DARK = '#021630'
 
+// Palette dans la charte : navy (#021630) pour la carrière, gris pour congé, rouge pour disciplinaire
 const EVENT_TYPES = {
-  embauche:       { label: 'Embauche',            color: DARK, bg: '#f8fafc' },
-  promotion:      { label: 'Promotion',            color: DARK, bg: '#f8fafc' },
-  mutation:       { label: 'Mutation / Transfert', color: DARK, bg: '#f8fafc' },
-  conge:          { label: 'Congé',                color: DARK, bg: '#f8fafc' },
-  mission:        { label: 'Mission',              color: DARK, bg: '#f8fafc' },
-  evaluation:     { label: 'Évaluation',           color: DARK, bg: '#f8fafc' },
-  formation:      { label: 'Formation',            color: DARK, bg: '#f8fafc' },
-  avertissement:  { label: 'Avertissement',        color: ACCENT, bg: '#fef2f2' },
-  autre:          { label: 'Autre',                color: '#475569', bg: '#f8fafc' },
+  embauche:       { label: 'Embauche',             color: '#021630', bg: '#c8d4e5' }, // navy brand — le plus foncé
+  promotion:      { label: 'Promotion',             color: '#063e7a', bg: '#d0dff0' }, // navy sombre
+  mutation:       { label: 'Mutation / Transfert',  color: '#1e6aaf', bg: '#daeaf8' }, // navy médium
+  conge:          { label: 'Congé',                 color: '#4a5568', bg: '#edf2f7' }, // gris neutre — clairement différent
+  mission:        { label: 'Mission',               color: '#02244d', bg: '#d4e0f0' }, // navy profond
+  evaluation:     { label: 'Évaluation',            color: '#0d5faa', bg: '#d8e8f8' }, // bleu
+  formation:      { label: 'Formation',             color: '#2880c8', bg: '#dff0fc' }, // bleu clair
+  avertissement:  { label: 'Avertissement',         color: '#ce2b2b', bg: '#fde8e8' }, // accent brand
+  disciplinaire:  { label: 'Mesure disciplinaire',  color: '#9b1c1c', bg: '#fbd5d5' }, // accent foncé
+  autre:          { label: 'Autre',                 color: '#4a5568', bg: '#edf2f7' },
 }
 
-function buildTimeline(employee, conges, missions, parcours) {
+// Statuts considérés comme "validés" pour les opérations
+const STATUTS_VALIDES = ['approuve', 'approuvé', 'approuvée', 'valide', 'validé', 'validée', 'accordé', 'accepté', 'terminé', 'termine', 'effectue', 'effectué']
+export function isStatutValide(statut) {
+  return STATUTS_VALIDES.includes(String(statut || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''))
+    || STATUTS_VALIDES.includes(String(statut || '').toLowerCase())
+}
+
+export function buildTimeline(employee, conges, missionsMisso, parcours, mesures, evaluations, formations) {
   const events = []
 
+  // --- Embauche (toujours en premier) ---
   if (employee?.date_embauche) {
     events.push({
       date: employee.date_embauche,
@@ -32,6 +42,7 @@ function buildTimeline(employee, conges, missions, parcours) {
     })
   }
 
+  // --- Parcours (promotions / mutations) ---
   parcours?.forEach(p => {
     const t = String(p.type_action || '').toUpperCase()
     const mapped = t === 'PROMOTION' ? 'promotion'
@@ -46,37 +57,74 @@ function buildTimeline(employee, conges, missions, parcours) {
     const detail = p.libelle
       || [p.ancienne_valeur, p.nouvelle_valeur].filter(Boolean).join(' → ')
       || (p.champ_modifie ? `Champ modifié: ${p.champ_modifie}` : 'Changement enregistré')
+    events.push({ date: p.date_action || p.created_at, type: mapped, title: label, detail })
+  })
+
+  // --- Congés validés uniquement ---
+  conges?.filter(c => isStatutValide(c.statut)).forEach(c => {
     events.push({
-      date: p.date_action || p.created_at,
-      type: mapped,
-      title: label,
-      detail,
+      date: c.date_debut || c.date_demande,
+      type: 'conge',
+      title: 'Congé approuvé',
+      detail: [
+        c.date_debut ? `Du ${new Date(c.date_debut).toLocaleDateString('fr-FR')}` : null,
+        c.date_fin ? `au ${new Date(c.date_fin).toLocaleDateString('fr-FR')}` : null,
+        c.duree_jours ? `(${c.duree_jours}j)` : null,
+      ].filter(Boolean).join(' '),
     })
   })
 
-  conges?.forEach(c => {
-    if (c.statut === 'APPROUVE' || c.statut === 'approuve') {
-      events.push({
-        date: c.date_debut || c.created_at,
-        type: 'conge',
-        title: `Congé — ${c.type_conge || c.type || 'Annuel'}`,
-        detail: `Du ${c.date_debut || '?'} au ${c.date_fin || '?'}`,
-      })
-    }
+  // --- Missions validées où la personne est MISSIONNAIRE ---
+  missionsMisso?.filter(m => isStatutValide(m.statut)).forEach(m => {
+    const lieu = [m.ville, m.pays].filter(Boolean).join(', ') || 'N/A'
+    events.push({
+      date: m.date_debut,
+      type: 'mission',
+      title: `Mission — ${lieu}`,
+      detail: `Initiateur : ${m.initiateur_nom || '—'} · Statut : ${m.statut || '—'}`,
+    })
   })
 
-  missions?.forEach(m => {
-    if (m.statut !== 'REFUSE') {
-      events.push({
-        date: m.date_depart || m.created_at,
-        type: 'mission',
-        title: `Mission — ${m.destination || 'Destination N/A'}`,
-        detail: `Statut: ${m.statut || 'En cours'}`,
-      })
-    }
+  // --- Évaluations validées ---
+  evaluations?.filter(e => isStatutValide(e.statut) || e.note_finale != null).forEach(e => {
+    events.push({
+      date: e.date_creation,
+      type: 'evaluation',
+      title: 'Évaluation de performance',
+      detail: [
+        e.note_finale != null ? `Note : ${e.note_finale}/100` : null,
+        `Statut : ${e.statut || '—'}`,
+      ].filter(Boolean).join(' · '),
+    })
   })
 
-  return events.sort((a, b) => new Date(b.date) - new Date(a.date))
+  // --- Formations (participation confirmée) ---
+  formations?.forEach(f => {
+    events.push({
+      date: f.date,
+      type: 'formation',
+      title: f.titre || 'Formation',
+      detail: [
+        f.lieu ? `Lieu : ${f.lieu}` : null,
+        `Statut : ${f.statut || '—'}`,
+        f.source === 'tache' ? '(Tâche)' : f.source === 'evenement' ? '(Événement)' : '(Mission)',
+      ].filter(Boolean).join(' · '),
+    })
+  })
+
+  // --- Mesures disciplinaires ---
+  mesures?.forEach(m => {
+    const labels = { blame: 'Blâme', avertissement: 'Avertissement', sanction: 'Sanction', conseil_discipline: 'Conseil de discipline' }
+    events.push({
+      date: m.date_mesure || m.created_at,
+      type: 'disciplinaire',
+      title: labels[m.type_mesure] || m.type_mesure,
+      detail: m.motif,
+    })
+  })
+
+  // Tri chronologique ascendant (le plus ancien en tête)
+  return events.sort((a, b) => new Date(a.date) - new Date(b.date))
 }
 
 export default function EmployeeTimeline() {
@@ -89,10 +137,14 @@ export default function EmployeeTimeline() {
   const [searchQ, setSearchQ] = useState('')
   const [employee, setEmployee] = useState(null)
   const [conges, setConges] = useState([])
-  const [missions, setMissions] = useState([])
+  const [missionsMisso, setMissionsMisso] = useState([])
   const [parcours, setParcours] = useState([])
+  const [mesures, setMesures] = useState([])
+  const [evaluations, setEvaluations] = useState([])
+  const [formations, setFormations] = useState([])
   const [loading, setLoading] = useState(false)
   const [filterType, setFilterType] = useState('tous')
+  const [scoreData, setScoreData] = useState(null)
 
   useEffect(() => {
     if (isAdmin) {
@@ -105,19 +157,23 @@ export default function EmployeeTimeline() {
     setLoading(true)
     Promise.all([
       api.get(`/employees/${selectedMatricule}`).catch(() => null),
-      api.get('/conges').catch(() => ({ data: [] })),
-      api.get('/missions/list').catch(() => ({ data: [] })),
+      api.get(`/api/conges/historique/${selectedMatricule}`).catch(() => ({ data: [] })),
+      api.get(`/api/missions/en-tant-que-missionnaire/${selectedMatricule}`).catch(() => ({ data: [] })),
       api.get(`/employees/${selectedMatricule}/parcours`).catch(() => ({ data: [] })),
-    ]).then(([empRes, congesRes, missionsRes, parcoursRes]) => {
+      api.get(`/api/disciplinaire/employe/${selectedMatricule}`).catch(() => ({ data: [] })),
+      api.get(`/api/evaluations/mes-evaluations/${selectedMatricule}`).catch(() => ({ data: [] })),
+      api.get(`/employees/${selectedMatricule}/formations`).catch(() => ({ data: [] })),
+      api.get(`/api/scores/employe/${selectedMatricule}`).catch(() => ({ data: null })),
+    ]).then(([empRes, congesRes, missoRes, parcoursRes, mesuresRes, evalsRes, formRes, scoreRes]) => {
       setEmployee(empRes?.data || null)
-      const allConges = congesRes?.data || []
-      const allMissions = missionsRes?.data || []
-      setConges(allConges.filter(c => String(c.matricule) === String(selectedMatricule)))
-      setMissions(allMissions.filter(m => Array.isArray(m.missionnaires) 
-        ? m.missionnaires.some(mn => String(mn.matricule) === String(selectedMatricule))
-        : String(m.matricule) === String(selectedMatricule)
-      ))
-      setParcours(parcoursRes?.data || [])
+      const toArr = (d) => Array.isArray(d) ? d : (d?.items || d?.conges || d?.missions || d?.evaluations || [])
+      setConges(toArr(congesRes?.data))
+      setMissionsMisso(toArr(missoRes?.data))
+      setParcours(toArr(parcoursRes?.data))
+      setMesures(toArr(mesuresRes?.data))
+      setEvaluations(toArr(evalsRes?.data))
+      setFormations(toArr(formRes?.data))
+      setScoreData(scoreRes?.data?.score_global !== undefined ? scoreRes.data : null)
     }).finally(() => setLoading(false))
   }, [selectedMatricule])
 
@@ -127,7 +183,7 @@ export default function EmployeeTimeline() {
     return (e.prenom + ' ' + e.nom).toLowerCase().includes(q) || String(e.matricule).includes(q)
   })
 
-  const timeline = buildTimeline(employee, conges, missions, parcours)
+  const timeline = buildTimeline(employee, conges, missionsMisso, parcours, mesures, evaluations, formations)
   const filtered = filterType === 'tous' ? timeline : timeline.filter(e => e.type === filterType)
 
   const calcAge = (d) => {
@@ -237,6 +293,55 @@ export default function EmployeeTimeline() {
                   <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{timeline.length} événement(s)</div>
                 </div>
               </div>
+
+              {/* Score Comportemental */}
+              {scoreData && (() => {
+                const dims = scoreData.dimensions || {}
+                const dimList = [
+                  { key: 'delai_validation',        label: 'Délai validation', color: '#021630' },
+                  { key: 'participation_evenements', label: 'Participation',     color: '#063e7a' },
+                  { key: 'engagement_app',           label: 'Engagement',        color: '#0d5faa' },
+                  { key: 'esprit_equipe',            label: 'Esprit équipe',     color: '#2880c8' },
+                ]
+                const g = scoreData.score_global
+                const gColor = g >= 80 ? '#021630' : g >= 50 ? '#4a5568' : '#ce2b2b'
+                return (
+                  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: '0.88rem', color: DARK }}>
+                        <BarChart2 size={16} color={ACCENT} /> Score Comportemental
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 500 }}>
+                          {scoreData.periode}
+                        </span>
+                      </div>
+                      <div style={{
+                        fontWeight: 800, fontSize: '1.05rem', color: gColor,
+                        background: g >= 80 ? '#d0dff0' : g >= 50 ? '#edf2f7' : '#fde8e8',
+                        padding: '4px 12px', borderRadius: 8,
+                      }}>
+                        {g} / 100
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                      {dimList.map(d => {
+                        const v = dims[d.key]?.valeur ?? 0
+                        const vColor = v < 50 ? '#ce2b2b' : d.color
+                        return (
+                          <div key={d.key}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.73rem', color: '#475569', marginBottom: 3 }}>
+                              <span style={{ fontWeight: 600 }}>{d.label}</span>
+                              <span style={{ fontWeight: 700, color: vColor }}>{v}</span>
+                            </div>
+                            <div style={{ height: 6, borderRadius: 99, background: '#e2e8f0', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.min(v, 100)}%`, background: vColor, borderRadius: 99, transition: 'width 0.5s' }} />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Filter */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>

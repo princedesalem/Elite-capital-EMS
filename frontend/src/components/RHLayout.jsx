@@ -45,6 +45,7 @@ function Icon({name, size = 18, stroke = 1.8}) {
     settings: (<><path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 1 0 12 8.5Z" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-.4-1.1 1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2.8a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.1-.4 1.7 1.7 0 0 0 .6-1A1.7 1.7 0 0 0 4.26 6.3L4.2 6.24A2 2 0 1 1 7.03 3.4l.06.06A1.7 1.7 0 0 0 8.96 3.8a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V2a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 .4 1.1 1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.87-.34l.06-.06A2 2 0 1 1 20.52 6.2l-.06.06A1.7 1.7 0 0 0 19.4 8a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.1.4h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.1.4 1.7 1.7 0 0 0-.6 1Z" /></>),
     key: (<><path d="M21 2l-2 2" /><path d="M17.5 5.5A4.5 4.5 0 1 1 14 4l7-2-1.5 3.5Z" /><path d="M6 14l-4 4 2 2 4-4" /></>),
     lock: (<><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 1 1 8 0v3" /></>),
+    score: (<><path d="M3.05 13a9 9 0 1 1 17.9 0" /><path d="M12 13l3.5-5.5" /><circle cx="12" cy="13" r="1.5" fill="currentColor" /><path d="M5.6 17.4 6.65 16.35M18.4 17.4l-1.05-1.05M4 11h1.5M18.5 11H20" /></>),
   }
 
   return <svg {...common}>{icons[name]}</svg>
@@ -82,6 +83,17 @@ const MODULES = [
       {label: 'Gestion des talents',   path: '/rh/talent'},
       {label: 'Club Review',           path: '/rh/club-review'},
       {label: 'Sandbox',               path: '/rh/sandbox'},
+      {label: 'Demandes d\'explication', path: '/rh/demandes-explication'},
+      {label: 'Disciplinaire',         path: '/rh/disciplinaire'},
+      {label: 'Assistant IA',          path: '/rh/ai-assistant'},
+    ]
+  },
+  {
+    id: 'score-comportemental',
+    icon: 'score',
+    label: 'Score Comportemental',
+    subs: [
+      {label: 'Tableau de bord',       path: '/rh/score-comportemental'},
     ]
   },
   {id:'achats',    icon:'box',       label:'Achats',        subs:[{label:'Bientôt disponible', path:'/rh/module/achats'}]},

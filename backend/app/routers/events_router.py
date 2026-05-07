@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..db import get_db
+from ..utils.security import get_current_user
 
 router = APIRouter(prefix='/api/events', tags=['events'])
 
@@ -118,3 +119,116 @@ def delete_event(ev_id: int, db: Session = Depends(get_db)):
     db.delete(ev)
     db.commit()
     return {'ok': True}
+
+
+# ── Inscriptions & Présence ────────────────────────────────────────────────────
+
+class InscriptionBody(BaseModel):
+    matricules: List[str]
+
+
+class PresenceBody(BaseModel):
+    statut: str   # present | absent
+
+
+def _serialize_inscription(ins: models.InscriptionEvenement, db: Session) -> dict:
+    emp = db.query(models.Employe).filter_by(matricule=ins.matricule).first()
+    return {
+        'id_inscription': ins.id_inscription,
+        'id_evenement': ins.id_evenement,
+        'matricule': ins.matricule,
+        'nom': f"{emp.prenom} {emp.nom}" if emp else ins.matricule,
+        'statut': ins.statut,
+        'inscrit_le': ins.inscrit_le.isoformat() if ins.inscrit_le else None,
+        'confirme_le': ins.confirme_le.isoformat() if ins.confirme_le else None,
+        'confirme_par': ins.confirme_par,
+    }
+
+
+@router.post('/{ev_id}/inscriptions', status_code=201)
+def inscrire_employes(
+    ev_id: int,
+    body: InscriptionBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Inscrire un ou plusieurs employés à un événement."""
+    ev = db.query(models.Evenement).filter(models.Evenement.id == ev_id).first()
+    if not ev:
+        raise HTTPException(status_code=404, detail='Événement introuvable')
+    created = []
+    for mat in body.matricules:
+        existing = db.query(models.InscriptionEvenement).filter_by(
+            id_evenement=ev_id, matricule=mat
+        ).first()
+        if existing:
+            continue
+        ins = models.InscriptionEvenement(
+            id_evenement=ev_id,
+            matricule=mat,
+            statut='inscrit',
+            inscrit_le=datetime.utcnow(),
+        )
+        db.add(ins)
+        created.append(mat)
+    db.commit()
+    return {'inscrits': created}
+
+
+@router.get('/{ev_id}/inscriptions')
+def liste_inscriptions(
+    ev_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Liste des inscriptions à un événement."""
+    ev = db.query(models.Evenement).filter(models.Evenement.id == ev_id).first()
+    if not ev:
+        raise HTTPException(status_code=404, detail='Événement introuvable')
+    inscriptions = db.query(models.InscriptionEvenement).filter_by(id_evenement=ev_id).all()
+    return [_serialize_inscription(i, db) for i in inscriptions]
+
+
+@router.patch('/{ev_id}/inscriptions/{matricule}/presence')
+def marquer_presence(
+    ev_id: int,
+    matricule: str,
+    body: PresenceBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Marquer présent/absent. RH ou l'employé lui-même peuvent confirmer."""
+    if body.statut not in ('present', 'absent'):
+        raise HTTPException(status_code=422, detail="statut doit être 'present' ou 'absent'.")
+    ins = db.query(models.InscriptionEvenement).filter_by(
+        id_evenement=ev_id, matricule=matricule
+    ).first()
+    if not ins:
+        raise HTTPException(status_code=404, detail='Inscription introuvable.')
+    ins.statut = body.statut
+    ins.confirme_le = datetime.utcnow()
+    ins.confirme_par = current_user['matricule']
+    db.commit()
+    db.refresh(ins)
+    return _serialize_inscription(ins, db)
+
+
+@router.delete('/{ev_id}/inscriptions/{matricule}', status_code=204)
+def annuler_inscription(
+    ev_id: int,
+    matricule: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Annuler une inscription (RH ou l'employé lui-même)."""
+    ins = db.query(models.InscriptionEvenement).filter_by(
+        id_evenement=ev_id, matricule=matricule
+    ).first()
+    if not ins:
+        raise HTTPException(status_code=404, detail='Inscription introuvable.')
+    role = (current_user.get('role') or '').upper()
+    if current_user['matricule'] != matricule and role not in {'RH', 'ADMIN', 'DIRECTEUR', 'DG', 'PCA'}:
+        raise HTTPException(status_code=403, detail='Accès refusé.')
+    db.delete(ins)
+    db.commit()
+

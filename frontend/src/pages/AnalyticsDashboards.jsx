@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
-import { TrendingUp, Users, Briefcase, BarChart2, ArrowDown, ArrowUp, Target, Award, Clock, CalendarDays, ChevronDown, ChevronUp, Activity, AlertTriangle, GraduationCap, Smile, Zap } from 'lucide-react'
+import { TrendingUp, Users, Briefcase, BarChart2, ArrowDown, ArrowUp, Target, Award, Clock, CalendarDays, ChevronDown, ChevronUp, Activity, AlertTriangle, GraduationCap, Smile, Zap, Download } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts'
+import AIInsightPanel from '../components/AIInsightPanel'
 
 const ACCENT = '#ce2b2b'
 const DARK = '#021630'
@@ -64,6 +65,24 @@ export default function AnalyticsDashboards() {
   const [absenteisme, setAbsenteisme] = useState([])
   const [soldeConges, setSoldeConges] = useState([])
   const [formationRate, setFormationRate] = useState(null)
+  const [exportingXlsx, setExportingXlsx] = useState(false)
+
+  const handleExportExcel = () => {
+    setExportingXlsx(true)
+    api.get('/api/analytics/export-excel', { responseType: 'blob' })
+      .then(res => {
+        const url = URL.createObjectURL(res.data)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `analytics_rh_${new Date().toISOString().slice(0, 10)}.xlsx`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      })
+      .catch(() => alert('Erreur lors de la génération du fichier Excel.'))
+      .finally(() => setExportingXlsx(false))
+  }
 
   useEffect(() => {
     api.get('/employees/').then(r => { setEmployees(r.data || []); setLoading(false) }).catch(() => setLoading(false))
@@ -227,12 +246,46 @@ export default function AnalyticsDashboards() {
   return (
     <div style={{ padding: '0 0 32px 0' }}>
       {/* Header */}
-      <div style={{ background: 'linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%)', color: 'white', padding: '20px 24px', borderRadius: '10px', marginBottom: 20 }}>
-        <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <BarChart2 size={22} /> {"Analytiques RH"}
-        </h1>
-        <p style={{ margin: '4px 0 0', fontSize: '0.85rem', opacity: 0.8 }}>{"Indicateurs clés et tendances de l'effectif"}</p>
+      <div style={{ background: `linear-gradient(90deg, ${DARK} 0%, #112033 100%)`, color: 'white', padding: '20px 24px', borderRadius: '10px', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <BarChart2 size={22} /> {"Analytiques RH"}
+            </h1>
+            <p style={{ margin: '4px 0 0', fontSize: '0.85rem', opacity: 0.8 }}>{"Indicateurs clés et tendances de l'effectif"}</p>
+          </div>
+          <button
+            onClick={handleExportExcel}
+            disabled={exportingXlsx}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              background: exportingXlsx ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.2)',
+              border: '1px solid rgba(255,255,255,0.35)',
+              color: 'white', borderRadius: 8, padding: '8px 16px',
+              fontWeight: 600, fontSize: '0.83rem', cursor: exportingXlsx ? 'wait' : 'pointer',
+              transition: 'background 0.2s',
+            }}
+          >
+            <Download size={15} />
+            {exportingXlsx ? 'Export en cours…' : 'Export Excel'}
+          </button>
+        </div>
       </div>
+
+      {/* Panneau IA Analytics — contextuel par filtres période/direction/entité */}
+      <AIInsightPanel
+        page="analytics"
+        tab="global"
+        filters={{
+          annee: filterYear ? Number(filterYear) : undefined,
+          mois: filterMois && filterMois !== 'tous' ? Number(filterMois) : undefined,
+          direction: filterDirection && filterDirection !== 'tous' ? filterDirection : undefined,
+          entite: filterEntite && filterEntite !== 'tous' ? filterEntite : undefined,
+        }}
+        label="Résumé exécutif IA — Analytiques RH"
+        lang="fr"
+        depth="détaillé"
+      />
 
       {/* Global filters */}
       <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', marginBottom: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>

@@ -1030,6 +1030,32 @@ def export_employees(
     )
 
 
+@router.get('/autocomplete/employes')
+def search_employes_autocomplete(q: str = '', limit: int = 15, db: Session = Depends(get_db)):
+    """Recherche d'employés par matricule ou nom pour auto-complétion."""
+    term = q.strip()
+    query = db.query(models.Employe).filter(
+        models.Employe.statut_employe != models.StatutEmployeEnum.CONGEDIE
+    )
+    if term:
+        like = f'%{term}%'
+        query = query.filter(
+            func.lower(models.Employe.matricule).like(func.lower(like)) |
+            func.lower(models.Employe.nom).like(func.lower(like)) |
+            func.lower(models.Employe.prenom).like(func.lower(like))
+        )
+    employes = query.order_by(models.Employe.nom, models.Employe.prenom).limit(limit).all()
+    return [
+        {
+            'matricule': e.matricule,
+            'nom': e.nom or '',
+            'prenom': e.prenom or '',
+            'label': f"{e.matricule} — {(e.nom or '').upper()} {e.prenom or ''}".strip(),
+        }
+        for e in employes
+    ]
+
+
 @router.get('/{matricule}', response_model=schemas.EmployeOut)
 def get_employee(matricule: str, request: Request, db: Session = Depends(get_db)):
     e = crud.get_employe(db, matricule)
@@ -1913,6 +1939,103 @@ def get_employee_parcours(matricule: str, db: Session = Depends(get_db)):
         .all()
     )
     return rows
+
+
+@router.get('/{matricule}/formations')
+def get_employee_formations(matricule: str, db: Session = Depends(get_db)):
+    """
+    Retourne toutes les formations suivies par un employé.
+    Même logique que le taux d'accès à la formation du dashboard :
+      1) Missions avec 'formation' dans titre/commentaire/motif
+      2) Tâches terminées avec 'formation' dans le titre (assignées ou créées par l'employé)
+      3) Événements de type Formation inscrits par l'employé
+    """
+    import re as _re
+    formation_re = _re.compile(r'formations?', _re.IGNORECASE)
+    results = []
+
+    # 1) Missions formation où la personne est MISSIONNAIRE (pas initiateur)
+    mm_rows = db.query(models.MissionnairesMission).filter(
+        models.MissionnairesMission.matricule == matricule
+    ).all()
+    ids_misso = {mm.id_mission for mm in mm_rows}
+    for id_m in ids_misso:
+        op = db.query(models.Operation).filter(
+            models.Operation.id_operation == id_m,
+            models.Operation.type_demande == 'Mission',
+        ).first()
+        if op and (formation_re.search(op.titre or '')
+                   or formation_re.search(op.commentaire or '')
+                   or formation_re.search(op.motif or '')):
+            mission = db.query(models.Mission).filter(
+                models.Mission.id_mission == op.id_operation
+            ).first()
+            results.append({
+                'source': 'mission',
+                'id': op.id_operation,
+                'titre': op.titre or 'Mission formation',
+                'date': str(op.date_debut) if op.date_debut else str(op.date_demande),
+                'statut': op.statut,
+                'lieu': (mission.ville or mission.pays) if mission else None,
+            })
+
+    # 2) Tâches terminées avec 'formation' dans le titre
+    tasks_assigned = db.query(models.TaskAssignee).filter(
+        models.TaskAssignee.matricule_employe == matricule
+    ).all()
+    task_ids_assigned = {ta.id_task for ta in tasks_assigned}
+
+    tasks = db.query(models.Task).filter(
+        models.Task.statut == 'termine',
+    ).all()
+    for task in tasks:
+        if not formation_re.search(task.titre or ''):
+            continue
+        is_mine = (
+            str(task.cree_par) == str(matricule)
+            or str(task.assigne_a) == str(matricule)
+            or task.id_task in task_ids_assigned
+        )
+        if is_mine:
+            results.append({
+                'source': 'tache',
+                'id': task.id_task,
+                'titre': task.titre,
+                'date': str(task.date_modification or task.date_creation),
+                'statut': 'Terminé',
+                'lieu': None,
+            })
+
+    # 3) Événements de type Formation (inscrit comme présent)
+    inscriptions = db.query(models.InscriptionEvenement).filter(
+        models.InscriptionEvenement.matricule == matricule,
+        models.InscriptionEvenement.statut.in_(['inscrit', 'present']),
+    ).all()
+    for ins in inscriptions:
+        ev = db.query(models.Evenement).filter(
+            models.Evenement.id == ins.id_evenement,
+        ).first()
+        if ev and (ev.type == 'Formation' or formation_re.search(ev.titre or '')):
+            results.append({
+                'source': 'evenement',
+                'id': ev.id,
+                'titre': ev.titre,
+                'date': str(ev.date_debut) if ev.date_debut else None,
+                'statut': 'Présent' if ins.statut == 'present' else 'Inscrit',
+                'lieu': ev.lieu,
+            })
+
+    # Déduplication par (source, id)
+    seen = set()
+    dedup = []
+    for r in results:
+        key = (r['source'], r['id'])
+        if key not in seen:
+            seen.add(key)
+            dedup.append(r)
+
+    dedup.sort(key=lambda x: x['date'] or '', reverse=True)
+    return dedup
 
 
 @router.get('/admin/utilisateurs')

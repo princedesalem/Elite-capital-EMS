@@ -982,7 +982,11 @@ def get_absenteisme_par_dept(db: Session = Depends(get_db)):
     dept_jours: dict = {}
     for op in ops:
         emp = db.query(models.Employe).filter(models.Employe.matricule == op.matricule).first()
-        dept = (emp.departement or 'Non renseigné') if emp else 'Non renseigné'
+        if emp and emp.dept_id:
+            dept_obj = db.query(models.Departement).filter(models.Departement.dept_id == emp.dept_id).first()
+            dept = dept_obj.nom if dept_obj and dept_obj.nom else 'Non renseigné'
+        else:
+            dept = 'Non renseigné'
         duree = float(op.duree_jours or 0)
         dept_jours[dept] = dept_jours.get(dept, 0.0) + duree
 

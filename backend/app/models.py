@@ -601,7 +601,7 @@ class OperationVue(Base):
     )
 
 class DemandeExplication(Base):
-    __tablename__ = 'Demande_explication'
+    __tablename__ = 'demande_explication_v1'
     id_demande_explication = Column(Integer, primary_key=True, autoincrement=True)
     matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
     id_operation = Column(Integer, ForeignKey('OPERATIONS.id_operation'))
@@ -823,3 +823,67 @@ class UserSettings(Base):
     matricule = Column(String(32), ForeignKey('EMPLOYE.matricule', ondelete='CASCADE'), primary_key=True)
     settings = Column(JSON, nullable=False, default=dict)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ── Module DE — Demande d'Explication ─────────────────────────────────────────
+class DemandeExplicationV2(Base):
+    """Demande d'explication formelle émise par RH/ADMIN/DIRECTEUR/DG/PCA."""
+    __tablename__ = 'demande_explication'
+    id_de = Column(Integer, primary_key=True, autoincrement=True)
+    matricule_employe = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False, index=True)
+    cree_par = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
+    motif = Column(Text, nullable=False)
+    reponse_employe = Column(Text, nullable=True)
+    # statut: EN_ATTENTE | REPONDU | CLOS
+    statut = Column(String(20), nullable=False, default='EN_ATTENTE')
+    date_limite_reponse = Column(DateTime, nullable=False)   # cree_le + 72h
+    date_reponse = Column(DateTime, nullable=True)
+    cree_le = Column(DateTime, nullable=False, default=datetime.utcnow)
+    clos_le = Column(DateTime, nullable=True)
+    clos_par = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
+
+
+# ── Gestion Disciplinaire ─────────────────────────────────────────────────────
+class MesureDisciplinaire(Base):
+    __tablename__ = 'mesure_disciplinaire'
+    id_mesure = Column(Integer, primary_key=True, autoincrement=True)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False, index=True)
+    # blame | avertissement | sanction | conseil_discipline
+    type_mesure = Column(String(50), nullable=False)
+    motif = Column(Text, nullable=False)
+    gravite = Column(Integer, nullable=False, default=1)  # 1-5
+    date_mesure = Column(Date, nullable=False)
+    cree_par = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+# ── Scoring Comportemental ────────────────────────────────────────────────────
+class ScoreComportemental(Base):
+    __tablename__ = 'score_comportemental'
+    id_score = Column(Integer, primary_key=True, autoincrement=True)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False, index=True)
+    # delai_validation | participation_evenements | engagement_app | esprit_equipe
+    dimension = Column(String(50), nullable=False)
+    valeur = Column(DECIMAL(5, 2), nullable=False, default=0)
+    periode = Column(String(7), nullable=False)   # YYYY-MM
+    details = Column(JSON, nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (
+        UniqueConstraint('matricule', 'dimension', 'periode', name='uq_score_dim_periode'),
+    )
+
+
+# ── Inscriptions Événements ───────────────────────────────────────────────────
+class InscriptionEvenement(Base):
+    __tablename__ = 'inscription_evenement'
+    id_inscription = Column(Integer, primary_key=True, autoincrement=True)
+    id_evenement = Column(Integer, ForeignKey('evenements.id', ondelete='CASCADE'), nullable=False, index=True)
+    matricule = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=False, index=True)
+    # inscrit | present | absent
+    statut = Column(String(20), nullable=False, default='inscrit')
+    inscrit_le = Column(DateTime, nullable=False, default=datetime.utcnow)
+    confirme_le = Column(DateTime, nullable=True)
+    confirme_par = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
+    __table_args__ = (
+        UniqueConstraint('id_evenement', 'matricule', name='uq_inscription_evenement'),
+    )

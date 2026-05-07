@@ -14,7 +14,7 @@ const VARIANT_META = {
   success: { color: '#059669', Icon: CheckCircle2, label: 'Succès',          duration: 4000 },
   error:   { color: '#dc2626', Icon: XCircle,      label: 'Erreur',          duration: 6000 },
   warning: { color: '#f59e0b', Icon: AlertTriangle, label: 'Attention',      duration: 5000 },
-  info:    { color: '#2563eb', Icon: Info,         label: 'Information',     duration: 4000 },
+  info:    { color: '#02162e', Icon: Info,         label: 'Information',     duration: 4000 },
 }
 
 const ToastContext = createContext(null)

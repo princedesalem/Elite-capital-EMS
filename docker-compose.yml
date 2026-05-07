@@ -20,6 +20,7 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: '60'
       APP_URL: http://localhost:5173
       INIT_ADMIN_PW: ChangeMe123!@#
+      OLLAMA_BASE_URL: http://ollama:11434
       # Web Push (VAPID) — génération automatique
       WEBPUSH_PUBLIC_KEY: BH4nCKU6RhzEuXBYjFpN9M-2ensb3oZJZOqhZStMiOkzzNFd0ChJIvx-rMy90Gys8wbBFhiFmkQoZDapSl2cnhk
       WEBPUSH_PRIVATE_KEY: _bsR9XGPjJzW-X9DwCgvaD4n9oSN_IQTt5HpvUvaggo
@@ -34,6 +35,7 @@ services:
       - '8000:8000'
     depends_on:
       - db
+      - ollama
     volumes:
       - ./backend:/app
       - ./VERSION.txt:/app/VERSION.txt:ro
@@ -89,5 +91,20 @@ services:
       - BACKEND_URL=http://backend:8000
     command: ["sh", "-c", "npm install --silent --no-audit --no-fund && npm run test:e2e -- e2e/sorties-visual.spec.js"]
 
+  ollama:
+    image: ollama/ollama
+    ports:
+      - '11434:11434'
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
 volumes:
   db_data:
+  ollama_data:

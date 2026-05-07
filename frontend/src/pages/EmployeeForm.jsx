@@ -272,7 +272,6 @@ export default function EmployeeForm(){
     departement:'',fonction:'',ville:'',id_localisation:'',contact_urgence:'+237',diplome:'',solde_conges:0,
     date_embauche:'',entite:'',role:'',direction:'',categorie:'',n1_fonction:'',
     annee_experience:0,statut_employe:'ACTIF',statut_matrimonial:'',nombre_enfants:'',
-    salaire_brut:'',salaire_devise:'XAF',
     salaire_brut:'',salaire_devise:'XAF'
   })
   const [err,setErr]=useState(null)

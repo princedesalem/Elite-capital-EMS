@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
-import { CalendarDays, Plus, CheckCircle, Clock, FileText, X, MapPin, Users, Edit3, Trash2 } from 'lucide-react'
+import { CalendarDays, Plus, Clock, X, MapPin, Users, Edit3, Trash2, ChevronDown, ChevronUp, UserCheck, UserX, Search, UserPlus } from 'lucide-react'
 import '../styles/Operations.css'
 import { confirmDialog } from '../components/ui/bridge'
 
@@ -31,6 +31,29 @@ export default function EventsPage() {
   const [filterStatut, setFilterStatut] = useState('tous')
   const [filterType, setFilterType] = useState('tous')
   const [searchQ, setSearchQ] = useState('')
+  const [inscriptionsOpen, setInscriptionsOpen] = useState({})
+  const [inscriptionsData, setInscriptionsData] = useState({})
+  const [inscriptionsLoading, setInscriptionsLoading] = useState({})
+  const [addSearch, setAddSearch] = useState({})
+  const [addResults, setAddResults] = useState({})
+
+  // Modal participants (événement existant)
+  const [modalEvId, setModalEvId] = useState(null)
+  const [modalAudSelEnt, setModalAudSelEnt] = useState(null)
+  const [modalAudSelDir, setModalAudSelDir] = useState(null)
+  const [modalSearch, setModalSearch] = useState('')
+  const [modalSearchResults, setModalSearchResults] = useState([])
+
+  // Participants du formulaire de création
+  const [formParticipants, setFormParticipants] = useState([])  // [{matricule, prenom, nom}]
+  const [formPSearch, setFormPSearch] = useState('')
+  const [formPResults, setFormPResults] = useState([])
+  const [audienceEntites, setAudienceEntites] = useState([])
+  const [audienceDirs, setAudienceDirs] = useState([])
+  const [audienceDepts, setAudienceDepts] = useState([])
+  const [audienceAllEmps, setAudienceAllEmps] = useState([])
+  const [formAudSelEnt, setFormAudSelEnt] = useState(null)  // {value, label}
+  const [formAudSelDir, setFormAudSelDir] = useState(null)  // {value, label, id_entite}
 
   const role = String(user?.role || '').toUpperCase()
   const isEventManager = ['RH', 'PCA', 'ADMIN', 'AG'].includes(role)
@@ -39,6 +62,16 @@ export default function EventsPage() {
   useEffect(() => {
     loadEvents()
   }, [])
+
+  // Charger entités + directions + depts + tous les employés (partagé form + modal)
+  useEffect(() => {
+    if ((showForm && !editingId || modalEvId) && audienceAllEmps.length === 0) {
+      api.get('/employees/autocomplete/entites').then(r => setAudienceEntites(Array.isArray(r.data) ? r.data : []))
+      api.get('/employees/autocomplete/directions').then(r => setAudienceDirs(Array.isArray(r.data) ? r.data : []))
+      api.get('/employees/autocomplete/departements').then(r => setAudienceDepts(Array.isArray(r.data) ? r.data : []))
+      api.get('/employees/').then(r => setAudienceAllEmps(Array.isArray(r.data) ? r.data : []))
+    }
+  }, [showForm, editingId, modalEvId])
 
   const loadEvents = async () => {
     try {
@@ -58,7 +91,12 @@ export default function EventsPage() {
       if (editingId) {
         await api.put(`/api/events/${editingId}`, { ...form })
       } else {
-        await api.post('/api/events', { ...form, created_by: user?.matricule || null })
+        const res = await api.post('/api/events', { ...form, created_by: user?.matricule || null })
+        if (formParticipants.length > 0 && res.data?.id) {
+          await api.post(`/api/events/${res.data.id}/inscriptions`, {
+            matricules: formParticipants.map(p => p.matricule)
+          })
+        }
       }
       await loadEvents()
     } catch { /* silent */ }
@@ -89,7 +127,108 @@ export default function EventsPage() {
     } catch { /* silent */ }
   }
 
-  const resetForm = () => { setForm(emptyForm); setEditingId(null); setShowForm(false) }
+  const resetForm = () => {
+    setForm(emptyForm); setEditingId(null); setShowForm(false)
+    setFormParticipants([]); setFormPSearch(''); setFormPResults([])
+    setFormAudSelEnt(null); setFormAudSelDir(null)
+  }
+
+  const selectAudience = (filterFn) => {
+    const newList = audienceAllEmps
+      .filter(filterFn)
+      .map(e => ({ matricule: e.matricule, prenom: e.prenom || '', nom: e.nom || '' }))
+    setFormParticipants(newList)
+  }
+
+  const toggleInscriptions = async (evId) => {
+    const isOpen = inscriptionsOpen[evId]
+    setInscriptionsOpen(p => ({ ...p, [evId]: !isOpen }))
+    if (!isOpen) {
+      setInscriptionsLoading(p => ({ ...p, [evId]: true }))
+      try {
+        const r = await api.get(`/api/events/${evId}/inscriptions`)
+        setInscriptionsData(p => ({ ...p, [evId]: Array.isArray(r.data) ? r.data : [] }))
+      } catch {
+        setInscriptionsData(p => ({ ...p, [evId]: [] }))
+      } finally {
+        setInscriptionsLoading(p => ({ ...p, [evId]: false }))
+      }
+    }
+  }
+
+  const refreshInscriptions = async (evId) => {
+    try {
+      const r = await api.get(`/api/events/${evId}/inscriptions`)
+      setInscriptionsData(p => ({ ...p, [evId]: Array.isArray(r.data) ? r.data : [] }))
+    } catch {}
+  }
+
+  const markPresence = async (evId, matricule, statut) => {
+    try {
+      await api.patch(`/api/events/${evId}/inscriptions/${matricule}/presence`, { statut })
+      setInscriptionsData(p => ({
+        ...p,
+        [evId]: (p[evId] || []).map(i => i.matricule === matricule ? { ...i, statut } : i),
+      }))
+    } catch { /* silent */ }
+  }
+
+  const addParticipant = async (evId, matricule) => {
+    try {
+      await api.post(`/api/events/${evId}/inscriptions`, { matricules: [matricule] })
+      await refreshInscriptions(evId)
+      setAddSearch(p => ({ ...p, [evId]: '' }))
+      setAddResults(p => ({ ...p, [evId]: [] }))
+    } catch { /* silent */ }
+  }
+
+  const removeParticipant = async (evId, matricule) => {
+    try {
+      await api.delete(`/api/events/${evId}/inscriptions/${matricule}`)
+      setInscriptionsData(p => ({
+        ...p,
+        [evId]: (p[evId] || []).filter(i => i.matricule !== matricule),
+      }))
+    } catch { /* silent */ }
+  }
+
+  const markAll = async (evId, statut) => {
+    const list = inscriptionsData[evId] || []
+    await Promise.all(list.map(i => markPresence(evId, i.matricule, statut)))
+  }
+
+  const openParticipantsModal = async (ev) => {
+    setModalEvId(ev.id)
+    setModalAudSelEnt(null); setModalAudSelDir(null)
+    setModalSearch(''); setModalSearchResults([])
+    // Charger les inscriptions si pas encore chargées
+    setInscriptionsLoading(p => ({ ...p, [ev.id]: true }))
+    try {
+      const r = await api.get(`/api/events/${ev.id}/inscriptions`)
+      setInscriptionsData(p => ({ ...p, [ev.id]: Array.isArray(r.data) ? r.data : [] }))
+    } catch {
+      setInscriptionsData(p => ({ ...p, [ev.id]: [] }))
+    } finally {
+      setInscriptionsLoading(p => ({ ...p, [ev.id]: false }))
+    }
+  }
+
+  const closeModal = () => {
+    setModalEvId(null)
+    setModalAudSelEnt(null); setModalAudSelDir(null)
+    setModalSearch(''); setModalSearchResults([])
+  }
+
+  // Inscrire tous les employés d'une audience (filtre) en ignorant les déjà inscrits
+  const addAudienceToEvent = async (evId, filterFn) => {
+    const already = new Set((inscriptionsData[evId] || []).map(i => String(i.matricule)))
+    const toAdd = audienceAllEmps.filter(filterFn).map(e => e.matricule).filter(m => !already.has(String(m)))
+    if (toAdd.length === 0) return
+    try {
+      await api.post(`/api/events/${evId}/inscriptions`, { matricules: toAdd })
+      await refreshInscriptions(evId)
+    } catch { /* silent */ }
+  }
 
   const getStatut = (v) => STATUTS_EVENT.find(s => s.value === v) || STATUTS_EVENT[0]
 
@@ -110,7 +249,7 @@ export default function EventsPage() {
   return (
     <div style={{ padding: '0 0 32px 0' }}>
       {/* Header */}
-      <div style={{ background: 'linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%)', color: 'white', padding: '20px 24px', borderRadius: '10px', marginBottom: 20 }}>
+      <div style={{ background: 'linear-gradient(90deg, #021630 0%, #112033 100%)', color: 'white', padding: '20px 24px', borderRadius: '10px', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -196,6 +335,180 @@ export default function EventsPage() {
                 </select>
               </div>
             )}
+
+            {/* ── Section Participants (création uniquement) ── */}
+            {!editingId && isEventManager && (
+              <div style={{ marginTop: 8, border: '1px solid #d0dff0', borderRadius: 8, overflow: 'hidden' }}>
+                {/* Header */}
+                <div style={{ background: '#eef4fb', borderBottom: '1px solid #d0dff0', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Users size={13} color="#021630" />
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#021630' }}>Participants</span>
+                  {formParticipants.length > 0 && (
+                    <span style={{ marginLeft: 'auto', background: '#021630', color: '#fff', borderRadius: 99, fontSize: '0.68rem', fontWeight: 700, padding: '1px 8px' }}>
+                      {formParticipants.length} sélectionné(s)
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ padding: '10px 12px' }}>
+                  {/* ── Niveau 1 : Entités ── */}
+                  <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
+                    {formAudSelDir ? `${formAudSelEnt?.label} › ${formAudSelDir.label}` : formAudSelEnt ? formAudSelEnt.label : 'Audience'}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
+                    {/* Bouton "Tout" — toujours visible */}
+                    <button type="button"
+                      onClick={() => { selectAudience(() => true); setFormAudSelEnt(null); setFormAudSelDir(null) }}
+                      style={{ padding: '4px 11px', borderRadius: 99, border: '1.5px solid #021630', background: !formAudSelEnt ? '#021630' : '#f8fafc', color: !formAudSelEnt ? '#fff' : '#021630', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
+                      Tout
+                    </button>
+                    {/* Boutons entités */}
+                    {!formAudSelEnt && audienceEntites.map(ent => (
+                      <button key={ent.value} type="button"
+                        onClick={() => { setFormAudSelEnt(ent); setFormAudSelDir(null) }}
+                        style={{ padding: '4px 11px', borderRadius: 99, border: '1.5px solid #d0dff0', background: '#f8fafc', color: '#021630', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
+                        {ent.label}
+                      </button>
+                    ))}
+
+                    {/* ── Niveau 2 : Directions de l'entité sélectionnée ── */}
+                    {formAudSelEnt && !formAudSelDir && (() => {
+                      const dirs = audienceDirs.filter(d => d.id_entite === formAudSelEnt.value)
+                      // Départements rattachés directement à l'entité (sans direction)
+                      const deptsOrphelins = audienceDepts.filter(d => d.id_entite === formAudSelEnt.value && !d.id_direction)
+                      return (
+                        <>
+                          {/* Retour */}
+                          <button type="button" onClick={() => setFormAudSelEnt(null)}
+                            style={{ padding: '4px 10px', borderRadius: 99, border: '1.5px solid #e2e8f0', background: '#fff', color: '#94a3b8', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                            ← retour
+                          </button>
+                          {/* Toute l'entité */}
+                          <button type="button" onClick={() => selectAudience(emp => emp.id_entite === formAudSelEnt.value)}
+                            style={{ padding: '4px 11px', borderRadius: 99, border: '1.5px solid #021630', background: '#eef4fb', color: '#021630', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
+                            Tout {formAudSelEnt.label}
+                          </button>
+                          {/* Directions */}
+                          {dirs.map(dir => (
+                            <button key={dir.value} type="button"
+                              onClick={() => setFormAudSelDir(dir)}
+                              style={{ padding: '4px 11px', borderRadius: 99, border: '1.5px solid #d0dff0', background: '#f8fafc', color: '#021630', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
+                              {dir.label}
+                            </button>
+                          ))}
+                          {/* Départements orphelins (sans direction) — séparateur visuel si les deux existent */}
+                          {deptsOrphelins.length > 0 && dirs.length > 0 && (
+                            <span style={{ alignSelf: 'center', color: '#cbd5e1', fontSize: '0.7rem', margin: '0 2px' }}>|</span>
+                          )}
+                          {deptsOrphelins.map(dept => (
+                            <button key={dept.value} type="button"
+                              onClick={() => selectAudience(emp => emp.dept_id === dept.value)}
+                              style={{ padding: '4px 10px', borderRadius: 99, border: '1.5px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                              {dept.label}
+                            </button>
+                          ))}
+                        </>
+                      )
+                    })()}
+
+                    {/* ── Niveau 3 : Départements de la direction sélectionnée ── */}
+                    {formAudSelDir && (() => {
+                      const depts = audienceDepts.filter(d => d.id_direction === formAudSelDir.value)
+                      return (
+                        <>
+                          {/* Retour direction */}
+                          <button type="button" onClick={() => setFormAudSelDir(null)}
+                            style={{ padding: '4px 10px', borderRadius: 99, border: '1.5px solid #e2e8f0', background: '#fff', color: '#94a3b8', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                            ← retour
+                          </button>
+                          {/* Toute la direction */}
+                          <button type="button" onClick={() => selectAudience(emp => emp.id_direction === formAudSelDir.value)}
+                            style={{ padding: '4px 11px', borderRadius: 99, border: '1.5px solid #021630', background: '#eef4fb', color: '#021630', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
+                            Toute la direction
+                          </button>
+                          {depts.length === 0
+                            ? <span style={{ fontSize: '0.72rem', color: '#94a3b8', alignSelf: 'center' }}>Aucun département</span>
+                            : depts.map(dept => (
+                              <button key={dept.value} type="button"
+                                onClick={() => selectAudience(emp => emp.dept_id === dept.value)}
+                                style={{ padding: '4px 11px', borderRadius: 99, border: '1.5px solid #d0dff0', background: '#f8fafc', color: '#475569', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                                {dept.label}
+                              </button>
+                            ))
+                          }
+                        </>
+                      )
+                    })()}
+                  </div>
+
+                  {/* Recherche individuelle */}
+                  <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Ajouter une personne</div>
+                  <div style={{ position: 'relative', marginBottom: 4 }}>
+                    <Search size={11} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+                    <input className="form-control" style={{ paddingLeft: 26, fontSize: '0.82rem' }}
+                      placeholder="Rechercher un employé..."
+                      value={formPSearch}
+                      onChange={async e => {
+                        const val = e.target.value
+                        setFormPSearch(val)
+                        if (val.length >= 2) {
+                          try {
+                            const r = await api.get(`/employees/autocomplete/employes?q=${encodeURIComponent(val)}&limit=6`)
+                            const already = new Set(formParticipants.map(p => String(p.matricule)))
+                            setFormPResults((r.data || []).filter(x => !already.has(String(x.matricule))))
+                          } catch { setFormPResults([]) }
+                        } else { setFormPResults([]) }
+                      }}
+                    />
+                  </div>
+                  {formPResults.length > 0 && (
+                    <div style={{ border: '1px solid #d0dff0', borderRadius: '0 0 6px 6px', background: '#fff', maxHeight: 130, overflowY: 'auto', marginBottom: 8 }}>
+                      {formPResults.map(e => (
+                        <button key={e.matricule} type="button"
+                          onClick={() => {
+                            const already = new Set(formParticipants.map(p => String(p.matricule)))
+                            if (!already.has(String(e.matricule))) {
+                              setFormParticipants(p => [...p, { matricule: e.matricule, prenom: e.prenom || '', nom: e.nom || '' }])
+                            }
+                            setFormPSearch(''); setFormPResults([])
+                          }}
+                          style={{ width: '100%', padding: '6px 10px', border: 'none', borderBottom: '1px solid #f1f5f9', background: '#fff', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#021630' }}>{e.prenom} {e.nom}</span>
+                          <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>#{e.matricule}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Liste sélectionnée */}
+                  {formParticipants.length > 0 && (
+                    <div style={{ border: '1px solid #d0dff0', borderRadius: 6, background: '#fff', maxHeight: 170, overflowY: 'auto', marginTop: 6 }}>
+                      <div style={{ padding: '5px 10px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b' }}>{formParticipants.length} participant(s)</span>
+                        <button type="button" onClick={() => setFormParticipants([])}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.68rem', color: '#ce2b2b', fontWeight: 600 }}>
+                          Tout effacer
+                        </button>
+                      </div>
+                      {formParticipants.map(p => (
+                        <div key={p.matricule} style={{ display: 'flex', alignItems: 'center', padding: '5px 10px', borderBottom: '1px solid #f1f5f9', gap: 8 }}>
+                          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#021630', flexShrink: 0 }} />
+                          <span style={{ flex: 1, fontSize: '0.78rem', fontWeight: 600, color: '#021630', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {p.prenom} {p.nom}
+                          </span>
+                          <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>#{p.matricule}</span>
+                          <button type="button"
+                            onClick={() => setFormParticipants(prev => prev.filter(x => x.matricule !== p.matricule))}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, lineHeight: 1 }}>
+                            <X size={11} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button type="submit" className="btn btn-primary">{editingId ? "Enregistrer" : "Créer"}</button>
               <button type="button" className="btn" onClick={resetForm} style={{ background: 'var(--bg)', color: '#475569' }}>{"Annuler"}</button>
@@ -269,11 +582,287 @@ export default function EventsPage() {
                     <button onClick={() => changeStatut(ev.id, 'refuse')} className="btn btn-danger" style={{ flex: 1, fontSize: '0.78rem', padding: '5px 8px' }}>Refuser</button>
                   </div>
                 )}
+
+                {/* Participants : toggle inline + bouton ajout */}
+                {isEventManager && (
+                  <div style={{ marginTop: 12, borderTop: '1px solid #e2e8f0', paddingTop: 10 }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <button
+                        onClick={() => toggleInscriptions(ev.id)}
+                        style={{
+                          flex: 1, padding: '7px 12px', border: '1px solid #d0dff0',
+                          borderRadius: 8, background: inscriptionsOpen[ev.id] ? '#eef4fb' : '#f8fafc',
+                          cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, color: '#021630',
+                          display: 'flex', alignItems: 'center', gap: 6,
+                        }}
+                      >
+                        <Users size={13} />
+                        Participants
+                        {inscriptionsData[ev.id]?.length > 0 && (
+                          <span style={{ background: '#021630', color: '#fff', borderRadius: 99, fontSize: '0.68rem', fontWeight: 700, padding: '1px 7px' }}>
+                            {inscriptionsData[ev.id].length}
+                          </span>
+                        )}
+                        <span style={{ marginLeft: 'auto' }}>
+                          {inscriptionsOpen[ev.id] ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => openParticipantsModal(ev)}
+                        title="Ajouter des participants"
+                        style={{ padding: '7px 10px', border: '1px solid #d0dff0', borderRadius: 8, background: '#f8fafc', cursor: 'pointer', color: '#021630', display: 'flex', alignItems: 'center' }}
+                      >
+                        <UserPlus size={13} />
+                      </button>
+                    </div>
+
+                    {/* Panneau inline — liste + présence */}
+                    {inscriptionsOpen[ev.id] && (
+                      <div style={{ marginTop: 8, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                        {inscriptionsLoading[ev.id] ? (
+                          <div style={{ padding: '14px', textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>Chargement...</div>
+                        ) : !(inscriptionsData[ev.id] || []).length ? (
+                          <div style={{ padding: '18px', textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>
+                            Aucun participant — utilisez <UserPlus size={11} style={{ display: 'inline', verticalAlign: 'middle' }} /> pour en ajouter
+                          </div>
+                        ) : (
+                          <>
+                            {(() => {
+                              const list = inscriptionsData[ev.id] || []
+                              const np = list.filter(i => i.statut === 'present').length
+                              const na = list.filter(i => i.statut === 'absent').length
+                              return (
+                                <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#fff' }}>
+                                  {[
+                                    { label: 'Inscrits', val: list.length, color: '#4a5568' },
+                                    { label: 'Présents', val: np, color: '#021630' },
+                                    { label: 'Absents', val: na, color: '#ce2b2b' },
+                                  ].map(s => (
+                                    <div key={s.label} style={{ flex: 1, textAlign: 'center', padding: '6px 4px', borderRight: '1px solid #e2e8f0' }}>
+                                      <div style={{ fontSize: '1rem', fontWeight: 800, color: s.color }}>{s.val}</div>
+                                      <div style={{ fontSize: '0.6rem', color: '#94a3b8', fontWeight: 600 }}>{s.label}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )
+                            })()}
+                            <div style={{ display: 'flex', gap: 6, padding: '6px 10px', borderBottom: '1px solid #e2e8f0', background: '#fff' }}>
+                              <button onClick={() => markAll(ev.id, 'present')}
+                                style={{ flex: 1, padding: '4px 8px', border: '1px solid #d0dff0', borderRadius: 6, background: '#eef4fb', color: '#021630', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                <UserCheck size={11} /> Tous présents
+                              </button>
+                              <button onClick={() => markAll(ev.id, 'absent')}
+                                style={{ flex: 1, padding: '4px 8px', border: '1px solid #fecaca', borderRadius: 6, background: '#fef2f2', color: '#ce2b2b', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                <UserX size={11} /> Tous absents
+                              </button>
+                            </div>
+                            <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                              {(inscriptionsData[ev.id] || []).map(participant => (
+                                <div key={participant.matricule} style={{
+                                  display: 'flex', alignItems: 'center', padding: '7px 10px', borderBottom: '1px solid #f1f5f9', gap: 8,
+                                  background: participant.statut === 'present' ? '#f8fbff' : participant.statut === 'absent' ? '#fff8f8' : '#fff',
+                                }}>
+                                  <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: participant.statut === 'present' ? '#021630' : participant.statut === 'absent' ? '#ce2b2b' : '#cbd5e1' }} />
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 700, color: '#021630', fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{participant.nom}</div>
+                                    <div style={{ color: '#94a3b8', fontSize: '0.65rem' }}>#{participant.matricule}</div>
+                                  </div>
+                                  <span style={{
+                                    fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', borderRadius: 99, flexShrink: 0,
+                                    color: participant.statut === 'present' ? '#021630' : participant.statut === 'absent' ? '#ce2b2b' : '#64748b',
+                                    background: participant.statut === 'present' ? '#d0dff0' : participant.statut === 'absent' ? '#fde8e8' : '#f1f5f9',
+                                  }}>
+                                    {participant.statut === 'present' ? 'Présent' : participant.statut === 'absent' ? 'Absent' : 'Inscrit'}
+                                  </span>
+                                  <button onClick={() => markPresence(ev.id, participant.matricule, 'present')} title="Présent"
+                                    style={{ border: 'none', borderRadius: 5, padding: '4px 5px', cursor: 'pointer', background: participant.statut === 'present' ? '#d0dff0' : '#f1f5f9', color: '#021630' }}>
+                                    <UserCheck size={11} />
+                                  </button>
+                                  <button onClick={() => markPresence(ev.id, participant.matricule, 'absent')} title="Absent"
+                                    style={{ border: 'none', borderRadius: 5, padding: '4px 5px', cursor: 'pointer', background: participant.statut === 'absent' ? '#fde8e8' : '#f1f5f9', color: '#ce2b2b' }}>
+                                    <UserX size={11} />
+                                  </button>
+                                  <button onClick={() => removeParticipant(ev.id, participant.matricule)} title="Retirer"
+                                    style={{ border: 'none', borderRadius: 5, padding: '4px 5px', cursor: 'pointer', background: '#f1f5f9', color: '#94a3b8' }}>
+                                    <X size={11} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
         </div>
       )}
+
+      {/* ═══════════════════════════════════════════════
+          MODAL — Gestion des participants (événement existant)
+      ═══════════════════════════════════════════════ */}
+      {modalEvId && (() => {
+      const evTitle = events.find(e => e.id === modalEvId)?.titre || ''
+      const ins = inscriptionsData[modalEvId] || []
+      return (
+        <div onClick={e => { if (e.target === e.currentTarget) closeModal() }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(2,22,48,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 560, display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(2,22,48,0.3)' }}>
+
+            {/* Header modal */}
+            <div style={{ background: 'linear-gradient(90deg, #021630 0%, #112033 100%)', color: '#fff', padding: '14px 18px', borderRadius: '14px 14px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <UserPlus size={15} />
+                  <span style={{ fontWeight: 800, fontSize: '0.95rem' }}>Ajouter des participants</span>
+                </div>
+                <div style={{ fontSize: '0.75rem', opacity: 0.75, marginTop: 2 }}>{evTitle}</div>
+              </div>
+              <button onClick={closeModal} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, padding: '5px 7px', cursor: 'pointer', color: '#fff' }}><X size={15} /></button>
+            </div>
+
+            {/* Corps */}
+            <div style={{ overflowY: 'auto' }}>
+
+              {/* ── Audience drill-down ── */}
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 7 }}>
+                  {modalAudSelDir ? `${modalAudSelEnt?.label} › ${modalAudSelDir.label}` : modalAudSelEnt ? modalAudSelEnt.label : 'Ajouter par audience'}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {/* Niveau 1 — Entités */}
+                  {!modalAudSelEnt && (
+                    <>
+                      <button type="button" onClick={() => addAudienceToEvent(modalEvId, () => true)}
+                        style={{ padding: '5px 12px', borderRadius: 99, border: '1.5px solid #021630', background: '#021630', color: '#fff', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
+                        Tout
+                      </button>
+                      {audienceEntites.map(ent => (
+                        <button key={ent.value} type="button" onClick={() => setModalAudSelEnt(ent)}
+                          style={{ padding: '5px 12px', borderRadius: 99, border: '1.5px solid #d0dff0', background: '#f8fafc', color: '#021630', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
+                          {ent.label}
+                        </button>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Niveau 2 — Directions + depts orphelins de l'entité */}
+                  {modalAudSelEnt && !modalAudSelDir && (() => {
+                    const dirs = audienceDirs.filter(d => d.id_entite === modalAudSelEnt.value)
+                    const deptsOrphelins = audienceDepts.filter(d => d.id_entite === modalAudSelEnt.value && !d.id_direction)
+                    return (
+                      <>
+                        <button type="button" onClick={() => setModalAudSelEnt(null)}
+                          style={{ padding: '5px 10px', borderRadius: 99, border: '1.5px solid #e2e8f0', background: '#fff', color: '#94a3b8', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                          ← retour
+                        </button>
+                        <button type="button" onClick={() => addAudienceToEvent(modalEvId, emp => emp.id_entite === modalAudSelEnt.value)}
+                          style={{ padding: '5px 12px', borderRadius: 99, border: '1.5px solid #021630', background: '#eef4fb', color: '#021630', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
+                          Tout {modalAudSelEnt.label}
+                        </button>
+                        {dirs.map(dir => (
+                          <button key={dir.value} type="button" onClick={() => setModalAudSelDir(dir)}
+                            style={{ padding: '5px 12px', borderRadius: 99, border: '1.5px solid #d0dff0', background: '#f8fafc', color: '#021630', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
+                            {dir.label}
+                          </button>
+                        ))}
+                        {deptsOrphelins.length > 0 && dirs.length > 0 && (
+                          <span style={{ alignSelf: 'center', color: '#cbd5e1', fontSize: '0.7rem', margin: '0 2px' }}>|</span>
+                        )}
+                        {deptsOrphelins.map(dept => (
+                          <button key={dept.value} type="button" onClick={() => addAudienceToEvent(modalEvId, emp => emp.dept_id === dept.value)}
+                            style={{ padding: '5px 10px', borderRadius: 99, border: '1.5px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                            {dept.label}
+                          </button>
+                        ))}
+                      </>
+                    )
+                  })()}
+
+                  {/* Niveau 3 — Départements de la direction */}
+                  {modalAudSelDir && (() => {
+                    const depts = audienceDepts.filter(d => d.id_direction === modalAudSelDir.value)
+                    return (
+                      <>
+                        <button type="button" onClick={() => setModalAudSelDir(null)}
+                          style={{ padding: '5px 10px', borderRadius: 99, border: '1.5px solid #e2e8f0', background: '#fff', color: '#94a3b8', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                          ← retour
+                        </button>
+                        <button type="button" onClick={() => addAudienceToEvent(modalEvId, emp => emp.id_direction === modalAudSelDir.value)}
+                          style={{ padding: '5px 12px', borderRadius: 99, border: '1.5px solid #021630', background: '#eef4fb', color: '#021630', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
+                          Toute la direction
+                        </button>
+                        {depts.length === 0
+                          ? <span style={{ fontSize: '0.72rem', color: '#94a3b8', alignSelf: 'center' }}>Aucun département</span>
+                          : depts.map(dept => (
+                            <button key={dept.value} type="button" onClick={() => addAudienceToEvent(modalEvId, emp => emp.dept_id === dept.value)}
+                              style={{ padding: '5px 11px', borderRadius: 99, border: '1.5px solid #d0dff0', background: '#f8fafc', color: '#475569', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                              {dept.label}
+                            </button>
+                          ))
+                        }
+                      </>
+                    )
+                  })()}
+                </div>
+              </div>
+
+              {/* ── Recherche individuelle ── */}
+              <div style={{ padding: '10px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                <div style={{ position: 'relative' }}>
+                  <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+                  <input style={{ width: '100%', padding: '7px 10px 7px 30px', border: '1px solid #d0dff0', borderRadius: 8, fontSize: '0.82rem', boxSizing: 'border-box' }}
+                    placeholder="Ajouter une personne par nom ou matricule..."
+                    value={modalSearch}
+                    onChange={async e => {
+                      const val = e.target.value
+                      setModalSearch(val)
+                      if (val.length >= 2) {
+                        try {
+                          const r = await api.get(`/employees/autocomplete/employes?q=${encodeURIComponent(val)}&limit=6`)
+                          const already = new Set(ins.map(i => String(i.matricule)))
+                          setModalSearchResults((r.data || []).filter(x => !already.has(String(x.matricule))))
+                        } catch { setModalSearchResults([]) }
+                      } else { setModalSearchResults([]) }
+                    }}
+                  />
+                </div>
+                {modalSearchResults.length > 0 && (
+                  <div style={{ border: '1px solid #d0dff0', borderTop: 'none', borderRadius: '0 0 8px 8px', background: '#fff', maxHeight: 130, overflowY: 'auto' }}>
+                    {modalSearchResults.map(e => (
+                      <button key={e.matricule} type="button"
+                        onClick={async () => {
+                          await addParticipant(modalEvId, e.matricule)
+                          setModalSearch(''); setModalSearchResults([])
+                        }}
+                        style={{ width: '100%', padding: '7px 12px', border: 'none', borderBottom: '1px solid #f1f5f9', background: '#fff', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#021630' }}>{e.prenom} {e.nom}</span>
+                        <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>#{e.matricule}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {modalSearch.length >= 2 && modalSearchResults.length === 0 && (
+                  <div style={{ padding: '7px 12px', fontSize: '0.75rem', color: '#94a3b8', border: '1px solid #d0dff0', borderTop: 'none', borderRadius: '0 0 8px 8px' }}>Aucun résultat</div>
+                )}
+              </div>
+
+              {/* Confirmation après ajout */}
+              {ins.length > 0 && (
+                <div style={{ padding: '8px 16px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: '0.75rem', color: '#021630', fontWeight: 700 }}>{ins.length} participant(s) inscrit(s)</span>
+                  <button onClick={closeModal} style={{ marginLeft: 'auto', padding: '4px 12px', border: '1px solid #d0dff0', borderRadius: 6, background: '#eef4fb', color: '#021630', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>Fermer</button>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )
+    })()}
     </div>
   )
 }

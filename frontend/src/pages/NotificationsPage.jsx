@@ -40,7 +40,7 @@ function getTargetRoute(notif) {
   const opId = notif.id_operation
   const bucket = notif.workflow_bucket || 'envoye'
   const opParam = opId ? `?operationId=${opId}&tab=${bucket}` : ''
-  if (td.includes('frais')) return { path: `/rh/frais${opParam}`, label: 'Voir mes frais de mission' }
+  if (td.includes('frais')) return { path: `/rh/frais${opParam}`, label: 'Voir la demande' }
   if (td.includes('permission')) return { path: `/rh/permissions${opParam}`, label: 'Voir ma permission' }
   if (td.includes('mission')) return { path: `/rh/missions${opParam}`, label: 'Voir ma mission' }
   if (td.includes('sortie')) return { path: `/rh/sorties${opParam}`, label: 'Voir ma sortie' }
@@ -52,7 +52,7 @@ function getTargetRoute(notif) {
   if (type === 'EVALUATION') return { path: '/rh/evaluations', label: 'Voir mes évaluations' }
   // Priorité 3 : contenu du message
   const text = ((notif.message || '') + ' ' + (notif.titre || '')).toLowerCase()
-  if (text.includes('frais de mission') || text.includes('frais')) return { path: `/rh/frais${opParam}`, label: 'Voir mes frais de mission' }
+  if (text.includes('frais de mission') || text.includes('frais')) return { path: `/rh/frais${opParam}`, label: 'Voir la demande' }
   if (text.includes('permission')) return { path: `/rh/permissions${opParam}`, label: 'Voir ma permission' }
   if (text.includes('mission')) return { path: `/rh/missions${opParam}`, label: 'Voir ma mission' }
   if (text.includes('sortie')) return { path: `/rh/sorties${opParam}`, label: 'Voir ma sortie' }

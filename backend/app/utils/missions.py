@@ -253,7 +253,7 @@ def creer_demande_frais(
             role=prochain_role,
             matricule=prochain_matricule,
             type_notification='VALIDATION',
-            titre='Une nouvelle demande de frais de mission',
+            titre=f"Une nouvelle demande de frais de mission — {_nom_emp}",
             message=f"{_nom_emp} a soumis une demande de frais de mission ({total_frais} FCFA) pour la mission de {mission.ville or mission.pays or 'destination'}.",
             id_operation=operation_frais.id_operation,
             db=db

@@ -1,7 +1,10 @@
-import React, {createContext, useContext, useEffect, useState} from 'react'
+import React, {createContext, useContext, useEffect, useRef, useState} from 'react'
 import api from '../services/api'
 import jwt_decode from 'jwt-decode'
 import {useNavigate} from 'react-router-dom'
+
+const INACTIVITY_TIMEOUT = 5 * 60 * 1000 // 5 minutes
+const ACTIVITY_EVENTS = ['mousemove','mousedown','keydown','touchstart','scroll','click']
 
 const AuthContext = createContext()
 
@@ -49,8 +52,54 @@ export function AuthProvider({children}){
   const [loading, setLoading] = useState(true)
   const [sessionId, setSessionId] = useState(null)
   const navigate = useNavigate()
+  const inactivityTimer = useRef(null)
+  const lastActivityRef = useRef(Date.now())
+
+  // ── Inactivity + veille auto-logout ─────────────────────────────
+  useEffect(() => {
+    if (!user) return
+    const reset = () => {
+      lastActivityRef.current = Date.now()
+      clearTimeout(inactivityTimer.current)
+      inactivityTimer.current = setTimeout(() => {
+        logout()
+      }, INACTIVITY_TIMEOUT)
+    }
+    reset()
+    ACTIVITY_EVENTS.forEach(e => window.addEventListener(e, reset, { passive: true }))
+
+    // Détection du réveil machine : quand la page redevient visible,
+    // vérifier si le délai d'inactivité a été dépassé pendant la veille
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        if (Date.now() - lastActivityRef.current >= INACTIVITY_TIMEOUT) {
+          logout()
+        } else {
+          reset()
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      clearTimeout(inactivityTimer.current)
+      ACTIVITY_EVENTS.forEach(e => window.removeEventListener(e, reset))
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
 
   useEffect(()=>{
+    // Si sessionStorage n'a pas le flag, c'est une nouvelle session navigateur
+    // (machine redémarrée ou navigateur fermé) → forcer la re-connexion
+    if (!sessionStorage.getItem('session_alive')) {
+      localStorage.removeItem('ec_token')
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('session_id')
+      localStorage.removeItem('session_date')
+      setLoading(false)
+      return
+    }
     const token = localStorage.getItem('ec_token') || localStorage.getItem('access_token')
     if(token){
       try{
@@ -96,6 +145,7 @@ export function AuthProvider({children}){
     const {access_token}=res.data
     localStorage.setItem('ec_token',access_token)
     localStorage.setItem('access_token',access_token)
+    sessionStorage.setItem('session_alive','1')
     const data = jwt_decode(access_token)
     setUser(data)
 
@@ -120,6 +170,7 @@ export function AuthProvider({children}){
     // token reçu via lien email
     localStorage.setItem('ec_token',token)
     localStorage.setItem('access_token',token)
+    sessionStorage.setItem('session_alive','1')
     const data = jwt_decode(token)
     setUser(data)
 
@@ -152,6 +203,7 @@ export function AuthProvider({children}){
     localStorage.removeItem('access_token')
     localStorage.removeItem('session_id')
     localStorage.removeItem('session_date')
+    sessionStorage.removeItem('session_alive')
     setUser(null)
     setSessionId(null)
     navigate('/login')
@@ -162,6 +214,7 @@ export function AuthProvider({children}){
     localStorage.removeItem('access_token')
     localStorage.removeItem('session_id')
     localStorage.removeItem('session_date')
+    sessionStorage.removeItem('session_alive')
     setUser(null)
     setSessionId(null)
   }

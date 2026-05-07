@@ -20,6 +20,8 @@ from .routers import (
     events_router, reviews360_router, talent_router, workforce_router, clubs_router,
     admin_router, pdf_router, settings_router, biometrie_router,
     fiches_poste_router,
+    demande_explication_router, disciplinaire_router, scoring_router,
+    ai_router, analytics_router,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request
@@ -145,7 +147,11 @@ async def audit_middleware(request: Request, call_next):
     return resp
 
 
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as _create_err:
+    import logging
+    logging.getLogger(__name__).warning("create_all warning (tables may already exist): %s", _create_err)
 
 from fastapi.staticfiles import StaticFiles
 os.makedirs('/app/uploads', exist_ok=True)
@@ -182,6 +188,11 @@ app.include_router(admin_router.router)
 app.include_router(pdf_router.router)
 app.include_router(settings_router.router)
 app.include_router(biometrie_router.router)
+app.include_router(demande_explication_router.router)
+app.include_router(disciplinaire_router.router)
+app.include_router(scoring_router.router)
+app.include_router(ai_router.router)
+app.include_router(analytics_router.router)
 
 
 @app.get('/')

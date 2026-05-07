@@ -45,6 +45,10 @@ import SandboxPage from './pages/SandboxPage'
 import AbsencesPage from './pages/AbsencesPage'
 import AuditLogPage from './pages/AuditLogPage'
 import ProfilePage from './pages/ProfilePage'
+import DemandeExplicationPage from './pages/DemandeExplicationPage'
+import AIAssistantPage from './pages/AIAssistantPage'
+import DisciplinairePage from './pages/DisciplinairePage'
+import ScoreComportementalPage from './pages/ScoreComportementalPage'
 import RemplacantsPage from './pages/RemplacantsPage'
 import { ToastProvider, ConfirmProvider } from './components/ui'
 import './index.css'
@@ -111,6 +115,10 @@ export default function App(){
             <Route path="audit-logs" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AuditLogPage /></ProtectedRoute>} />
             <Route path="module/:slug" element={<ModulePlaceholder />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="demandes-explication" element={<DemandeExplicationPage />} />
+            <Route path="ai-assistant" element={<AIAssistantPage />} />
+            <Route path="disciplinaire" element={<DisciplinairePage />} />
+            <Route path="score-comportemental" element={<ScoreComportementalPage />} />
           </Route>
 
           <Route path="/home" element={<Navigate to="/rh/home" replace />} />
