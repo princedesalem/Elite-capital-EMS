@@ -95,6 +95,9 @@ services:
     image: ollama/ollama
     ports:
       - '11434:11434'
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped

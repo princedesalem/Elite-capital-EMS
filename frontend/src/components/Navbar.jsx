@@ -280,7 +280,7 @@ export default function Navbar(){
                     height: 18,
                     padding: '0 5px',
                     borderRadius: 999,
-                    background: '#f97316',
+                    background: '#c00000',
                     color: '#fff',
                     fontSize: '0.64rem',
                     fontWeight: 800,
