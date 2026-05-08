@@ -518,3 +518,29 @@ def export_dashboard(
         headers={'Content-Disposition': f'attachment; filename="{filename}"'},
     )
 
+
+@router.get('/recrues-par-an')
+def recrues_par_an(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Retourne le nombre de nouvelles recrues (nouvelle_recrue=True) par année d'embauche."""
+    role = (current_user.get('role') or '').upper()
+    if role not in _ROLES_RH:
+        raise HTTPException(status_code=403, detail='Accès réservé.')
+
+    rows = (
+        db.query(
+            func.year(models.Employe.date_embauche).label('annee'),
+            func.count(models.Employe.matricule).label('count'),
+        )
+        .filter(
+            models.Employe.nouvelle_recrue == True,  # noqa: E712
+            models.Employe.date_embauche.isnot(None),
+        )
+        .group_by(func.year(models.Employe.date_embauche))
+        .order_by(func.year(models.Employe.date_embauche))
+        .all()
+    )
+    return [{'annee': r.annee, 'count': r.count} for r in rows if r.annee is not None]
+

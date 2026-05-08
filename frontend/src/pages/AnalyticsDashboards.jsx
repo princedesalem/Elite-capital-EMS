@@ -66,6 +66,7 @@ export default function AnalyticsDashboards() {
   const [soldeConges, setSoldeConges] = useState([])
   const [formationRate, setFormationRate] = useState(null)
   const [exportingXlsx, setExportingXlsx] = useState(false)
+  const [recruesParAn, setRecruesParAn] = useState([])
 
   const handleExportExcel = () => {
     setExportingXlsx(true)
@@ -98,6 +99,7 @@ export default function AnalyticsDashboards() {
     api.get('/dashboard/absenteisme-par-dept').then(r => setAbsenteisme(r.data || [])).catch(() => {})
     api.get('/dashboard/solde-conges-par-tranche').then(r => setSoldeConges(r.data || [])).catch(() => {})
     api.get('/dashboard/formation-rate').then(r => setFormationRate(r.data || null)).catch(() => {})
+    api.get('/api/analytics/recrues-par-an').then(r => setRecruesParAn(r.data || [])).catch(() => {})
   }, [])
 
   const MOIS = useMemo(() => [
@@ -399,6 +401,30 @@ export default function AnalyticsDashboards() {
                         <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>Embauches dans l'année sélectionnée</div>
                       </div>
                     </div>
+                    {/* Recrues par année */}
+                    {recruesParAn.length > 0 && (
+                      <>
+                        <h3 style={{ margin: '0 0 8px', color: DARK, fontSize: '0.95rem', fontWeight: 700 }}>Nouvelles recrues par année</h3>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: 12 }}>
+                          Employés marqués <strong>«&nbsp;Nouvelle recrue&nbsp;»</strong> — comptabilisés selon leur année d'embauche
+                        </div>
+                        <div style={{ width: '100%', height: 220, marginBottom: 24 }}>
+                          <ResponsiveContainer>
+                            <BarChart data={recruesParAn} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                              <XAxis dataKey="annee" tick={{ fontSize: 11 }} />
+                              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                              <Tooltip formatter={(v) => [v, 'Recrues']} />
+                              <Bar dataKey="count" fill="#16a34a" radius={[4, 4, 0, 0]} name="Recrues" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </>
+                    )}
+                    {recruesParAn.length === 0 && (
+                      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '12px 16px', marginBottom: 20, fontSize: '0.8rem', color: '#15803d' }}>
+                        Aucune recrue marquée pour l'instant — cochez «&nbsp;Nouvelle recrue&nbsp;» lors de la création d'un employé pour alimenter ce graphique.
+                      </div>
+                    )}
                     <h3 style={{ margin: '0 0 12px', color: DARK, fontSize: '0.95rem', fontWeight: 700 }}>Distribution de l'ancienneté</h3>
                     <div style={{ width: '100%', height: 220 }}>
                       <ResponsiveContainer>

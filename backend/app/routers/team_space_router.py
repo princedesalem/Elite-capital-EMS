@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -10,13 +11,14 @@ from ..db import get_db
 
 router = APIRouter(prefix='/api/team-space', tags=['team-space'])
 
-VALID_TYPES = {'shoutout', 'kudos', 'poll', 'annonce'}
+VALID_TYPES = {'shoutout', 'kudos', 'poll', 'annonce', 'message'}
 
 POST_TYPE_LABELS = {
     'shoutout': 'Shout-out',
     'kudos': 'Kudos',
     'poll': 'Sondage',
     'annonce': 'Annonce',
+    'message': 'Message',
 }
 
 
@@ -115,8 +117,13 @@ def _notify_post_created(post: models.TeamSpacePost, db: Session) -> None:
         titre = f'Nouveau sondage de {author}'
         message = (post.question or '').strip() or 'Un nouveau sondage est disponible.'
     elif post.post_type == 'annonce':
-        titre = f'📢 Annonce de {author}'
-        message = (post.message or '').strip() or 'Nouvelle annonce dans l’Espace Équipe.'
+        titre = f'Annonce de {author}'
+        annonce_titre = (post.valeur or '').strip()
+        body = (post.message or '').strip()
+        message = f'{annonce_titre} — {body}' if annonce_titre and body else annonce_titre or body or 'Nouvelle annonce dans l’Espace Équipe.'
+    elif post.post_type == 'message':
+        titre = f'Message de {author}'
+        message = (post.message or '').strip() or 'Nouveau message dans l’Espace Équipe.'
     else:
         titre = f'Nouvelle publication ({label})'
         message = (post.message or post.question or '').strip() or 'Nouvelle publication dans l’Espace Équipe.'
@@ -137,7 +144,11 @@ def _notify_post_created(post: models.TeamSpacePost, db: Session) -> None:
         db.commit()
 
 
-def _serialize(post: models.TeamSpacePost) -> Dict[str, Any]:
+def _serialize(
+    post: models.TeamSpacePost,
+    comments_count: int = 0,
+    liked_by: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     return {
         'id': post.id_post,
         'type': post.post_type,
@@ -153,6 +164,8 @@ def _serialize(post: models.TeamSpacePost) -> Dict[str, Any]:
         'options': post.poll_options or [],
         'votedBy': post.voted_by or [],
         'likes': int(post.likes or 0),
+        'comments_count': comments_count,
+        'liked_by': liked_by if liked_by is not None else [],
         'audience': {
             'type': post.audience_type or 'all',
             'selected': post.audience_selected or [],
@@ -161,11 +174,79 @@ def _serialize(post: models.TeamSpacePost) -> Dict[str, Any]:
     }
 
 
+def _serialize_comment(
+    c: models.TeamSpaceComment,
+    replies: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    return {
+        'id': c.id,
+        'post_id': c.post_id,
+        'parent_id': c.parent_id,
+        'auteur_matricule': c.auteur_matricule,
+        'auteur_nom': c.auteur_nom,
+        'contenu': c.contenu,
+        'date': c.created_at.strftime('%d/%m/%Y %H:%M') if c.created_at else None,
+        'created_at': c.created_at.isoformat() if c.created_at else None,
+        'replies': replies if replies is not None else [],
+    }
+
+
+def _notify_like(post: models.TeamSpacePost, liker_matricule: str, db: Session) -> None:
+    """Ajoute une notif à l’auteur du post quand quelqu’un like (sans commit)."""
+    if not post.author_matricule:
+        return
+    author_mat = str(post.author_matricule).strip().upper()
+    liker_mat = str(liker_matricule).strip().upper()
+    if author_mat == liker_mat:
+        return  # pas de notif auto-like
+    liker = db.query(models.Employe).filter(
+        models.Employe.matricule == liker_matricule
+    ).first()
+    liker_name = f'{liker.prenom or ""} {liker.nom or ""}'.strip() if liker else f'Matricule {liker_matricule}'
+    notif = models.Notification(
+        matricule=author_mat,
+        type_notification=models.TypeNotificationEnum.AUTRE,
+        titre=f'{liker_name} a aimé votre publication',
+        message=(post.message or post.question or post.valeur or 'Votre publication dans l’Espace Équipe.')[:300],
+        id_operation=None,
+    )
+    db.add(notif)
+
+
+def _notify_comment(post: models.TeamSpacePost, commenter_nom: str, contenu: str, db: Session) -> None:
+    """Notifie l’auteur du post quand quelqu’un commente."""
+    if not post.author_matricule:
+        return
+    db.add(models.Notification(
+        matricule=str(post.author_matricule).strip().upper(),
+        type_notification=models.TypeNotificationEnum.AUTRE,
+        titre=f'{commenter_nom} a commenté votre publication',
+        message=contenu[:300],
+        id_operation=None,
+    ))
+    db.commit()
+
+
+def _notify_reply(parent: models.TeamSpaceComment, replier_nom: str, contenu: str, db: Session) -> None:
+    """Notifie l’auteur du commentaire quand quelqu’un répond."""
+    if not parent.auteur_matricule:
+        return
+    db.add(models.Notification(
+        matricule=str(parent.auteur_matricule).strip().upper(),
+        type_notification=models.TypeNotificationEnum.AUTRE,
+        titre=f'{replier_nom} a répondu à votre commentaire',
+        message=contenu[:300],
+        id_operation=None,
+    ))
+    db.commit()
+
+
 @router.get('/posts')
 def list_posts(
     type: str = Query(default='all'),
     search: str = Query(default=''),
     limit: int = Query(default=100, ge=1, le=500),
+    viewer_matricule: str = Query(default=''),
     db: Session = Depends(get_db),
 ):
     query = db.query(models.TeamSpacePost)
@@ -185,7 +266,32 @@ def list_posts(
         )
 
     posts = query.order_by(models.TeamSpacePost.date_creation.desc()).limit(limit).all()
-    return [_serialize(post) for post in posts]
+
+    # Batch fetch: comment counts + liked_by lists
+    post_ids = [p.id_post for p in posts]
+    comment_counts: Dict[int, int] = {}
+    liked_by_map: Dict[int, List[str]] = {}
+    if post_ids:
+        counts = (
+            db.query(models.TeamSpaceComment.post_id, func.count(models.TeamSpaceComment.id))
+            .filter(models.TeamSpaceComment.post_id.in_(post_ids))
+            .group_by(models.TeamSpaceComment.post_id)
+            .all()
+        )
+        comment_counts = {pid: cnt for pid, cnt in counts}
+        for like in db.query(models.TeamSpacePostLike).filter(
+            models.TeamSpacePostLike.post_id.in_(post_ids)
+        ).all():
+            liked_by_map.setdefault(like.post_id, []).append(like.matricule)
+
+    return [
+        _serialize(
+            post,
+            comments_count=comment_counts.get(post.id_post, 0),
+            liked_by=liked_by_map.get(post.id_post, []),
+        )
+        for post in posts
+    ]
 
 
 @router.post('/posts')
@@ -223,6 +329,9 @@ def create_post(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_d
     elif post_type == 'kudos':
         if not post.destinataire:
             raise HTTPException(status_code=400, detail='Destinataire obligatoire')
+    elif post_type == 'message':
+        if not post.message:
+            raise HTTPException(status_code=400, detail='Message obligatoire')
     elif post_type == 'poll':
         if not post.question:
             raise HTTPException(status_code=400, detail='Question obligatoire')
@@ -242,19 +351,148 @@ def create_post(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_d
     db.commit()
     db.refresh(post)
     _notify_post_created(post, db)
-    return _serialize(post)
+    return _serialize(post, comments_count=0, liked_by=[])
 
 
-@router.patch('/posts/{id_post}/like')
-def like_post(id_post: int, db: Session = Depends(get_db)):
+@router.post('/posts/{id_post}/like')
+def toggle_like(id_post: int, payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)):
+    """Toggle like: 1 like par personne, illimité en nombre de clics mais compte 1 fois."""
     post = db.query(models.TeamSpacePost).filter(models.TeamSpacePost.id_post == id_post).first()
     if not post:
         raise HTTPException(status_code=404, detail='Publication introuvable')
 
-    post.likes = int(post.likes or 0) + 1
+    matricule = str(payload.get('matricule') or '').strip()
+    if not matricule:
+        raise HTTPException(status_code=400, detail='Matricule requis')
+
+    existing = db.query(models.TeamSpacePostLike).filter(
+        models.TeamSpacePostLike.post_id == id_post,
+        models.TeamSpacePostLike.matricule == matricule,
+    ).first()
+
+    if existing:
+        db.delete(existing)
+        post.likes = max(0, int(post.likes or 0) - 1)
+    else:
+        db.add(models.TeamSpacePostLike(post_id=id_post, matricule=matricule))
+        post.likes = int(post.likes or 0) + 1
+        _notify_like(post, matricule, db)  # notif sans commit
+
     db.commit()
     db.refresh(post)
-    return _serialize(post)
+
+    liked_by = [
+        r.matricule for r in
+        db.query(models.TeamSpacePostLike)
+        .filter(models.TeamSpacePostLike.post_id == id_post)
+        .all()
+    ]
+    comments_count = db.query(func.count(models.TeamSpaceComment.id)).filter(
+        models.TeamSpaceComment.post_id == id_post
+    ).scalar() or 0
+    return _serialize(post, comments_count=comments_count, liked_by=liked_by)
+
+
+@router.get('/posts/{id_post}/comments')
+def list_comments(id_post: int, db: Session = Depends(get_db)):
+    top_comments = (
+        db.query(models.TeamSpaceComment)
+        .filter(
+            models.TeamSpaceComment.post_id == id_post,
+            models.TeamSpaceComment.parent_id.is_(None),
+        )
+        .order_by(models.TeamSpaceComment.created_at.asc())
+        .all()
+    )
+    result = []
+    for c in top_comments:
+        replies = (
+            db.query(models.TeamSpaceComment)
+            .filter(models.TeamSpaceComment.parent_id == c.id)
+            .order_by(models.TeamSpaceComment.created_at.asc())
+            .all()
+        )
+        result.append(_serialize_comment(c, [_serialize_comment(r) for r in replies]))
+    return result
+
+
+@router.post('/posts/{id_post}/comments')
+def add_comment(id_post: int, payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)):
+    post = db.query(models.TeamSpacePost).filter(models.TeamSpacePost.id_post == id_post).first()
+    if not post:
+        raise HTTPException(status_code=404, detail='Publication introuvable')
+
+    auteur_nom = str(payload.get('auteur_nom') or '').strip()
+    contenu = str(payload.get('contenu') or '').strip()
+    if not auteur_nom or not contenu:
+        raise HTTPException(status_code=400, detail='Auteur et contenu requis')
+
+    comment = models.TeamSpaceComment(
+        post_id=id_post,
+        parent_id=None,
+        auteur_matricule=str(payload.get('auteur_matricule') or '').strip() or None,
+        auteur_nom=auteur_nom,
+        contenu=contenu,
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    _notify_comment(post, auteur_nom, contenu, db)
+    return _serialize_comment(comment)
+
+
+@router.post('/comments/{id_comment}/reply')
+def reply_comment(id_comment: int, payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)):
+    parent = db.query(models.TeamSpaceComment).filter(models.TeamSpaceComment.id == id_comment).first()
+    if not parent:
+        raise HTTPException(status_code=404, detail='Commentaire introuvable')
+
+    auteur_nom = str(payload.get('auteur_nom') or '').strip()
+    contenu = str(payload.get('contenu') or '').strip()
+    if not auteur_nom or not contenu:
+        raise HTTPException(status_code=400, detail='Auteur et contenu requis')
+
+    reply = models.TeamSpaceComment(
+        post_id=parent.post_id,
+        parent_id=id_comment,
+        auteur_matricule=str(payload.get('auteur_matricule') or '').strip() or None,
+        auteur_nom=auteur_nom,
+        contenu=contenu,
+    )
+    db.add(reply)
+    db.commit()
+    db.refresh(reply)
+    _notify_reply(parent, auteur_nom, contenu, db)
+    return _serialize_comment(reply)
+
+
+@router.patch('/comments/{id_comment}')
+def update_comment(id_comment: int, payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)):
+    comment = db.query(models.TeamSpaceComment).filter(models.TeamSpaceComment.id == id_comment).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail='Commentaire introuvable')
+    contenu = str(payload.get('contenu') or '').strip()
+    if not contenu:
+        raise HTTPException(status_code=400, detail='Contenu requis')
+    comment.contenu = contenu
+    db.commit()
+    db.refresh(comment)
+    return _serialize_comment(comment)
+
+
+@router.delete('/comments/{id_comment}')
+def delete_comment(id_comment: int, db: Session = Depends(get_db)):
+    comment = db.query(models.TeamSpaceComment).filter(models.TeamSpaceComment.id == id_comment).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail='Commentaire introuvable')
+    post_id = comment.post_id
+    db.delete(comment)
+    db.commit()
+    # Retourner le nouveau compteur
+    count = db.query(func.count(models.TeamSpaceComment.id)).filter(
+        models.TeamSpaceComment.post_id == post_id
+    ).scalar() or 0
+    return {'ok': True, 'post_id': post_id, 'comments_count': count}
 
 
 @router.patch('/posts/{id_post}/vote')
@@ -276,7 +514,7 @@ def vote_poll(id_post: int, payload: Dict[str, Any] = Body(...), db: Session = D
 
     voted_by = post.voted_by or []
     if voter in voted_by:
-        return _serialize(post)
+        return _serialize(post, liked_by=[])
 
     next_options = []
     for idx, option in enumerate(options):
@@ -289,7 +527,7 @@ def vote_poll(id_post: int, payload: Dict[str, Any] = Body(...), db: Session = D
     post.voted_by = [*voted_by, voter]
     db.commit()
     db.refresh(post)
-    return _serialize(post)
+    return _serialize(post, liked_by=[])
 
 
 @router.patch('/posts/{id_post}')
@@ -318,7 +556,7 @@ def update_post(id_post: int, payload: Dict[str, Any] = Body(...), db: Session =
 
     db.commit()
     db.refresh(post)
-    return _serialize(post)
+    return _serialize(post, liked_by=[])
 
 
 @router.delete('/posts/{id_post}')

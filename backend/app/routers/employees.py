@@ -1,6 +1,6 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Query, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 from sqlalchemy.exc import IntegrityError
 from ..db import get_db
 from .. import crud, schemas, models
@@ -1054,6 +1054,77 @@ def search_employes_autocomplete(q: str = '', limit: int = 15, db: Session = Dep
         }
         for e in employes
     ]
+
+
+_PRESENCE_THRESHOLD_MINUTES = 5  # en ligne si actif dans les 5 dernières minutes
+
+
+@router.patch('/me/heartbeat', status_code=204)
+def heartbeat(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Mise à jour de la présence — appelé par le frontend toutes les 30s."""
+    try:
+        matricule, _ = _get_token_context(request)
+    except HTTPException:
+        return  # token absent ou invalide → on ignore silencieusement
+    emp = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
+    if emp:
+        now = datetime.utcnow()
+        emp.derniere_connexion = now
+        # Synchronise aussi Utilisateur.dernier_login
+        if emp.utilisateur:
+            emp.utilisateur.dernier_login = now
+        db.commit()
+
+
+@router.get('/presence')
+def get_presence(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Retourne la liste de tous les employés actifs avec leur statut de présence."""
+    threshold = datetime.utcnow() - timedelta(minutes=_PRESENCE_THRESHOLD_MINUTES)
+    employes = (
+        db.query(models.Employe)
+        .filter(models.Employe.statut_employe == models.StatutEmployeEnum.ACTIF)
+        .order_by(
+            # MySQL ne supporte pas NULLS LAST — on trie les NULL en dernier manuellement
+            case((models.Employe.derniere_connexion == None, 1), else_=0),
+            models.Employe.derniere_connexion.desc(),
+            models.Employe.nom,
+        )
+        .all()
+    )
+    result = []
+    for e in employes:
+        # Utilise dernier_login comme fallback si derniere_connexion non encore renseignée
+        connexion = e.derniere_connexion or (e.utilisateur.dernier_login if e.utilisateur else None)
+        en_ligne = connexion is not None and connexion >= threshold
+        result.append({
+            'matricule': e.matricule,
+            'nom': e.nom or '',
+            'prenom': e.prenom or '',
+            'fonction': e.fonction or '',
+            'photo_url': e.photo_url or None,
+            'en_ligne': en_ligne,
+            'derniere_connexion': connexion.isoformat() if connexion else None,
+        })
+    # Trier: en ligne d'abord, puis hors ligne par derniere_connexion desc, puis jamais connecté
+    result.sort(key=lambda x: (
+        0 if x['en_ligne'] else (1 if x['derniere_connexion'] else 2),
+        x['derniere_connexion'] or '',
+    ), reverse=False)
+    # Inverser la clé de date pour avoir le plus récent en premier dans hors-ligne
+    result.sort(key=lambda x: (
+        0 if x['en_ligne'] else 1,
+        '' if not x['derniere_connexion'] else x['derniere_connexion'],
+    ), reverse=False)
+    online = [x for x in result if x['en_ligne']]
+    offline_with = sorted([x for x in result if not x['en_ligne'] and x['derniere_connexion']], key=lambda x: x['derniere_connexion'], reverse=True)
+    offline_never = [x for x in result if not x['en_ligne'] and not x['derniere_connexion']]
+    return online + offline_with + offline_never
 
 
 @router.get('/{matricule}', response_model=schemas.EmployeOut)

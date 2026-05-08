@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Enum, Boolean, Text, JSON, DECIMAL, Time, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Enum, Boolean, Text, JSON, DECIMAL, Time, UniqueConstraint, func
 from sqlalchemy.orm import relationship
 from .db import Base
 import enum
@@ -156,6 +156,8 @@ class Employe(Base):
     notif_email_enabled = Column(Boolean, nullable=False, default=True)
     # Assignation manuelle d'une fiche de poste (FK vers Fiche_poste_template)
     id_fiche_poste = Column(Integer, ForeignKey('Fiche_poste_template.id_template', ondelete='SET NULL'), nullable=True)
+    # Présence en ligne — mis à jour par heartbeat frontend toutes les 30s
+    derniere_connexion = Column(DateTime, nullable=True)
     utilisateur = relationship('Utilisateur', back_populates='employe', uselist=False)
     fiche_poste = relationship('FichePosteTemplate', back_populates='titulaires', foreign_keys=[id_fiche_poste])
 
@@ -675,6 +677,30 @@ class TeamSpacePost(Base):
     audience_type = Column(String(30), default='all', nullable=False)
     audience_selected = Column(JSON, nullable=True)
     date_creation = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class TeamSpacePostLike(Base):
+    """1 like par personne par post — unicité enforced en DB."""
+    __tablename__ = 'team_space_post_like'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    post_id = Column(Integer, ForeignKey('TEAM_SPACE_POST.id_post', ondelete='CASCADE'), nullable=False)
+    matricule = Column(String(32), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    __table_args__ = (
+        UniqueConstraint('post_id', 'matricule', name='uq_like_post_user'),
+    )
+
+
+class TeamSpaceComment(Base):
+    """Commentaires (et réponses imbriquées) sur les posts Espace Équipe."""
+    __tablename__ = 'team_space_comment'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    post_id = Column(Integer, ForeignKey('TEAM_SPACE_POST.id_post', ondelete='CASCADE'), nullable=False)
+    parent_id = Column(Integer, ForeignKey('team_space_comment.id', ondelete='CASCADE'), nullable=True)
+    auteur_matricule = Column(String(32), nullable=True)
+    auteur_nom = Column(String(150), nullable=False)
+    contenu = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class ModuleStoreItem(Base):

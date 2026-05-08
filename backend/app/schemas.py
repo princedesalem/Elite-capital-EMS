@@ -83,6 +83,7 @@ class EmployeUpdate(EmployeBase):
 
 class EmployeOut(EmployeBase):
     n1_nom: Optional[str] = None
+    derniere_connexion: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 

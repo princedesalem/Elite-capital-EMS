@@ -89,7 +89,7 @@ def test_like_and_vote_do_not_create_notifications(client, db_session, seed_refe
     post = _create_post(client, payload)
     count_after_create = db_session.query(models.Notification).count()
 
-    res_like = client.patch(f"/api/team-space/posts/{post['id']}/like")
+    res_like = client.post(f"/api/team-space/posts/{post['id']}/like", json={'matricule': str(author.matricule)})
     assert res_like.status_code == 200
     res_vote = client.patch(
         f"/api/team-space/posts/{post['id']}/vote",

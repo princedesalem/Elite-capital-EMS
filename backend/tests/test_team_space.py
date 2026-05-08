@@ -160,12 +160,12 @@ class TestTeamSpaceLike:
     def test_like_increments(self, client):
         created = client.post('/api/team-space/posts', json=_shoutout_payload()).json()
         post_id = created['id']
-        r = client.patch(f'/api/team-space/posts/{post_id}/like')
+        r = client.post(f'/api/team-space/posts/{post_id}/like', json={'matricule': '9999'})
         assert r.status_code == 200
         assert r.json()['likes'] == 1
 
     def test_like_404(self, client):
-        r = client.patch('/api/team-space/posts/99999/like')
+        r = client.post('/api/team-space/posts/99999/like', json={'matricule': '9999'})
         assert r.status_code == 404
 
 

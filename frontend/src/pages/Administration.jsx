@@ -483,7 +483,7 @@ export default function Administration() {
     <div style={{ padding: '12px', background: 'linear-gradient(135deg, #f7f8fb 0%, #e8f4f8 100%)', minHeight: '100vh' }}>
       <div
         style={{
-          background: 'linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%)',
+          background: 'linear-gradient(90deg, #021630 0%, #ce2b2b 100%)',
           color: 'white',
           padding: '16px 14px',
           borderRadius: '10px',

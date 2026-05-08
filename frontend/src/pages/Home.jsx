@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import AvatarCircle from '../components/AvatarCircle'
-import { BarChart2, LogOut, Star, MessageSquare, ThumbsUp, BarChart, Send, Plus, X, ChevronDown, Search, Gift, Users, Briefcase, Clock, MoreVertical, Pencil, Trash2, CheckCircle, Megaphone } from 'lucide-react'
+import { BarChart2, LogOut, Star, MessageSquare, ThumbsUp, BarChart, Send, Plus, X, ChevronDown, Search, Gift, Users, Briefcase, Clock, MoreVertical, Pencil, Trash2, CheckCircle, Megaphone, Heart, Wifi, UserCheck, WifiOff, RefreshCw } from 'lucide-react'
 import { toast, confirmDialog } from '../components/ui/bridge'
 import { BRAND_GRADIENT } from '../theme'
+import { formatLastSeen } from '../utils/formatLastSeen'
 
 // -- Team Engagement (backend persisted) --
 const WISHES_KEY = 'ems_wishes_v1'
@@ -45,10 +46,7 @@ export default function Home() {
 
     function handleDoubleClick(postId) {
       setLikeHearts(prev => ({ ...prev, [postId]: true }));
-      setLikes(prev => ({ ...prev, [postId]: (prev[postId] || 0) + 1 }));
-      // Also increment the main React count
-      const post = filteredFeed.find(f => f.id === postId);
-      if (post) likePost(post._type, postId);
+      toggleLike(postId);
       setTimeout(() => setLikeHearts(prev => ({ ...prev, [postId]: false })), 900);
     }
   const { user, logout } = useAuth()
@@ -61,14 +59,26 @@ export default function Home() {
   const [shoutouts, setShoutouts] = useState([])
   const [kudos, setKudos] = useState([])
   const [polls, setPolls] = useState([])
+  const [messages, setMessages] = useState([])
   const [showShoutoutForm, setShowShoutoutForm] = useState(false)
   const [showKudosForm, setShowKudosForm] = useState(false)
   const [showPollForm, setShowPollForm] = useState(false)
   const [showAnnonceForm, setShowAnnonceForm] = useState(false)
+  const [showMessageForm, setShowMessageForm] = useState(false)
   const [shoutoutForm, setShoutoutForm] = useState({ destinataire: '', message: '' })
   const [kudosForm, setKudosForm] = useState({ destinataire: '', raison: '', valeur: 'Excellence' })
   const [pollForm, setPollForm] = useState({ question: '', options: ['', ''] })
   const [annonceForm, setAnnonceForm] = useState({ titre: '', message: '' })
+  const [messageForm, setMessageForm] = useState({ message: '' })
+  // Comments modal state
+  const [commentModalPost, setCommentModalPost] = useState(null) // post object or null
+  const [expandedComments, setExpandedComments] = useState({})
+  const [commentInput, setCommentInput] = useState({})
+  const [replyInput, setReplyInput] = useState({})
+  const [replyingTo, setReplyingTo] = useState({})
+  const [commentsData, setCommentsData] = useState({})
+  const [editingComment, setEditingComment] = useState(null) // {id, contenu}
+  const [editCommentValue, setEditCommentValue] = useState('')
   // Annonces feed
   const [annonces, setAnnonces] = useState([])
   // Animation pulse pour nouveaux messages non vus
@@ -96,6 +106,10 @@ export default function Home() {
   const [leaveModalForm, setLeaveModalForm] = useState({ date_debut: '', date_fin: '', motif: '' })
   const [leaveModalMsg, setLeaveModalMsg] = useState(null)
   const birthdayRef = useRef(null)
+  // ── Présence en ligne ──────────────────────────────────────────────────────
+  const [presenceOpen, setPresenceOpen] = useState(false)
+  const [presenceList, setPresenceList] = useState([])
+  const [presenceLoading, setPresenceLoading] = useState(false)
 
   useEffect(() => {
     const matricule = Number(user?.matricule || user?.sub || 0)
@@ -123,6 +137,7 @@ export default function Home() {
     const nextKudos = []
     const nextPolls = []
     const nextAnnonces = []
+    const nextMessages = []
     ;(Array.isArray(posts) ? posts : []).forEach((p) => {
       const base = {
         id: p.id,
@@ -131,26 +146,31 @@ export default function Home() {
         created_at: p.created_at || null,
         destinataire: p.destinataire || '',
         message: p.message || '',
+        titre: p.titre || p.valeur || '',
         valeur: p.valeur || '',
         raison: p.raison || '',
         question: p.question || '',
         options: Array.isArray(p.options) ? p.options : [],
         votedBy: Array.isArray(p.votedBy) ? p.votedBy : [],
         likes: Number(p.likes || 0),
+        comments_count: Number(p.comments_count || 0),
+        liked_by: Array.isArray(p.liked_by) ? p.liked_by : [],
         audience: p.audience || { type: 'all', selected: [] }
       }
       if (p.type === 'shoutout') nextShoutouts.push(base)
       if (p.type === 'kudos') nextKudos.push(base)
       if (p.type === 'poll') nextPolls.push(base)
       if (p.type === 'annonce') nextAnnonces.push(base)
+      if (p.type === 'message') nextMessages.push(base)
     })
     setShoutouts(nextShoutouts)
     setKudos(nextKudos)
     setPolls(nextPolls)
     setAnnonces(nextAnnonces)
+    setMessages(nextMessages)
 
     // Vérifier s'il y a de nouveaux posts non vus
-    const allPosts = [...nextShoutouts, ...nextKudos, ...nextPolls, ...nextAnnonces]
+    const allPosts = [...nextShoutouts, ...nextKudos, ...nextPolls, ...nextAnnonces, ...nextMessages]
     if (allPosts.length > 0) {
       const maxId = Math.max(...allPosts.map(p => p.id || 0))
       const lastSeen = Number(sessionStorage.getItem('ems_lastSeenPostId') || 0)
@@ -162,13 +182,15 @@ export default function Home() {
 
   const loadTeamSpacePosts = async () => {
     try {
-      const res = await api.get('/api/team-space/posts', { params: { limit: 150 } })
+      const myMat = String(user?.matricule || user?.sub || '')
+      const res = await api.get('/api/team-space/posts', { params: { limit: 150, viewer_matricule: myMat } })
       splitTeamPosts(res.data)
     } catch (_) {
       setShoutouts([])
       setKudos([])
       setPolls([])
       setAnnonces([])
+      setMessages([])
     }
   }
 
@@ -186,6 +208,34 @@ export default function Home() {
     }, 30000)
     return () => clearInterval(interval)
   }, [])
+
+  // Heartbeat 30s — met à jour la présence en ligne
+  useEffect(() => {
+    const ping = () => api.patch('/employees/me/heartbeat').catch(() => {})
+    ping() // ping immédiat au chargement
+    const hb = setInterval(ping, 30000)
+    return () => clearInterval(hb)
+  }, [])
+
+  // Rafraîchissement auto du panel présence quand il est ouvert
+  useEffect(() => {
+    if (!presenceOpen) return
+    const refresh = setInterval(() => {
+      api.get('/employees/presence').then(r => setPresenceList(r.data || [])).catch(() => {})
+    }, 60000)
+    return () => clearInterval(refresh)
+  }, [presenceOpen])
+
+  const loadPresence = async () => {
+    setPresenceLoading(true)
+    try {
+      const res = await api.get('/employees/presence')
+      setPresenceList(res.data || [])
+    } catch (_) {}
+    setPresenceLoading(false)
+  }
+
+  // formatLastSeen importé depuis ../utils/formatLastSeen
 
   const calculateAnciennete = (dateEmbauche) => {
     if (!dateEmbauche) return 'N/A'
@@ -327,6 +377,7 @@ export default function Home() {
       ...kudos.map(k => ({ ...k, _type: 'kudos' })),
       ...polls.map(p => ({ ...p, _type: 'poll' })),
       ...annonces.map(a => ({ ...a, _type: 'annonce' })),
+      ...messages.map(m => ({ ...m, _type: 'message' })),
     ].sort((a, b) => b.id - a.id)
     if (filterType !== 'all') feed = feed.filter(f => f._type === filterType)
     if (filterSearch.trim()) {
@@ -339,7 +390,7 @@ export default function Home() {
       )
     }
     return feed.slice(0, 20)
-  }, [shoutouts, kudos, polls, annonces, filterType, filterSearch])
+  }, [shoutouts, kudos, polls, annonces, messages, filterType, filterSearch])
 
   // -- Birthday wishes --
   const sendWishes = (matricule) => {
@@ -378,22 +429,118 @@ export default function Home() {
     } catch (_) {}
   }
   const likePost = async (type, id) => {
+    // kept for legacy double-click path — delegates to toggleLike
+    toggleLike(id)
+  }
+  const toggleLike = async (postId) => {
+    const myMat = String(user?.matricule || user?.sub || '')
+    if (!myMat) return
     try {
-      const res = await api.patch(`/api/team-space/posts/${id}/like`)
+      const res = await api.post(`/api/team-space/posts/${postId}/like`, { matricule: myMat })
       const updated = {
         id: res.data?.id,
-        likes: Number(res.data?.likes || 0)
+        likes: Number(res.data?.likes || 0),
+        liked_by: Array.isArray(res.data?.liked_by) ? res.data.liked_by : [],
+        comments_count: Number(res.data?.comments_count || 0),
       }
-      if (type === 'shoutout') {
-        setShoutouts((prev) => prev.map((s) => s.id === updated.id ? { ...s, likes: updated.likes } : s))
-      } else if (type === 'kudos') {
-        setKudos((prev) => prev.map((k) => k.id === updated.id ? { ...k, likes: updated.likes } : k))
-      } else if (type === 'poll') {
-        setPolls((prev) => prev.map((p) => p.id === updated.id ? { ...p, likes: updated.likes } : p))
-      } else if (type === 'annonce') {
-        setAnnonces((prev) => prev.map((a) => a.id === updated.id ? { ...a, likes: updated.likes } : a))
+      const patchArr = (arr) => arr.map(p =>
+        p.id === updated.id ? { ...p, likes: updated.likes, liked_by: updated.liked_by } : p
+      )
+      setShoutouts(patchArr)
+      setKudos(patchArr)
+      setPolls(patchArr)
+      setAnnonces(patchArr)
+      setMessages(patchArr)
+    } catch (_) {}
+  }
+  const loadComments = async (postId) => {
+    try {
+      const res = await api.get(`/api/team-space/posts/${postId}/comments`)
+      setCommentsData(prev => ({ ...prev, [postId]: res.data }))
+    } catch (_) {}
+  }
+  const toggleComments = (postId) => {
+    setExpandedComments(prev => {
+      const next = { ...prev, [postId]: !prev[postId] }
+      if (next[postId]) loadComments(postId)
+      return next
+    })
+  }
+  const openCommentModal = (item) => {
+    setCommentModalPost(item)
+    loadComments(item.id)
+  }
+  const closeCommentModal = () => {
+    setCommentModalPost(null)
+    setEditingComment(null)
+    setEditCommentValue('')
+    setReplyingTo({})
+  }
+  const deleteComment = async (commentId, postId) => {
+    const ok = await confirmDialog({ title: 'Supprimer le commentaire', message: 'Supprimer définitivement ce commentaire ?', variant: 'danger', confirmLabel: 'Supprimer' })
+    if (!ok) return
+    try {
+      const res = await api.delete(`/api/team-space/comments/${commentId}`)
+      loadComments(postId)
+      const newCount = res.data?.comments_count ?? 0
+      const patchArr = (arr) => arr.map(p => p.id === postId ? { ...p, comments_count: newCount } : p)
+      setShoutouts(patchArr); setKudos(patchArr); setPolls(patchArr); setAnnonces(patchArr); setMessages(patchArr)
+      // Mettre à jour le post dans le modal
+      if (commentModalPost?.id === postId) setCommentModalPost(prev => prev ? { ...prev, comments_count: newCount } : prev)
+    } catch (_) {}
+  }
+  const saveEditComment = async (commentId, postId) => {
+    if (!editCommentValue.trim()) return
+    try {
+      await api.patch(`/api/team-space/comments/${commentId}`, { contenu: editCommentValue.trim() })
+      setEditingComment(null)
+      setEditCommentValue('')
+      loadComments(postId)
+    } catch (_) {}
+  }
+  const submitComment = async (postId, parentId = null) => {
+    const myName = employe?.prenom
+      ? `${employe.prenom} ${employe.nom || ''}`.trim()
+      : String(user?.matricule || 'Anonyme')
+    const myMat = String(user?.matricule || user?.sub || '')
+    const content = parentId
+      ? (replyInput[parentId] || '').trim()
+      : (commentInput[postId] || '').trim()
+    if (!content) return
+    try {
+      if (parentId) {
+        await api.post(`/api/team-space/comments/${parentId}/reply`, {
+          auteur_matricule: myMat,
+          auteur_nom: myName,
+          contenu: content,
+        })
+        setReplyInput(prev => ({ ...prev, [parentId]: '' }))
+        setReplyingTo(prev => ({ ...prev, [postId]: null }))
+      } else {
+        await api.post(`/api/team-space/posts/${postId}/comments`, {
+          auteur_matricule: myMat,
+          auteur_nom: myName,
+          contenu: content,
+        })
+        setCommentInput(prev => ({ ...prev, [postId]: '' }))
+      }
+      loadComments(postId)
+      const incCount = (arr) => arr.map(p =>
+        p.id === postId ? { ...p, comments_count: (p.comments_count || 0) + 1 } : p
+      )
+      setShoutouts(incCount)
+      setKudos(incCount)
+      setPolls(incCount)
+      setAnnonces(incCount)
+      setMessages(incCount)
+      if (!parentId && commentModalPost?.id === postId) {
+        setCommentModalPost(prev => prev ? { ...prev, comments_count: (prev.comments_count || 0) + 1 } : prev)
       }
     } catch (_) {}
+  }
+  const isLikedByMe = (item) => {
+    const myMat = String(user?.matricule || user?.sub || '')
+    return myMat && Array.isArray(item.liked_by) && item.liked_by.includes(myMat)
   }
   const submitKudos = async (e) => {
     e.preventDefault()
@@ -454,6 +601,24 @@ export default function Home() {
       await loadTeamSpacePosts()
       setAnnonceForm({ titre: '', message: '' })
       setShowAnnonceForm(false)
+      resetAudience()
+    } catch (_) {}
+  }
+  const submitMessage = async (e) => {
+    e.preventDefault()
+    if (!messageForm.message.trim()) return
+    try {
+      await api.post('/api/team-space/posts', {
+        type: 'message',
+        from: employe?.prenom ? `${employe.prenom} ${employe.nom || ''}`.trim() : String(user?.matricule || 'Moi'),
+        from_matricule: Number(user?.matricule || user?.sub || 0) || null,
+        message: messageForm.message.trim(),
+        likes: 0,
+        audience: { type: audienceType, selected: [...audienceSelected] }
+      })
+      await loadTeamSpacePosts()
+      setMessageForm({ message: '' })
+      setShowMessageForm(false)
       resetAudience()
     } catch (_) {}
   }
@@ -776,21 +941,25 @@ export default function Home() {
         {/* Espace Équipe */}
         <style>{`
 @keyframes teamSpacePulse {
-  0%   { box-shadow: 0 0 0 0 rgba(206,43,43,0.55); }
-  60%  { box-shadow: 0 0 0 16px rgba(206,43,43,0); }
-  100% { box-shadow: 0 0 0 0 rgba(206,43,43,0); }
+  0%   { box-shadow: 0 0 0 0 rgba(206,43,43,0.95), 0 0 40px 10px rgba(206,43,43,0.6); }
+  50%  { box-shadow: 0 0 0 56px rgba(206,43,43,0), 0 0 80px 28px rgba(206,43,43,0.25); }
+  100% { box-shadow: 0 0 0 0 rgba(206,43,43,0), 0 0 40px 10px rgba(206,43,43,0); }
+}
+@keyframes teamSpaceBorder {
+  0%, 100% { border-color: #ce2b2b; }
+  50%       { border-color: #ff4444; }
 }
         `}</style>
         <div
           onClick={() => {
             if (hasNewPosts) {
               setHasNewPosts(false)
-              const allFeedIds = [...shoutouts,...kudos,...polls,...annonces].map(p=>p.id||0)
+              const allFeedIds = [...shoutouts,...kudos,...polls,...annonces,...messages].map(p=>p.id||0)
               const maxId = allFeedIds.length > 0 ? Math.max(...allFeedIds) : 0
               sessionStorage.setItem('ems_lastSeenPostId', String(maxId))
             }
           }}
-          style={{ background: 'var(--card)', borderRadius: 12, boxShadow: hasNewPosts ? '0 0 0 0 rgba(206,43,43,0.55)' : '0 2px 12px rgba(0,0,0,0.07)', border: hasNewPosts ? '2px solid #ce2b2b' : '1px solid var(--border)', overflow: 'hidden', marginBottom: 18, animation: hasNewPosts ? 'teamSpacePulse 1.8s ease-out infinite' : 'none', cursor: hasNewPosts ? 'pointer' : 'default', transition: 'border 0.3s' }}>
+          style={{ background: 'var(--card)', borderRadius: 12, boxShadow: hasNewPosts ? '0 0 0 0 rgba(206,43,43,0.95)' : '0 2px 12px rgba(0,0,0,0.07)', border: hasNewPosts ? '5px solid #ce2b2b' : '1px solid var(--border)', overflow: 'hidden', marginBottom: 18, animation: hasNewPosts ? 'teamSpacePulse 1.2s ease-out infinite, teamSpaceBorder 1.2s ease-in-out infinite' : 'none', cursor: hasNewPosts ? 'pointer' : 'default', transition: 'border 0.3s', transform: hasNewPosts ? 'scale(1.003)' : 'scale(1)' }}>
           <div style={{ background: '#ce2b2b', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <MessageSquare size={14} color="white" />
             <h2 style={{ margin: 0, color: 'white', fontSize: '0.88rem', fontWeight: 700 }}>Espace Équipe</h2>
@@ -799,16 +968,16 @@ export default function Home() {
 
           {/* -- Compose bar -- */}
           <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: (showShoutoutForm || showKudosForm || showPollForm || showAnnonceForm) ? 14 : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: (showShoutoutForm || showKudosForm || showPollForm || showAnnonceForm || showMessageForm) ? 14 : 0 }}>
               <AvatarCircle photoUrl={employe?.photo_url} letter={(employe?.prenom || user?.prenom || 'U')[0]} size={38} />
-              {!showShoutoutForm && !showKudosForm && !showPollForm && !showAnnonceForm && (
+              {!showShoutoutForm && !showKudosForm && !showPollForm && !showAnnonceForm && !showMessageForm && (
                 <div
-                  onClick={() => { setShowShoutoutForm(true); setShowKudosForm(false); setShowPollForm(false) }}
+                  onClick={() => { setShowShoutoutForm(true); setShowKudosForm(false); setShowPollForm(false); setShowAnnonceForm(false); setShowMessageForm(false) }}
                   style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 24, padding: '9px 18px', cursor: 'pointer', fontSize: '0.85rem', color: '#94a3b8', userSelect: 'none' }}>
                   Écrire un shoutout...
                 </div>
               )}
-              {(showShoutoutForm || showKudosForm || showPollForm || showAnnonceForm) && (
+              {(showShoutoutForm || showKudosForm || showPollForm || showAnnonceForm || showMessageForm) && (
                 <div style={{ flex: 1 }} />
               )}
               {/* Audience Picker — inline next to avatar */}
@@ -860,24 +1029,46 @@ export default function Home() {
                   </div>
                 )}
               </div>
+              {/* ── Bouton Présences en ligne ── */}
+              <button
+                type="button"
+                onClick={() => { setPresenceOpen(true); loadPresence() }}
+                title="Présences en ligne"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5, padding: '5px 9px',
+                  border: '1px solid #bbf7d0', borderRadius: 20, background: '#f0fdf4',
+                  cursor: 'pointer', flexShrink: 0,
+                }}
+              >
+                <span style={{
+                  width: 10, height: 10, borderRadius: '50%', background: '#16a34a',
+                  display: 'inline-block', flexShrink: 0,
+                  boxShadow: '0 0 0 3px rgba(22,163,74,0.25), 0 0 8px 2px rgba(22,163,74,0.5)',
+                }} />
+                <Wifi size={14} style={{ color: '#15803d' }} />
+              </button>
             </div>
 
             {/* Quick action buttons */}
-            {!showShoutoutForm && !showKudosForm && !showPollForm && !showAnnonceForm && (
+            {!showShoutoutForm && !showKudosForm && !showPollForm && !showAnnonceForm && !showMessageForm && (
               <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
-                <button onClick={() => { setShowAnnonceForm(true); setShowShoutoutForm(false); setShowKudosForm(false); setShowPollForm(false) }}
+                <button onClick={() => { setShowMessageForm(true); setShowShoutoutForm(false); setShowKudosForm(false); setShowPollForm(false); setShowAnnonceForm(false) }}
+                  style={{ flex: 1, padding: '7px 6px', background: 'none', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                  <MessageSquare size={13} /> Message
+                </button>
+                <button onClick={() => { setShowAnnonceForm(true); setShowShoutoutForm(false); setShowKudosForm(false); setShowPollForm(false); setShowMessageForm(false) }}
                   style={{ flex: 1, padding: '7px 6px', background: 'none', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                   <Megaphone size={13} /> Annonce
                 </button>
-                <button onClick={() => { setShowShoutoutForm(true); setShowKudosForm(false); setShowPollForm(false); setShowAnnonceForm(false) }}
+                <button onClick={() => { setShowShoutoutForm(true); setShowKudosForm(false); setShowPollForm(false); setShowAnnonceForm(false); setShowMessageForm(false) }}
                   style={{ flex: 1, padding: '7px 6px', background: 'none', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                  <MessageSquare size={13} /> Féliciter
+                  <Star size={13} /> Féliciter
                 </button>
-                <button onClick={() => { setShowKudosForm(true); setShowShoutoutForm(false); setShowPollForm(false); setShowAnnonceForm(false) }}
+                <button onClick={() => { setShowKudosForm(true); setShowShoutoutForm(false); setShowPollForm(false); setShowAnnonceForm(false); setShowMessageForm(false) }}
                   style={{ flex: 1, padding: '7px 6px', background: 'none', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                   <Star size={13} /> Kudos
                 </button>
-                <button onClick={() => { setShowPollForm(true); setShowShoutoutForm(false); setShowKudosForm(false); setShowAnnonceForm(false) }}
+                <button onClick={() => { setShowPollForm(true); setShowShoutoutForm(false); setShowKudosForm(false); setShowAnnonceForm(false); setShowMessageForm(false) }}
                   style={{ flex: 1, padding: '7px 6px', background: 'none', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                   <BarChart size={13} /> Sondage
                 </button>
@@ -942,11 +1133,22 @@ export default function Home() {
                 </div>
               </form>
             )}
+
+            {/* Message Form */}
+            {showMessageForm && (
+              <form onSubmit={submitMessage} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <textarea style={{ border: '1px solid #bfdbfe', borderRadius: 6, padding: '6px 8px', fontSize: '0.78rem', resize: 'vertical', minHeight: 64 }} placeholder="Écrire un message simple pour votre équipe..." value={messageForm.message} onChange={e => setMessageForm({ ...messageForm, message: e.target.value })} required autoFocus />
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                  <button type="button" onClick={() => { setShowMessageForm(false); resetAudience() }} style={{ padding: '5px 10px', background: 'var(--bg)', border: 'none', borderRadius: 6, cursor: 'pointer', color: '#64748b', fontSize: '0.78rem' }}>Annuler</button>
+                  <button type="submit" style={{ padding: '5px 14px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: 5 }}><Send size={12} /> Diffuser</button>
+                </div>
+              </form>
+            )}
           </div>
 
           {/* -- Filter Bar -- */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-            {[{ key: 'all', label: 'Tout' }, { key: 'annonce', label: 'Annonces' }, { key: 'shoutout', label: 'Félicitations' }, { key: 'kudos', label: 'Kudos' }, { key: 'poll', label: 'Sondages' }].map(f => (
+            {[{ key: 'all', label: 'Tout' }, { key: 'message', label: 'Messages' }, { key: 'annonce', label: 'Annonces' }, { key: 'shoutout', label: 'Félicitations' }, { key: 'kudos', label: 'Kudos' }, { key: 'poll', label: 'Sondages' }].map(f => (
               <button key={f.key} onClick={() => setFilterType(f.key)}
                 style={{ padding: '5px 12px', borderRadius: 20, border: filterType === f.key ? '2px solid #021630' : '1px solid #e2e8f0', background: filterType === f.key ? '#021630' : 'white', color: filterType === f.key ? 'white' : '#475569', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
                 {f.label}
@@ -1000,8 +1202,8 @@ export default function Home() {
                           )}
                         </div>
                       </div>
-                      <span style={{ fontSize: '0.67rem', fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: item._type === 'kudos' ? '#fef2f2' : item._type === 'poll' ? '#f1f5f9' : item._type === 'annonce' ? '#f5f3ff' : '#f0f4ff', color: item._type === 'kudos' ? '#ce2b2b' : item._type === 'poll' ? '#475569' : item._type === 'annonce' ? '#7c3aed' : '#021630', border: `1px solid ${item._type === 'kudos' ? '#fecaca' : item._type === 'annonce' ? '#ddd6fe' : '#e2e8f0'}` }}>
-                        {item._type === 'kudos' ? 'Kudos' : item._type === 'poll' ? 'Sondage' : item._type === 'shoutout' ? 'Félicitations' : item._type === 'annonce' ? '📢 Annonce' : 'Post'}
+                      <span style={{ fontSize: '0.67rem', fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: item._type === 'kudos' ? '#fef2f2' : item._type === 'poll' ? '#f1f5f9' : item._type === 'annonce' ? '#f5f3ff' : item._type === 'message' ? '#eff6ff' : '#f0f4ff', color: item._type === 'kudos' ? '#ce2b2b' : item._type === 'poll' ? '#475569' : item._type === 'annonce' ? '#7c3aed' : item._type === 'message' ? '#2563eb' : '#021630', border: `1px solid ${item._type === 'kudos' ? '#fecaca' : item._type === 'annonce' ? '#ddd6fe' : item._type === 'message' ? '#bfdbfe' : '#e2e8f0'}` }}>
+                        {item._type === 'kudos' ? 'Kudos' : item._type === 'poll' ? 'Sondage' : item._type === 'shoutout' ? 'Félicitations' : item._type === 'annonce' ? 'Annonce' : item._type === 'message' ? 'Message' : 'Post'}
                       </span>
                       <div style={{ position: 'relative' }} data-post-menu>
                         <button
@@ -1081,8 +1283,15 @@ export default function Home() {
                     {/* Annonce body */}
                     {item._type === 'annonce' && (
                       <div style={{ margin: '0 16px 14px', borderRadius: 10, background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)', padding: '14px 18px' }}>
-                        {item.titre && <div style={{ fontWeight: 700, color: 'white', fontSize: '0.92rem', marginBottom: 6 }}>{item.titre}</div>}
+                        {item.titre && <div style={{ fontWeight: 800, color: 'white', fontSize: '1rem', marginBottom: 8, letterSpacing: 0.2 }}>{item.titre}</div>}
                         <p style={{ margin: 0, color: 'rgba(255,255,255,0.9)', fontSize: '0.85rem', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{item.message}</p>
+                      </div>
+                    )}
+
+                    {/* Message body */}
+                    {item._type === 'message' && (
+                      <div style={{ padding: '0 16px 14px' }}>
+                        <p style={{ margin: 0, color: '#334155', fontSize: '0.88rem', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{item.message}</p>
                       </div>
                     )}
 
@@ -1192,20 +1401,22 @@ export default function Home() {
                         </div>
                       </div>
                     )}
-                    {/* Post footer — React + Comment */}
+                    {/* Post footer — Like + Commenter */}
                     <div style={{ borderTop: '1px solid #f1f5f9', padding: '6px 16px', display: 'flex', gap: 4 }}>
                       <button
-                        onClick={() => likePost(item._type, item.id)}
-                        style={{ flex: 1, background: 'none', border: 'none', borderRadius: 8, padding: '7px', cursor: 'pointer', color: '#64748b', fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                        onClick={() => toggleLike(item.id)}
+                        style={{ flex: 1, background: 'none', border: 'none', borderRadius: 8, padding: '7px', cursor: 'pointer', color: isLikedByMe(item) ? '#ce2b2b' : '#64748b', fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'color 0.15s' }}
                         onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                         onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                        <ThumbsUp size={14} /> {item.likes > 0 ? `${item.likes} ` : ''}React
+                        <Heart size={14} fill={isLikedByMe(item) ? '#ce2b2b' : 'none'} stroke={isLikedByMe(item) ? '#ce2b2b' : 'currentColor'} />
+                        {item.likes > 0 ? `${item.likes} ` : ''}J’aime
                       </button>
                       <button
+                        onClick={() => openCommentModal(item)}
                         style={{ flex: 1, background: 'none', border: 'none', borderRadius: 8, padding: '7px', cursor: 'pointer', color: '#64748b', fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                         onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                         onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                        <MessageSquare size={14} /> Comment
+                        <MessageSquare size={14} /> {item.comments_count > 0 ? `${item.comments_count} ` : ''}Commenter
                       </button>
                     </div>
                   </div>
@@ -1433,6 +1644,346 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        {/* ---- Modal Commentaires ---- */}
+        {commentModalPost && (
+          <div
+            onClick={closeCommentModal}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'white', borderRadius: 14, width: '100%', maxWidth: 560, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#021630' }}>
+                  Commentaires
+                  {commentModalPost.comments_count > 0 && <span style={{ marginLeft: 6, color: '#94a3b8', fontWeight: 400, fontSize: '0.82rem' }}>({commentModalPost.comments_count})</span>}
+                </div>
+                <button onClick={closeCommentModal} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', padding: 4, borderRadius: 6 }}>
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Corps scrollable : liste commentaires */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {(commentsData[commentModalPost.id] || []).length === 0 && (
+                  <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem', padding: '24px 0' }}>Aucun commentaire pour l&apos;instant</div>
+                )}
+                {(commentsData[commentModalPost.id] || []).map(comment => {
+                  const isMine = comment.auteur_matricule === (employe?.matricule || user?.matricule)
+                  const isEditing = editingComment?.id === comment.id
+                  return (
+                    <div key={comment.id}>
+                      {/* Commentaire principal */}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <AvatarCircle photoUrl={resolvePhotoUrl(comment.auteur_nom)} letter={(comment.auteur_nom || '?')[0]} size={30} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ background: '#f8fafc', borderRadius: 12, padding: '8px 12px', border: '1px solid #f1f5f9' }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.78rem', color: '#021630', marginBottom: 2 }}>{comment.auteur_nom}</div>
+                            {isEditing ? (
+                              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                                <input
+                                  value={editCommentValue}
+                                  onChange={e => setEditCommentValue(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEditComment(comment.id, commentModalPost.id) } if (e.key === 'Escape') { setEditingComment(null); setEditCommentValue('') } }}
+                                  autoFocus
+                                  style={{ flex: 1, border: '1px solid #e2e8f0', borderRadius: 8, padding: '5px 10px', fontSize: '0.82rem', outline: 'none' }}
+                                />
+                                <button onClick={() => saveEditComment(comment.id, commentModalPost.id)} style={{ background: '#021630', border: 'none', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', color: 'white', display: 'flex', alignItems: 'center' }}><Send size={11} /></button>
+                                <button onClick={() => { setEditingComment(null); setEditCommentValue('') }} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 8, padding: '5px 8px', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }}><X size={11} /></button>
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: '0.82rem', color: '#334155', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{comment.contenu}</div>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: 10, marginTop: 3, paddingLeft: 4, alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{comment.date}</span>
+                            <button
+                              onClick={() => setReplyingTo(prev => ({ ...prev, [commentModalPost.id]: replyingTo[commentModalPost.id] === comment.id ? null : comment.id }))}
+                              style={{ background: 'none', border: 'none', color: replyingTo[commentModalPost.id] === comment.id ? '#2563eb' : '#64748b', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+                              Répondre
+                            </button>
+                            {isMine && !isEditing && (
+                              <>
+                                <button onClick={() => { setEditingComment(comment); setEditCommentValue(comment.contenu) }} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }} title="Modifier"><Pencil size={11} /></button>
+                                <button onClick={() => deleteComment(comment.id, commentModalPost.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }} title="Supprimer"><Trash2 size={11} /></button>
+                              </>
+                            )}
+                          </div>
+                          {/* Input réponse */}
+                          {replyingTo[commentModalPost.id] === comment.id && (
+                            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                              <input
+                                value={replyInput[comment.id] || ''}
+                                onChange={e => setReplyInput(prev => ({ ...prev, [comment.id]: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment(commentModalPost.id, comment.id) } }}
+                                placeholder={`Répondre à ${comment.auteur_nom}...`}
+                                autoFocus
+                                style={{ flex: 1, border: '1px solid #e2e8f0', borderRadius: 20, padding: '6px 12px', fontSize: '0.75rem', outline: 'none' }}
+                              />
+                              <button onClick={() => submitComment(commentModalPost.id, comment.id)} style={{ background: '#021630', border: 'none', borderRadius: 20, padding: '6px 10px', cursor: 'pointer', color: 'white', display: 'flex', alignItems: 'center' }}><Send size={11} /></button>
+                              <button onClick={() => setReplyingTo(prev => ({ ...prev, [commentModalPost.id]: null }))} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 20, padding: '6px 8px', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }}><X size={11} /></button>
+                            </div>
+                          )}
+                          {/* Réponses imbriquées */}
+                          {comment.replies?.length > 0 && (
+                            <div style={{ marginLeft: 16, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {comment.replies.map(reply => {
+                                const replyIsMine = reply.auteur_matricule === (employe?.matricule || user?.matricule)
+                                const replyIsEditing = editingComment?.id === reply.id
+                                return (
+                                  <div key={reply.id} style={{ display: 'flex', gap: 8 }}>
+                                    <AvatarCircle photoUrl={resolvePhotoUrl(reply.auteur_nom)} letter={(reply.auteur_nom || '?')[0]} size={24} />
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ background: '#f1f5f9', borderRadius: 12, padding: '6px 10px' }}>
+                                        <div style={{ fontWeight: 700, fontSize: '0.75rem', color: '#021630', marginBottom: 2 }}>{reply.auteur_nom}</div>
+                                        {replyIsEditing ? (
+                                          <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
+                                            <input value={editCommentValue} onChange={e => setEditCommentValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEditComment(reply.id, commentModalPost.id) } if (e.key === 'Escape') { setEditingComment(null); setEditCommentValue('') } }} autoFocus style={{ flex: 1, border: '1px solid #e2e8f0', borderRadius: 8, padding: '4px 8px', fontSize: '0.78rem', outline: 'none' }} />
+                                            <button onClick={() => saveEditComment(reply.id, commentModalPost.id)} style={{ background: '#021630', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', color: 'white', display: 'flex', alignItems: 'center' }}><Send size={10} /></button>
+                                            <button onClick={() => { setEditingComment(null); setEditCommentValue('') }} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 8, padding: '4px 6px', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }}><X size={10} /></button>
+                                          </div>
+                                        ) : (
+                                          <div style={{ fontSize: '0.78rem', color: '#475569', whiteSpace: 'pre-wrap' }}>{reply.contenu}</div>
+                                        )}
+                                      </div>
+                                      <div style={{ display: 'flex', gap: 8, marginTop: 2, paddingLeft: 4, alignItems: 'center' }}>
+                                        <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{reply.date}</span>
+                                        {replyIsMine && !replyIsEditing && (
+                                          <>
+                                            <button onClick={() => { setEditingComment(reply); setEditCommentValue(reply.contenu) }} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }} title="Modifier"><Pencil size={10} /></button>
+                                            <button onClick={() => deleteComment(reply.id, commentModalPost.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }} title="Supprimer"><Trash2 size={10} /></button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Footer : nouveau commentaire */}
+              <div style={{ borderTop: '1px solid #f1f5f9', padding: '12px 18px', display: 'flex', gap: 8, alignItems: 'center' }}>
+                <AvatarCircle photoUrl={employe?.photo_url} letter={(employe?.prenom || user?.prenom || 'U')[0]} size={28} />
+                <input
+                  value={commentInput[commentModalPost.id] || ''}
+                  onChange={e => setCommentInput(prev => ({ ...prev, [commentModalPost.id]: e.target.value }))}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment(commentModalPost.id) } }}
+                  placeholder="Ajouter un commentaire..."
+                  style={{ flex: 1, border: '1px solid #e2e8f0', borderRadius: 20, padding: '8px 14px', fontSize: '0.82rem', outline: 'none' }}
+                />
+                {(commentInput[commentModalPost.id] || '').trim() && (
+                  <button onClick={() => setCommentInput(prev => ({ ...prev, [commentModalPost.id]: '' }))} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 20, padding: '7px 10px', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }} title="Annuler"><X size={13} /></button>
+                )}
+                <button
+                  onClick={() => submitComment(commentModalPost.id)}
+                  disabled={!(commentInput[commentModalPost.id] || '').trim()}
+                  style={{ background: (commentInput[commentModalPost.id] || '').trim() ? '#021630' : '#e2e8f0', border: 'none', borderRadius: 20, padding: '8px 14px', cursor: (commentInput[commentModalPost.id] || '').trim() ? 'pointer' : 'default', color: (commentInput[commentModalPost.id] || '').trim() ? 'white' : '#94a3b8', display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.78rem', fontWeight: 600 }}>
+                  <Send size={13} /> Envoyer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      {/* ══════════════════════ DRAWER PRÉSENCES ══════════════════════ */}
+      <style>{`
+        @keyframes presenceSlideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to   { transform: translateX(0);    opacity: 1; }
+        }
+      `}</style>
+      {presenceOpen && (
+        <>
+          {/* Backdrop — commence sous la navbar */}
+          <div
+            onClick={() => setPresenceOpen(false)}
+            style={{ position: 'fixed', top: 50, bottom: 0, left: 0, right: 0, background: 'rgba(2,22,48,0.38)', zIndex: 2000, backdropFilter: 'blur(3px)', cursor: 'pointer' }}
+          />
+          {/* Panneau latéral — commence sous la navbar */}
+          <div style={{
+            position: 'fixed', top: 50, right: 0, height: 'calc(100vh - 50px)', width: 390,
+            background: 'var(--card)', zIndex: 2001, display: 'flex', flexDirection: 'column',
+            boxShadow: '-10px 0 40px rgba(0,0,0,0.22)', borderLeft: '1px solid var(--border)',
+            animation: 'presenceSlideIn 0.25s ease-out',
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '14px 22px 12px', borderBottom: '1px solid var(--border)',
+              display: 'flex', alignItems: 'center', gap: 12,
+              background: 'linear-gradient(135deg, #021630 0%, #0f2d4a 100%)',
+            }}>
+              <span style={{
+                width: 12, height: 12, borderRadius: '50%', background: '#16a34a',
+                display: 'inline-block', flexShrink: 0,
+                boxShadow: '0 0 0 3px rgba(22,163,74,0.25), 0 0 8px 3px rgba(22,163,74,0.55)',
+              }} />
+              <Wifi size={18} style={{ color: '#86efac', flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: '1rem', color: 'white', letterSpacing: '-0.01em' }}>Présences</div>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
+                  <span style={{ color: '#86efac', fontWeight: 700 }}>{presenceList.filter(p => p.en_ligne).length}</span> en ligne
+                  &nbsp;·&nbsp;{presenceList.length} au total
+                </div>
+              </div>
+              <button
+                onClick={() => { loadPresence() }}
+                style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '6px 8px', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', marginRight: 4 }}
+                title="Actualiser"
+              >
+                <RefreshCw size={14} />
+              </button>
+              <button
+                onClick={() => setPresenceOpen(false)}
+                style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '6px 8px', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+              {presenceLoading && (
+                <div style={{ padding: '50px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+                  <div style={{ marginBottom: 8 }}><RefreshCw size={24} style={{ color: '#cbd5e1' }} /></div>
+                  Chargement...
+                </div>
+              )}
+              {!presenceLoading && presenceList.length === 0 && (
+                <div style={{ padding: '50px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+                  Aucun employé actif trouvé.
+                </div>
+              )}
+
+              {/* EN LIGNE */}
+              {!presenceLoading && presenceList.filter(p => p.en_ligne).length > 0 && (
+                <div>
+                  <div style={{
+                    padding: '8px 20px 6px', fontSize: '0.67rem', fontWeight: 800,
+                    color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.09em',
+                    display: 'flex', alignItems: 'center', gap: 7,
+                  }}>
+                    <UserCheck size={12} />
+                    En ligne &nbsp;({presenceList.filter(p => p.en_ligne).length})
+                  </div>
+                  {presenceList.filter(p => p.en_ligne).map(emp => (
+                    <div
+                      key={emp.matricule}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 20px', transition: 'background 0.15s', cursor: 'default' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#f0fdf4' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                    >
+                      {/* Avatar */}
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        {emp.photo_url ? (
+                          <img src={emp.photo_url} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '2px solid #bbf7d0' }} />
+                        ) : (
+                          <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg, #021630 0%, #164e63 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: '0.85rem', border: '2px solid #bbf7d0', flexShrink: 0 }}>
+                            {(emp.prenom?.[0] || '').toUpperCase()}{(emp.nom?.[0] || '').toUpperCase()}
+                          </div>
+                        )}
+                        <span style={{ position: 'absolute', bottom: 1, right: 1, width: 12, height: 12, borderRadius: '50%', background: '#16a34a', border: '2.5px solid white', display: 'block', boxShadow: '0 0 0 2px rgba(22,163,74,0.3), 0 0 6px 2px rgba(22,163,74,0.4)' }} />
+                      </div>
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {emp.prenom} {emp.nom}
+                          {emp.matricule.toUpperCase() === String(user?.matricule || user?.sub || '').trim().toUpperCase() && (
+                            <em style={{ color: '#94a3b8', fontWeight: 400, fontSize: '0.75rem', fontStyle: 'italic', marginLeft: 4 }}>(Vous)</em>
+                          )}
+                        </div>
+                        {emp.fonction && (
+                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {emp.fonction}
+                          </div>
+                        )}
+                      </div>
+                      {/* Badge */}
+                      <span style={{ flexShrink: 0, background: '#dcfce7', color: '#15803d', fontSize: '0.63rem', fontWeight: 800, padding: '3px 9px', borderRadius: 10, border: '1px solid #bbf7d0', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        En ligne
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* HORS LIGNE */}
+              {!presenceLoading && presenceList.filter(p => !p.en_ligne).length > 0 && (
+                <div style={{ marginTop: presenceList.filter(p => p.en_ligne).length > 0 ? 8 : 0 }}>
+                  <div style={{
+                    padding: '8px 20px 6px', fontSize: '0.67rem', fontWeight: 800,
+                    color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.09em',
+                    display: 'flex', alignItems: 'center', gap: 7,
+                    borderTop: presenceList.filter(p => p.en_ligne).length > 0 ? '1px solid var(--border)' : 'none',
+                    marginTop: presenceList.filter(p => p.en_ligne).length > 0 ? 4 : 0,
+                  }}>
+                    <WifiOff size={12} />
+                    Hors ligne &nbsp;({presenceList.filter(p => !p.en_ligne).length})
+                  </div>
+                  {presenceList.filter(p => !p.en_ligne).map(emp => (
+                    <div
+                      key={emp.matricule}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 20px', transition: 'background 0.15s', cursor: 'default' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                    >
+                      {/* Avatar */}
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        {emp.photo_url ? (
+                          <img src={emp.photo_url} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '2px solid #e2e8f0', filter: 'grayscale(0.25)' }} />
+                        ) : (
+                          <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontWeight: 800, fontSize: '0.85rem', flexShrink: 0 }}>
+                            {(emp.prenom?.[0] || '').toUpperCase()}{(emp.nom?.[0] || '').toUpperCase()}
+                          </div>
+                        )}
+                        <span style={{ position: 'absolute', bottom: 1, right: 1, width: 12, height: 12, borderRadius: '50%', background: '#cbd5e1', border: '2.5px solid white', display: 'block' }} />
+                      </div>
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.86rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {emp.prenom} {emp.nom}
+                          {emp.matricule.toUpperCase() === String(user?.matricule || user?.sub || '').trim().toUpperCase() && (
+                            <em style={{ color: '#94a3b8', fontWeight: 400, fontSize: '0.75rem', fontStyle: 'italic', marginLeft: 4 }}>(Vous)</em>
+                          )}
+                        </div>
+                        {emp.fonction && (
+                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {emp.fonction}
+                          </div>
+                        )}
+                      </div>
+                      {/* Dernière vue */}
+                      <span style={{ flexShrink: 0, fontSize: '0.65rem', color: '#94a3b8', textAlign: 'right', maxWidth: 90, lineHeight: 1.3 }}>
+                        {formatLastSeen(emp.derniere_connexion)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                Actualisation auto · 60s · Seuil en ligne : 5 min
+              </div>
+              <button
+                onClick={loadPresence}
+                style={{ background: '#021630', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', color: 'white', fontSize: '0.72rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}
+              >
+                <RefreshCw size={11} /> Actualiser
+              </button>
+            </div>
+          </div>
+        </>
+      )}
       </div>
     </div>
   )

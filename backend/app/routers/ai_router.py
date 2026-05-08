@@ -344,39 +344,134 @@ def _engine_recommandations(emp: models.Employe, nb_ops: int, nb_des: int, nb_me
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+def _normalize_punctuation(text: str) -> str:
+    """Remplace la ponctuation pleine largeur (sortie des modèles CJK) par ASCII standard."""
+    replacements = {
+        '！': '!',   # U+FF01 fullwidth exclamation
+        '？': '?',   # U+FF1F fullwidth question
+        '，': ',',   # U+FF0C fullwidth comma
+        '。': '.',   # U+3002 ideographic full stop
+        '：': ':',   # U+FF1A fullwidth colon
+        '；': ';',   # U+FF1B fullwidth semicolon
+        '（': '(',   # U+FF08 fullwidth left paren
+        '）': ')',   # U+FF09 fullwidth right paren
+        '\u2019': "'",  # RIGHT SINGLE QUOTATION MARK → apostrophe
+        '\u2018': "'",  # LEFT SINGLE QUOTATION MARK
+        '\u201c': '"',  # LEFT DOUBLE QUOTATION MARK
+        '\u201d': '"',  # RIGHT DOUBLE QUOTATION MARK
+    }
+    for bad, good in replacements.items():
+        text = text.replace(bad, good)
+    return text
+
+
+def _build_rh_context(question: str, db: Session) -> str:
+    """Injecte uniquement les données RH pertinentes pour la question posée."""
+    q = question.lower()
+    parts = []
+
+    # Toujours : chiffres clés si la question est RH
+    is_rh_question = any(w in q for w in [
+        'employ', 'congé', 'conge', 'mission', 'rh', 'absence', 'explication',
+        'disciplin', 'effectif', 'personnel', 'staff', 'résumé', 'resume',
+        'situation', 'bilan', 'rapport', 'combien', 'liste', 'actif',
+    ])
+
+    if not is_rh_question:
+        return ''  # Pas de contexte RH pour les questions générales
+
+    today = datetime.utcnow().date()
+    total = db.query(func.count(models.Employe.matricule)).scalar() or 0
+    actifs = db.query(func.count(models.Employe.matricule)).filter(
+        models.Employe.statut_employe == models.StatutEmployeEnum.ACTIF).scalar() or 0
+    parts.append(f"Date : {today.strftime('%d/%m/%Y')}")
+    parts.append(f"Effectif : {total} employés ({actifs} actifs, {total - actifs} inactifs)")
+
+    if any(w in q for w in ['congé', 'conge', 'absence']):
+        att = db.query(func.count(models.Operation.id_operation)).filter(
+            models.Operation.type_demande == 'Congé', models.Operation.statut == 'en attente').scalar() or 0
+        app = db.query(func.count(models.Operation.id_operation)).filter(
+            models.Operation.type_demande == 'Congé', models.Operation.statut == 'approuvé').scalar() or 0
+        parts.append(f"Congés en attente : {att} | Approuvés : {app}")
+        if att > 0:
+            ops = db.query(models.Operation).filter(
+                models.Operation.type_demande == 'Congé', models.Operation.statut == 'en attente'
+            ).limit(5).all()
+            for op in ops:
+                emp = db.query(models.Employe).filter_by(matricule=op.matricule).first()
+                nom = f"{emp.prenom} {emp.nom}" if emp else op.matricule
+                d = op.date_debut.strftime('%d/%m/%Y') if op.date_debut else '?'
+                parts.append(f"  - Congé en attente : {nom} (depuis {d})")
+
+    if any(w in q for w in ['mission']):
+        att = db.query(func.count(models.Operation.id_operation)).filter(
+            models.Operation.type_demande == 'Mission', models.Operation.statut == 'en attente').scalar() or 0
+        total_m = db.query(func.count(models.Operation.id_operation)).filter(
+            models.Operation.type_demande == 'Mission').scalar() or 0
+        parts.append(f"Missions : {total_m} total, {att} en attente")
+
+    if any(w in q for w in ['explication']):
+        att = db.query(func.count(models.DemandeExplicationV2.id_de)).filter(
+            models.DemandeExplicationV2.statut == 'EN_ATTENTE').scalar() or 0
+        parts.append(f"Demandes d'explication en attente : {att}")
+
+    if any(w in q for w in ['disciplin', 'sanction', 'mesure']):
+        total_d = db.query(func.count(models.MesureDisciplinaire.id_mesure)).scalar() or 0
+        parts.append(f"Mesures disciplinaires : {total_d}")
+
+    if any(w in q for w in ['résumé', 'resume', 'situation', 'bilan', 'rapport']):
+        att_c = db.query(func.count(models.Operation.id_operation)).filter(
+            models.Operation.type_demande == 'Congé', models.Operation.statut == 'en attente').scalar() or 0
+        att_m = db.query(func.count(models.Operation.id_operation)).filter(
+            models.Operation.type_demande == 'Mission', models.Operation.statut == 'en attente').scalar() or 0
+        att_e = db.query(func.count(models.DemandeExplicationV2.id_de)).filter(
+            models.DemandeExplicationV2.statut == 'EN_ATTENTE').scalar() or 0
+        mes = db.query(func.count(models.MesureDisciplinaire.id_mesure)).scalar() or 0
+        parts.append(f"Congés en attente : {att_c} | Missions en attente : {att_m}")
+        parts.append(f"Demandes explication ouvertes : {att_e} | Mesures disciplinaires : {mes}")
+
+    if any(w in q for w in ['liste', 'affiche', 'qui sont', 'actif']) and any(w in q for w in ['employ', 'actif']):
+        emps = db.query(models.Employe).filter(
+            models.Employe.statut_employe == models.StatutEmployeEnum.ACTIF
+        ).order_by(models.Employe.nom).limit(15).all()
+        for e in emps:
+            parts.append(f"  - {e.prenom} {e.nom} | {e.fonction or 'N/R'} | mat.{e.matricule}")
+
+    return '\n'.join(parts)
+
+
 @router.post('/chat')
 def chat_rh(
     body: ChatRequest,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    # Extrait le dernier message utilisateur
     last_user_msg = ''
     for m in reversed(body.messages):
         if m.role == 'user':
             last_user_msg = m.content
             break
 
-    # Réponse déterministe comme fallback et contexte
-    fallback_reply = _engine_chat(last_user_msg, db)
-
-    # Construit le contexte RH pour le system prompt
-    rh_summary = _engine_summary(db)
-    system_prompt = (
-        "Tu es EMS Chat, l'assistant RH intelligent d'ELITE CAPITAL GROUP S.A. "
-        "Tu réponds toujours en français, de manière professionnelle, claire et concise. "
-        "Tu as accès aux données RH en temps réel. Voici la situation RH actuelle :\n\n"
-        f"{rh_summary}\n\n"
-        "Réponds à la question de l'utilisateur en t'appuyant sur ce contexte. "
-        "Si la question dépasse ce contexte, utilise tes connaissances générales RH."
-    )
-
-    # Tentative Ollama avec l'historique complet
     base_url = os.environ.get('OLLAMA_BASE_URL', 'http://ollama:11434')
-    try:
-        # Détection automatique du modèle disponible
-        model_name = _get_ollama_model(base_url)
-        if model_name:
+    model_name = _get_ollama_model(base_url)
+
+    if model_name:
+        # Contexte RH injecté seulement si la question le nécessite
+        rh_context = _build_rh_context(last_user_msg, db)
+
+        system_prompt = (
+            "Tu es EMS Chat, l'assistant intelligent d'ELITE CAPITAL GROUP S.A. (Groupe financier panafricain).\n"
+            "RÈGLES ABSOLUES :\n"
+            "- Tu réponds TOUJOURS en français\n"
+            "- Tu es capable de tenir une vraie conversation naturelle (salutations, blagues, questions générales)\n"
+            "- Tu es aussi expert en RH, droit du travail, management, finance\n"
+            "- Quand on te parle de données RH de l'entreprise, utilise le contexte fourni ci-dessous\n"
+            "- Sois concis, professionnel mais humain\n"
+        )
+        if rh_context:
+            system_prompt += f"\nDONNÉES RH ELITE CAPITAL (temps réel) :\n{rh_context}\n"
+
+        try:
             ollama_messages = [{'role': 'system', 'content': system_prompt}]
             for m in body.messages:
                 if m.role in ('user', 'assistant'):
@@ -389,31 +484,32 @@ def chat_rh(
             )
             resp.raise_for_status()
             data = resp.json()
-            ollama_reply = (data.get('message') or {}).get('content', '').strip()
-            if ollama_reply:
-                return {'role': 'assistant', 'content': ollama_reply}
-    except Exception:
-        pass  # Fallback silencieux vers le moteur déterministe
+            reply = (data.get('message') or {}).get('content', '').strip()
+            if reply:
+                return {'role': 'assistant', 'content': _normalize_punctuation(reply)}
+        except Exception:
+            pass
 
-    return {'role': 'assistant', 'content': fallback_reply}
+    # Fallback déterministe uniquement si Ollama est indisponible
+    return {'role': 'assistant', 'content': _engine_chat(last_user_msg, db)}
 
 
 def _get_ollama_model(base_url: str) -> str | None:
-    """Retourne le premier modèle disponible dans Ollama, ou None si aucun."""
-    # Ordre de préférence
-    PREFERRED = ['mistral', 'llama3', 'llama2', 'tinyllama', 'phi', 'gemma']
+    """Retourne le meilleur modèle disponible dans Ollama, ou None si aucun."""
+    # Ordre de préférence : du plus capable au moins capable
+    PREFERRED = ['mistral', 'llama3', 'llama2', 'qwen2', 'qwen', 'phi', 'gemma', 'tinyllama']
     try:
         resp = httpx.get(f'{base_url}/api/tags', timeout=5.0)
         resp.raise_for_status()
-        models = [m.get('name', '').split(':')[0] for m in resp.json().get('models', [])]
-        if not models:
+        all_models = resp.json().get('models', [])
+        if not all_models:
             return None
+        names = [m.get('name', '') for m in all_models]
         for pref in PREFERRED:
-            for m in models:
-                if pref in m.lower():
-                    return m
-        # Retourne n'importe quel modèle dispo
-        return resp.json()['models'][0]['name']
+            for name in names:
+                if pref in name.lower():
+                    return name
+        return names[0]
     except Exception:
         return None
 
