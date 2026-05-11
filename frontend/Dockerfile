@@ -1,4 +1,4 @@
-FROM node:20-slim
+FROM node:26-slim
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install --silent --no-audit --no-fund
