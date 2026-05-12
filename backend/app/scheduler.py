@@ -16,8 +16,9 @@ from .utils.missions import verifier_alertes_rapport_mission, verifier_relances_
 from .utils.permissions import envoyer_rappel_preuves_permission
 from .utils.business_logic import calculer_augmentation_solde_mensuel
 from .utils.relances import executer_relances
+from datetime import date, timedelta
 from .db import SessionLocal
-from .models import Employe, PermConventionelle
+from .models import Employe, PermConventionelle, AlerteContrat, TypeAlerteContratEnum, StatutAlerteContratEnum
 
 
 def job_quotidien():
@@ -176,6 +177,62 @@ def job_activation_reminders():
         db.close()
 
 
+def job_verif_contrats():
+    """
+    Vérification quotidienne des fins de contrat.
+    - J-7 : crée une alerte de type J7 (notification RH + manager + employé)
+    - J-2 : crée une alerte de type J2 (alerte urgente)
+    """
+    print(f"[{datetime.now()}] Vérification des fins de contrat...")
+    today = date.today()
+    j7 = today + timedelta(days=7)
+    j2 = today + timedelta(days=2)
+
+    db = SessionLocal()
+    try:
+        # Employés CDD ou Stagiaire avec date_fin_contrat connue
+        employes = (
+            db.query(Employe)
+            .filter(
+                Employe.type_contrat.in_(['CDD', 'Stagiaire']),
+                Employe.date_fin_contrat.isnot(None),
+                Employe.statut_employe == 'ACTIF',
+            )
+            .all()
+        )
+        nouvelles = 0
+        for emp in employes:
+            fin = emp.date_fin_contrat
+            for type_alerte, seuil in [(TypeAlerteContratEnum.J2, j2), (TypeAlerteContratEnum.J7, j7)]:
+                if fin != seuil:
+                    continue
+                # Éviter les doublons : vérifier si alerte active du même type existe déjà
+                existante = (
+                    db.query(AlerteContrat)
+                    .filter(
+                        AlerteContrat.employe_id == emp.matricule,
+                        AlerteContrat.type_alerte == type_alerte,
+                        AlerteContrat.statut == StatutAlerteContratEnum.ACTIVE,
+                    )
+                    .first()
+                )
+                if not existante:
+                    alerte = AlerteContrat(
+                        employe_id=emp.matricule,
+                        type_alerte=type_alerte,
+                        statut=StatutAlerteContratEnum.ACTIVE,
+                    )
+                    db.add(alerte)
+                    nouvelles += 1
+        db.commit()
+        print(f"[{datetime.now()}] {nouvelles} nouvelles alertes contrat créées.")
+    except Exception as e:
+        print(f"[{datetime.now()}] Erreur lors de la vérification des contrats: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def job_relances_15min():
     """Relances toutes les 15 minutes en heures ouvrées (L-V 8h-18h).
 
@@ -251,6 +308,15 @@ def configurer_scheduler():
         CronTrigger(hour='*/6', minute=0),
         id='job_activation_reminders',
         name='Rappels activation missions (toutes les 6h)',
+        replace_existing=True
+    )
+
+    # Vérification fins de contrat (quotidien à 8h05, juste après job_quotidien)
+    scheduler.add_job(
+        job_verif_contrats,
+        CronTrigger(hour=8, minute=5),
+        id='job_verif_contrats',
+        name='Vérification fins de contrat (8h05)',
         replace_existing=True
     )
 

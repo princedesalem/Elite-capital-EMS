@@ -22,6 +22,7 @@ from .routers import (
     fiches_poste_router,
     demande_explication_router, disciplinaire_router, scoring_router,
     ai_router, analytics_router, documentation_router,
+    contrats_router, academy_router,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request
@@ -194,6 +195,8 @@ app.include_router(scoring_router.router)
 app.include_router(ai_router.router)
 app.include_router(analytics_router.router)
 app.include_router(documentation_router.router)
+app.include_router(contrats_router.router)
+app.include_router(academy_router.router)
 
 
 @app.get('/')

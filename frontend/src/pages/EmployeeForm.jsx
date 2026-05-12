@@ -279,7 +279,8 @@ export default function EmployeeForm(){
     departement:'',fonction:'',ville:'',id_localisation:'',contact_urgence:'+237',diplome:'',solde_conges:0,
     date_embauche:'',entite:'',role:'',direction:'',categorie:'',n1_fonction:'',
     annee_experience:0,statut_employe:'ACTIF',statut_matrimonial:'',nombre_enfants:'',
-    salaire_brut:'',salaire_devise:'XAF',nouvelle_recrue:false
+    salaire_brut:'',salaire_devise:'XAF',nouvelle_recrue:false,
+    type_contrat:'CDI',date_debut_contrat:'',date_fin_contrat:''
   })
   const [err,setErr]=useState(null)
   const [n1Fonctions, setN1Fonctions] = useState([])
@@ -329,7 +330,8 @@ export default function EmployeeForm(){
           matricule:'',nom:'',prenom:'',date_naissance:'',sexe:'',telephone:'+237',email:'',
           departement:'',fonction:'',ville:'',id_localisation:'',contact_urgence:'+237',diplome:'',solde_conges:0,
           date_embauche:'',entite:'',role:'',direction:'',categorie:'',n1_fonction:'',
-          annee_experience:0,statut_employe:'ACTIF',statut_matrimonial:'',nombre_enfants:'',nouvelle_recrue:false
+          annee_experience:0,statut_employe:'ACTIF',statut_matrimonial:'',nombre_enfants:'',nouvelle_recrue:false,
+          type_contrat:'CDI',date_debut_contrat:'',date_fin_contrat:''
         }
         const merged = {}
         for (const key of Object.keys(defaults)) {
@@ -629,6 +631,42 @@ export default function EmployeeForm(){
               <option value="CONGEDIE">Congédié</option>
               <option value="SUSPENDU">Suspendu</option>
             </select>
+          </div>
+          {/* Type de contrat */}
+          <div style={{padding:'14px 16px',background:'#f8fafc',border:'1.5px solid #e2e8f0',borderRadius:10,marginTop:4}}>
+            <div style={{fontWeight:700,fontSize:'0.88rem',color:'#021630',marginBottom:10}}>Type de contrat</div>
+            <div style={{display:'flex',gap:16,flexWrap:'wrap',marginBottom:8}}>
+              {['CDI','CDD','Stagiaire'].map(tc=>(
+                <label key={tc} style={{display:'flex',alignItems:'center',gap:7,cursor:'pointer',fontWeight:form.type_contrat===tc?700:400,color:form.type_contrat===tc?'#021630':'#64748b'}}>
+                  <input type="radio" name="type_contrat" value={tc} checked={form.type_contrat===tc} onChange={()=>setField('type_contrat',tc)} style={{accentColor:'#021630'}} />
+                  {tc}
+                  {tc==='CDI'&&<span style={{fontSize:'0.72rem',color:'#64748b',fontWeight:400}}>(permanent)</span>}
+                  {tc==='CDD'&&<span style={{fontSize:'0.72rem',color:'#64748b',fontWeight:400}}>(durée déterminée)</span>}
+                  {tc==='Stagiaire'&&<span style={{fontSize:'0.72rem',color:'#64748b',fontWeight:400}}>(période de formation)</span>}
+                </label>
+              ))}
+            </div>
+            {(form.type_contrat==='CDD'||form.type_contrat==='Stagiaire')&&(
+              <div style={{display:'flex',gap:12,flexWrap:'wrap',marginTop:4}}>
+                <div style={{flex:'1 1 180px'}}>
+                  <label style={{fontSize:'0.78rem',color:'#64748b',display:'block',marginBottom:3}}>Date de début</label>
+                  <input className="input" type="date" value={form.date_debut_contrat||''} onChange={e=>setField('date_debut_contrat',e.target.value)} />
+                </div>
+                <div style={{flex:'1 1 180px'}}>
+                  <label style={{fontSize:'0.78rem',color:'#64748b',display:'block',marginBottom:3}}>Date de fin *</label>
+                  <input className="input" type="date" value={form.date_fin_contrat||''} onChange={e=>setField('date_fin_contrat',e.target.value)} required={form.type_contrat!=='CDI'} />
+                </div>
+                {form.date_debut_contrat&&form.date_fin_contrat&&(()=>{
+                  const d1=new Date(form.date_debut_contrat),d2=new Date(form.date_fin_contrat)
+                  const days=Math.round((d2-d1)/(86400000))
+                  const months=Math.round(days/30.4375)
+                  if(isNaN(days)||days<=0) return null
+                  return <div style={{alignSelf:'flex-end',marginBottom:6,fontSize:'0.8rem',fontWeight:700,color:'#021630',background:'#e0e7ff',padding:'4px 12px',borderRadius:20}}>
+                    Durée : {months>=2?`${months} mois`:`${days} jours`}
+                  </div>
+                })()}
+              </div>
+            )}
           </div>
           {/* Nouvelle recrue — juste avant enregistrer, bien visible */}
           {isPrivilegedForSalaire && (

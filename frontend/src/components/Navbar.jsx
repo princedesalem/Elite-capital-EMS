@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import {Link, NavLink, useLocation} from 'react-router-dom'
-import { Bell, LogOut } from 'lucide-react'
+import { Bell, LogOut, GraduationCap } from 'lucide-react'
 import {useAuth} from '../contexts/AuthContext'
 import api from '../services/api'
 import AvatarCircle from './AvatarCircle'
@@ -245,6 +245,14 @@ export default function Navbar(){
             <NavLink to="/rh/dashboard" style={topNavLinkStyle}>Dashboard</NavLink>
             <NavLink to="/rh/organisation" style={topNavLinkStyle}>Organisation</NavLink>
             <NavLink to="/rh/documentation" style={topNavLinkStyle}>Documentation</NavLink>
+            <NavLink to="/rh/academy" style={({ isActive }) => ({
+              ...topNavLinkStyle({ isActive }),
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+            })}>
+              <GraduationCap size={13} />Elite Academy
+            </NavLink>
           </div>
         )}
       </div>
@@ -294,7 +302,7 @@ export default function Navbar(){
                 </span>
               )}
             </Link>
-            <Link to="/rh/profile" style={{color:'#02162e',fontSize:'0.8rem',textDecoration:'none',display:'flex',alignItems:'center',gap:6,minWidth:0,fontWeight:600,minWidth:0}}>
+            <Link to="/rh/profile" style={{color:'#02162e',fontSize:'0.8rem',textDecoration:'none',display:'flex',alignItems:'center',gap:6,minWidth:0,fontWeight:600}}>
               <AvatarCircle
                 photoUrl={employee?.photo_url}
                 letter={(() => { try { return String(user?.matricule || user?.sub || '?')[0].toUpperCase() } catch { return '?' } })()}

@@ -51,6 +51,9 @@ import DisciplinairePage from './pages/DisciplinairePage'
 import ScoreComportementalPage from './pages/ScoreComportementalPage'
 import DocumentationPage from './pages/DocumentationPage'
 import RemplacantsPage from './pages/RemplacantsPage'
+import Academy from './pages/Academy'
+import AcademyCourse from './pages/AcademyCourse'
+import AcademyAdmin from './pages/AcademyAdmin'
 import { ToastProvider, ConfirmProvider } from './components/ui'
 import './index.css'
 
@@ -121,6 +124,9 @@ export default function App(){
             <Route path="disciplinaire" element={<DisciplinairePage />} />
             <Route path="score-comportemental" element={<ScoreComportementalPage />} />
             <Route path="documentation" element={<DocumentationPage />} />
+            <Route path="academy" element={<Academy />} />
+            <Route path="academy/admin" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AcademyAdmin /></ProtectedRoute>} />
+            <Route path="academy/:formationId" element={<AcademyCourse />} />
           </Route>
 
           <Route path="/home" element={<Navigate to="/rh/home" replace />} />

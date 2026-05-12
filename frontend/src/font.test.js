@@ -6,16 +6,19 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 describe('font globale', () => {
-  it("index.css déclare uniquement 'Century Gothic' sans police de repli", () => {
+  it("index.css charge Century Gothic via @font-face et l'applique globalement", () => {
     const css = fs.readFileSync(
       path.resolve(__dirname, 'index.css'),
       'utf-8'
     )
-    // Doit contenir 'Century Gothic'
-    expect(css).toContain("'Century Gothic'")
-    // Ne doit pas contenir d'autre famille de polices dans la règle body/#root
-    const fontFamilyRule = css.match(/body,#root\{[^}]+\}/)?.[0] ?? ''
-    // Pas de virgule après 'Century Gothic' => pas de fallback
-    expect(fontFamilyRule).toMatch(/font-family:'Century Gothic'[^,]/)
+    // Embed via @font-face
+    expect(css).toMatch(/@font-face\s*\{[^}]*font-family:\s*'Century Gothic'/)
+    // Doit pointer sur le fichier TTF embarqué
+    expect(css).toContain('/fonts/CenturyGothic.ttf')
+    // body/#root commence par 'Century Gothic'
+    const bodyRule = css.match(/body,#root\{[^}]+\}/)?.[0] ?? ''
+    expect(bodyRule).toMatch(/font-family:\s*'Century Gothic'/)
+    // Sélecteur global *
+    expect(css).toMatch(/\*\s*,\s*\*::before\s*,\s*\*::after\s*\{[^}]*font-family:\s*'Century Gothic'/)
   })
 })

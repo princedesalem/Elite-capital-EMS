@@ -77,6 +77,64 @@ class TypeParcoursEnum(str, enum.Enum):
     AUTRE = 'AUTRE'
 
 
+class TypeContratEnum(str, enum.Enum):
+    CDI = 'CDI'
+    CDD = 'CDD'
+    STAGIAIRE = 'Stagiaire'
+
+
+class TypeAlerteContratEnum(str, enum.Enum):
+    J7 = 'J7'
+    J2 = 'J2'
+
+
+class StatutAlerteContratEnum(str, enum.Enum):
+    ACTIVE = 'active'
+    TRAITEE = 'traitee'
+
+
+class ActionAlerteContratEnum(str, enum.Enum):
+    RENOUVELLEMENT = 'renouvellement'
+    ARRET = 'arret'
+    CONFIRMATION_CDI = 'confirmation_cdi'
+
+
+class TypeLettreRHEnum(str, enum.Enum):
+    RENOUVELLEMENT = 'renouvellement'
+    ARRET = 'arret'
+    CONFIRMATION_CDI = 'confirmation_cdi'
+    INFO_CONTRAT = 'info_contrat'
+
+
+# Academy enums
+class NiveauFormationEnum(str, enum.Enum):
+    DEBUTANT = 'Débutant'
+    INTERMEDIAIRE = 'Intermédiaire'
+    AVANCE = 'Avancé'
+
+
+class TypeLeconEnum(str, enum.Enum):
+    VIDEO = 'video'
+    PDF = 'pdf'
+    TEXTE = 'texte'
+    QUIZ = 'quiz'
+    PRESENTATION = 'presentation'
+
+
+class StatutInscriptionEnum(str, enum.Enum):
+    EN_COURS = 'en_cours'
+    TERMINE = 'termine'
+    ABANDONNE = 'abandonne'
+
+
+class TypeBadgeEnum(str, enum.Enum):
+    PREMIER_COURS = 'premier_cours'
+    SERIE_5 = 'serie_5'
+    PERFECTIONNISTE = 'perfectionniste'
+    TOP_APPRENANT = 'top_apprenant'
+    ASSIDU = 'assidu'
+
+
 class Pays(Base):
     __tablename__ = 'PAYS'
     id_pays = Column(Integer, primary_key=True, autoincrement=True)
@@ -158,8 +216,14 @@ class Employe(Base):
     id_fiche_poste = Column(Integer, ForeignKey('Fiche_poste_template.id_template', ondelete='SET NULL'), nullable=True)
     # Présence en ligne — mis à jour par heartbeat frontend toutes les 30s
     derniere_connexion = Column(DateTime, nullable=True)
+    # Contrat
+    type_contrat = Column(Enum(TypeContratEnum), nullable=False, default=TypeContratEnum.CDI)
+    date_debut_contrat = Column(Date, nullable=True)
+    date_fin_contrat = Column(Date, nullable=True)
     utilisateur = relationship('Utilisateur', back_populates='employe', uselist=False)
     fiche_poste = relationship('FichePosteTemplate', back_populates='titulaires', foreign_keys=[id_fiche_poste])
+    alertes_contrat = relationship('AlerteContrat', back_populates='employe', cascade='all, delete-orphan')
+    lettres_rh = relationship('LettreRH', back_populates='employe', cascade='all, delete-orphan')
 
 
 class Utilisateur(Base):
@@ -784,9 +848,160 @@ class WorkforcePosition(Base):
     annee = Column(String(10), nullable=True)
     budget = Column(DECIMAL(15, 2), nullable=True)
     priorite = Column(String(50), default='moyenne')
+
+
+# ── Gestion des contrats ─────────────────────────────────────────────────────
+
+class AlerteContrat(Base):
+    __tablename__ = 'alertes_contrat'
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    employe_id   = Column(String(32), ForeignKey('EMPLOYE.matricule', ondelete='CASCADE'), nullable=False)
+    type_alerte  = Column(Enum(TypeAlerteContratEnum), nullable=False)
+    statut       = Column(Enum(StatutAlerteContratEnum), nullable=False, default=StatutAlerteContratEnum.ACTIVE)
+    action       = Column(Enum(ActionAlerteContratEnum), nullable=True)
+    date_generee = Column(DateTime, nullable=False, default=datetime.utcnow)
+    date_traitee = Column(DateTime, nullable=True)
+    traite_par   = Column(String(32), nullable=True)
+    employe      = relationship('Employe', back_populates='alertes_contrat')
+    lettres      = relationship('LettreRH', back_populates='alerte')
+
+
+class LettreRH(Base):
+    __tablename__ = 'lettres_rh'
+    id                = Column(Integer, primary_key=True, autoincrement=True)
+    employe_id        = Column(String(32), ForeignKey('EMPLOYE.matricule', ondelete='CASCADE'), nullable=False)
+    alerte_id         = Column(Integer, ForeignKey('alertes_contrat.id', ondelete='SET NULL'), nullable=True)
+    type_lettre       = Column(Enum(TypeLettreRHEnum), nullable=False)
+    pdf_path          = Column(String(500), nullable=True)
+    signature_data    = Column(Text, nullable=True)
+    date_generation   = Column(DateTime, nullable=False, default=datetime.utcnow)
+    genere_par        = Column(String(32), nullable=False)
+    date_fin_nouvelle = Column(Date, nullable=True)
+    employe           = relationship('Employe', back_populates='lettres_rh')
+    alerte            = relationship('AlerteContrat', back_populates='lettres')
+
+
+# ── Elite Academy LMS ─────────────────────────────────────────────────────────
+
+class Formation(Base):
+    __tablename__ = 'formations'
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    titre            = Column(String(200), nullable=False)
+    description      = Column(Text, nullable=True)
+    categorie        = Column(String(100), nullable=True)
+    niveau           = Column(
+        Enum(NiveauFormationEnum, values_callable=lambda x: [e.value for e in x]),
+        nullable=False, default=NiveauFormationEnum.DEBUTANT,
+    )
+    image_url        = Column(String(500), nullable=True)
+    duree_estimee_h  = Column(DECIMAL(5, 1), nullable=True, default=0)
+    est_onboarding   = Column(Boolean, nullable=False, default=False)
+    est_publie       = Column(Boolean, nullable=False, default=False)
+    cree_par         = Column(String(32), nullable=False)
+    created_at       = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at       = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    modules          = relationship('ModuleFormation', back_populates='formation', cascade='all, delete-orphan', order_by='ModuleFormation.ordre')
+    inscriptions     = relationship('InscriptionFormation', back_populates='formation', cascade='all, delete-orphan')
+    certificats      = relationship('CertificatFormation', back_populates='formation', cascade='all, delete-orphan')
+
+
+class ModuleFormation(Base):
+    __tablename__ = 'modules_formation'
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    formation_id = Column(Integer, ForeignKey('formations.id', ondelete='CASCADE'), nullable=False)
+    titre        = Column(String(200), nullable=False)
+    description  = Column(Text, nullable=True)
+    ordre        = Column(Integer, nullable=False, default=0)
+    formation    = relationship('Formation', back_populates='modules')
+    lecons       = relationship('Lecon', back_populates='module', cascade='all, delete-orphan', order_by='Lecon.ordre')
+
+
+class Lecon(Base):
+    __tablename__ = 'lecons'
+    id        = Column(Integer, primary_key=True, autoincrement=True)
+    module_id = Column(Integer, ForeignKey('modules_formation.id', ondelete='CASCADE'), nullable=False)
+    titre     = Column(String(200), nullable=False)
+    type      = Column(
+        Enum(TypeLeconEnum, values_callable=lambda x: [e.value for e in x]),
+        nullable=False, default=TypeLeconEnum.TEXTE,
+    )
+    contenu   = Column(Text, nullable=True)
+    ordre     = Column(Integer, nullable=False, default=0)
+    duree_min = Column(Integer, nullable=True, default=0)
+    module    = relationship('ModuleFormation', back_populates='lecons')
+    questions = relationship('QuizQuestion', back_populates='lecon', cascade='all, delete-orphan', order_by='QuizQuestion.ordre')
+    progressions = relationship('ProgressionLecon', back_populates='lecon', cascade='all, delete-orphan')
+
+
+class QuizQuestion(Base):
+    __tablename__ = 'quiz_questions'
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    lecon_id     = Column(Integer, ForeignKey('lecons.id', ondelete='CASCADE'), nullable=False)
+    question     = Column(Text, nullable=False)
+    options      = Column(JSON, nullable=False)
+    bonne_reponse = Column(Integer, nullable=False, default=0)
+    explication  = Column(Text, nullable=True)
+    ordre        = Column(Integer, nullable=False, default=0)
+    lecon        = relationship('Lecon', back_populates='questions')
+
+
+class InscriptionFormation(Base):
+    __tablename__ = 'inscriptions_formation'
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    employe_id       = Column(String(32), ForeignKey('EMPLOYE.matricule', ondelete='CASCADE'), nullable=False)
+    formation_id     = Column(Integer, ForeignKey('formations.id', ondelete='CASCADE'), nullable=False)
+    date_inscription = Column(DateTime, nullable=False, default=datetime.utcnow)
+    statut           = Column(
+        Enum(StatutInscriptionEnum, values_callable=lambda x: [e.value for e in x]),
+        nullable=False, default=StatutInscriptionEnum.EN_COURS,
+    )
+    score_final      = Column(DECIMAL(5, 2), nullable=True)
+    date_completion  = Column(DateTime, nullable=True)
+    employe          = relationship('Employe')
+    formation        = relationship('Formation', back_populates='inscriptions')
+    progressions     = relationship('ProgressionLecon', back_populates='inscription', cascade='all, delete-orphan')
+    __table_args__ = (UniqueConstraint('employe_id', 'formation_id', name='uq_inscription'),)
+
+
+class ProgressionLecon(Base):
+    __tablename__ = 'progression_lecons'
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    inscription_id   = Column(Integer, ForeignKey('inscriptions_formation.id', ondelete='CASCADE'), nullable=False)
+    lecon_id         = Column(Integer, ForeignKey('lecons.id', ondelete='CASCADE'), nullable=False)
+    termine          = Column(Boolean, nullable=False, default=False)
+    score            = Column(DECIMAL(5, 2), nullable=True)
+    date_progression = Column(DateTime, nullable=False, default=datetime.utcnow)
+    inscription      = relationship('InscriptionFormation', back_populates='progressions')
+    lecon            = relationship('Lecon', back_populates='progressions')
+    __table_args__ = (UniqueConstraint('inscription_id', 'lecon_id', name='uq_progression'),)
+
+
+class Badge(Base):
+    __tablename__ = 'badges'
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    employe_id  = Column(String(32), ForeignKey('EMPLOYE.matricule', ondelete='CASCADE'), nullable=False)
+    type        = Column(
+        Enum(TypeBadgeEnum, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+    )
+    date_obtenu = Column(DateTime, nullable=False, default=datetime.utcnow)
+    employe     = relationship('Employe')
+    __table_args__ = (UniqueConstraint('employe_id', 'type', name='uq_badge'),)
+
+
+class CertificatFormation(Base):
+    __tablename__ = 'certificats_formation'
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    employe_id   = Column(String(32), ForeignKey('EMPLOYE.matricule', ondelete='CASCADE'), nullable=False)
+    formation_id = Column(Integer, ForeignKey('formations.id', ondelete='CASCADE'), nullable=False)
+    date_emission = Column(DateTime, nullable=False, default=datetime.utcnow)
+    pdf_path     = Column(String(500), nullable=True)
     statut = Column(String(50), default='planifie')
     notes = Column(Text, nullable=True)
     created_by = Column(String(32), ForeignKey('EMPLOYE.matricule'), nullable=True)
+    employe      = relationship('Employe', foreign_keys=[employe_id])
+    formation    = relationship('Formation', back_populates='certificats')
+    __table_args__ = (UniqueConstraint('employe_id', 'formation_id', name='uq_certificat'),)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

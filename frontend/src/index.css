@@ -1,3 +1,5 @@
+@font-face{font-family:'Century Gothic';src:url('/fonts/CenturyGothic.ttf') format('truetype');font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:'Century Gothic';src:url('/fonts/CenturyGothic-Bold.ttf') format('truetype');font-weight:700;font-style:normal;font-display:swap}
 :root{
   --rouge:rgb(208, 32, 43);
   --bleu:rgb(2, 22, 46);
@@ -48,9 +50,9 @@
   --modal-bg:#1a2233;
   --section-header-bg:#1e2d42;
 }
-*{box-sizing:border-box;font-family:inherit}
-html{background:#02162e;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-body,#root{height:100%;margin:0;font-family:'Century Gothic';background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-synthesis:none}
+*,*::before,*::after{box-sizing:border-box;font-family:'Century Gothic','CenturyGothic','Apple Gothic','URW Gothic L','AppleGothic','Avant Garde','Futura','Trebuchet MS',system-ui,sans-serif}
+html{background:#02162e;-webkit-text-size-adjust:100%;text-size-adjust:100%;font-family:'Century Gothic','CenturyGothic','Apple Gothic','URW Gothic L','AppleGothic','Avant Garde','Futura','Trebuchet MS',system-ui,sans-serif}
+body,#root{height:100%;margin:0;font-family:'Century Gothic','CenturyGothic','Apple Gothic','URW Gothic L','AppleGothic','Avant Garde','Futura','Trebuchet MS',system-ui,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-synthesis:none}
 img,svg{image-rendering:auto;image-rendering:-webkit-optimize-contrast}
 input,button,select,textarea,option{font-family:inherit;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 body{padding-top:50px}
