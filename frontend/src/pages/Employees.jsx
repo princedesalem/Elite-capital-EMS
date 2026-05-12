@@ -1,9 +1,10 @@
-import React, {useEffect, useState, useMemo, useRef} from 'react'
+import React, {useEffect, useState, useMemo, useRef, useCallback} from 'react'
 import api from '../services/api'
 import {Link} from 'react-router-dom'
 import {useAuth} from '../contexts/AuthContext'
 import {Pencil, ClipboardList, Briefcase, Building2, Clock, Upload, Download, MoreHorizontal, ChevronRight, Database, Trash2, AlertTriangle} from 'lucide-react'
 import AvatarCircle from '../components/AvatarCircle'
+import { useAutoRefresh } from '../hooks/useAutoRefresh'
 
 export default function Employees(){
   const {user} = useAuth()
@@ -77,7 +78,7 @@ export default function Employees(){
     return initial.toUpperCase()
   }
 
-  useEffect(()=>{
+  const loadEmployees = useCallback(() => {
     api.get('/employees/scoped')
       .then(r=>{setList(r.data)})
       .catch(async ()=>{
@@ -85,7 +86,16 @@ export default function Employees(){
         setList(fallback.data || [])
       })
       .finally(()=>setLoading(false))
-  },[])
+  }, [])
+
+  useEffect(()=>{ loadEmployees() },[loadEmployees])
+
+  useAutoRefresh(loadEmployees)
+
+  useEffect(()=>{
+    const interval = setInterval(loadEmployees, 30000)
+    return () => clearInterval(interval)
+  },[loadEmployees])
 
   useEffect(() => {
     api.get('/employees/autocomplete/pays')

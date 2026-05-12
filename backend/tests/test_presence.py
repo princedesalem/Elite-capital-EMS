@@ -212,3 +212,246 @@ def test_presence_has_derniere_connexion_field(client, db_session):
     emp_data = next(e for e in res.json() if e['matricule'] == 'PR030')
     assert emp_data['derniere_connexion'] is not None
     assert '2026-03-15' in emp_data['derniere_connexion']
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests PUT /employees/{matricule} — Modification d'un employé
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _make_employe_complet(db, matricule):
+    """Crée un employé avec les champs minimaux pour le PUT."""
+    emp = models.Employe(
+        matricule=matricule,
+        nom='Dupont',
+        prenom='Jean',
+        email=f'{matricule}@test.com',
+        date_embauche=datetime(2021, 1, 1).date(),
+        statut_employe='ACTIF',
+        nombre_enfants=0,
+        salaire_devise='XAF',
+    )
+    db.add(emp)
+    db.commit()
+    return emp
+
+
+# ── Test 10 : PUT avec date_naissance vide (None) ne fait pas de 422 ─────────
+
+def test_update_employe_date_naissance_null_ok(client, db_session):
+    """Envoyer date_naissance=None doit retourner 200 (pas 422)."""
+    _make_employe_complet(db_session, 'UP001')
+    token = _make_token('UP001', role='RH')
+    res = client.put(
+        '/employees/UP001',
+        json={
+            'nom': 'Dupont',
+            'prenom': 'Jean',
+            'date_naissance': None,
+            'date_embauche': '2021-01-01',
+            'statut_employe': 'ACTIF',
+            'entite': None,
+        },
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert res.status_code == 200
+
+
+# ── Test 11 : PUT avec salaire_brut vide (None) ne fait pas de 422 ───────────
+
+def test_update_employe_salaire_brut_null_ok(client, db_session):
+    """Envoyer salaire_brut=None doit retourner 200 (pas 422)."""
+    _make_employe_complet(db_session, 'UP002')
+    token = _make_token('UP002', role='RH')
+    res = client.put(
+        '/employees/UP002',
+        json={
+            'nom': 'Dupont',
+            'prenom': 'Jean',
+            'date_embauche': '2021-01-01',
+            'statut_employe': 'ACTIF',
+            'salaire_brut': None,
+            'entite': None,
+        },
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert res.status_code == 200
+
+
+# ── Test 12 : PUT avec tous les champs optionnels null retourne 200 ──────────
+
+def test_update_employe_champs_optionnels_null_ok(client, db_session):
+    """PUT avec tous les champs optionnels à None ne doit pas 422."""
+    _make_employe_complet(db_session, 'UP003')
+    token = _make_token('UP003', role='RH')
+    res = client.put(
+        '/employees/UP003',
+        json={
+            'nom': 'Dupont',
+            'prenom': 'Jean',
+            'date_naissance': None,
+            'date_embauche': '2021-01-01',
+            'statut_employe': 'ACTIF',
+            'salaire_brut': None,
+            'nombre_enfants': None,
+            'annee_experience': None,
+            'entite': None,
+            'n1': None,
+        },
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert res.status_code == 200
+
+
+# ── Test 13 : PUT avec champ mis à jour persisté en DB ───────────────────────
+
+def test_update_employe_persiste_changement(client, db_session):
+    """La modification d'un champ doit être enregistrée en DB."""
+    emp = _make_employe_complet(db_session, 'UP004')
+    assert emp.nom == 'Dupont'
+
+    token = _make_token('UP004', role='RH')
+    res = client.put(
+        '/employees/UP004',
+        json={
+            'nom': 'Nouveau Nom',
+            'prenom': 'Jean',
+            'date_embauche': '2021-01-01',
+            'statut_employe': 'ACTIF',
+            'entite': None,
+        },
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert res.status_code == 200
+    db_session.refresh(emp)
+    assert emp.nom == 'Nouveau Nom'
+
+
+# ── Test 14 : PUT sur employé inexistant retourne 404 ────────────────────────
+
+def test_update_employe_not_found_returns_404(client, db_session):
+    token = _make_token('GHOST', role='RH')
+    res = client.put(
+        '/employees/GHOST',
+        json={'nom': 'X', 'prenom': 'Y', 'date_embauche': '2021-01-01'},
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert res.status_code == 404
+
+
+# ── Test 15 : PUT departement="" efface le département ───────────────────────
+
+def test_update_employe_efface_departement(client, db_session):
+    """Envoyer departement='' doit mettre dept_id à None."""
+    entite = models.Entite(nom='EntiteTest15')
+    db_session.add(entite)
+    db_session.flush()
+    dept = models.Departement(nom='DeptTest15', id_entite=entite.id_entite)
+    db_session.add(dept)
+    db_session.flush()
+    emp = models.Employe(
+        matricule='DP015',
+        nom='Dupont',
+        prenom='Jean',
+        email='dp015@test.com',
+        date_embauche=datetime(2021, 1, 1).date(),
+        statut_employe='ACTIF',
+        dept_id=dept.dept_id,
+    )
+    db_session.add(emp)
+    db_session.commit()
+    assert emp.dept_id == dept.dept_id
+
+    token = _make_token('DP015', role='RH')
+    res = client.put(
+        '/employees/DP015',
+        json={
+            'nom': 'Dupont',
+            'prenom': 'Jean',
+            'date_embauche': '2021-01-01',
+            'statut_employe': 'ACTIF',
+            'departement': '',
+        },
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert res.status_code == 200
+    db_session.refresh(emp)
+    assert emp.dept_id is None
+
+
+# ── Test 16 : PUT direction="" efface la direction ───────────────────────────
+
+def test_update_employe_efface_direction(client, db_session):
+    """Envoyer direction='' doit mettre id_direction à None."""
+    entite = models.Entite(nom='EntiteTest16')
+    db_session.add(entite)
+    db_session.flush()
+    direction = models.Direction(nom='DirTest16', id_entite=entite.id_entite)
+    db_session.add(direction)
+    db_session.flush()
+    emp = models.Employe(
+        matricule='DP016',
+        nom='Dupont',
+        prenom='Jean',
+        email='dp016@test.com',
+        date_embauche=datetime(2021, 1, 1).date(),
+        statut_employe='ACTIF',
+        id_direction=direction.id_direction,
+    )
+    db_session.add(emp)
+    db_session.commit()
+    assert emp.id_direction == direction.id_direction
+
+    token = _make_token('DP016', role='RH')
+    res = client.put(
+        '/employees/DP016',
+        json={
+            'nom': 'Dupont',
+            'prenom': 'Jean',
+            'date_embauche': '2021-01-01',
+            'statut_employe': 'ACTIF',
+            'direction': '',
+        },
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert res.status_code == 200
+    db_session.refresh(emp)
+    assert emp.id_direction is None
+
+
+# ── Test 17 : PUT sans champ departement préserve le dept_id ─────────────────
+
+def test_update_employe_preserve_departement_si_absent_payload(client, db_session):
+    """Un PUT sans le champ departement ne doit pas effacer dept_id."""
+    entite = models.Entite(nom='EntiteTest17')
+    db_session.add(entite)
+    db_session.flush()
+    dept = models.Departement(nom='DeptTest17', id_entite=entite.id_entite)
+    db_session.add(dept)
+    db_session.flush()
+    emp = models.Employe(
+        matricule='DP017',
+        nom='Dupont',
+        prenom='Jean',
+        email='dp017@test.com',
+        date_embauche=datetime(2021, 1, 1).date(),
+        statut_employe='ACTIF',
+        dept_id=dept.dept_id,
+    )
+    db_session.add(emp)
+    db_session.commit()
+    original_dept_id = emp.dept_id
+
+    token = _make_token('DP017', role='RH')
+    res = client.put(
+        '/employees/DP017',
+        json={
+            'nom': 'Dupont Modifié',
+            'prenom': 'Jean',
+            'date_embauche': '2021-01-01',
+            'statut_employe': 'ACTIF',
+        },
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert res.status_code == 200
+    db_session.refresh(emp)
+    assert emp.dept_id == original_dept_id

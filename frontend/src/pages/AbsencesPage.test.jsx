@@ -41,4 +41,11 @@ describe('AbsencesPage', () => {
     fireEvent.click(screen.getByText('Remplaçants'))
     expect(screen.getByText('RemplacantsPage')).toBeInTheDocument()
   })
+
+  it('header de page : aucun gradient rouge (#ce2b2b)', () => {
+    const { container } = render(<MemoryRouter><AbsencesPage /></MemoryRouter>)
+    Array.from(container.querySelectorAll('div[style]'))
+      .filter(d => d.style.background && d.style.background.includes('gradient'))
+      .forEach(d => { expect(d.style.background).not.toContain('ce2b2b') })
+  })
 })

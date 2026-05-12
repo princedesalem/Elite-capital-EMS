@@ -43,4 +43,12 @@ describe('PerformanceReviews', () => {
     const matches = await screen.findAllByText(/360|performance|évaluation/i)
     expect(matches.length).toBeGreaterThan(0)
   })
+
+  it('header de page : aucun gradient rouge (#ce2b2b)', async () => {
+    const { container } = render(<MemoryRouter><PerformanceReviews /></MemoryRouter>)
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalled())
+    Array.from(container.querySelectorAll('div[style]'))
+      .filter(d => d.style.background && d.style.background.includes('gradient'))
+      .forEach(d => { expect(d.style.background).not.toContain('ce2b2b') })
+  })
 })

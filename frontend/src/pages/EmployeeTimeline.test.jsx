@@ -50,6 +50,14 @@ describe('EmployeeTimeline', () => {
       expect(matches.length + (document.body.textContent.match(/parcours|timeline|historique/i) ? 1 : 0)).toBeGreaterThan(0)
     })
   })
+
+  it('header de page : aucun gradient rouge (#ce2b2b)', async () => {
+    const { container } = render(<MemoryRouter initialEntries={['/?matricule=1001']}><EmployeeTimeline /></MemoryRouter>)
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalled())
+    Array.from(container.querySelectorAll('div[style]'))
+      .filter(d => d.style.background && d.style.background.includes('gradient'))
+      .forEach(d => { expect(d.style.background).not.toContain('ce2b2b') })
+  })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

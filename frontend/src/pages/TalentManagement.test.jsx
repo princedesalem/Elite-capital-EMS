@@ -64,4 +64,12 @@ describe('TalentManagement', () => {
       expect(document.body.textContent).toMatch(/Certification AWS|Objectifs/)
     })
   })
+
+  it('header de page : aucun gradient rouge (#ce2b2b)', async () => {
+    const { container } = render(<MemoryRouter><TalentManagement /></MemoryRouter>)
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalled())
+    Array.from(container.querySelectorAll('div[style]'))
+      .filter(d => d.style.background && d.style.background.includes('gradient'))
+      .forEach(d => { expect(d.style.background).not.toContain('ce2b2b') })
+  })
 })

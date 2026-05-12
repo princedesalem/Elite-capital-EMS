@@ -1,6 +1,7 @@
 import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import Administration from './Administration'
+import { BRAND_GRADIENT } from '../theme'
 
 const apiGetMock = vi.fn()
 
@@ -52,5 +53,24 @@ describe('Administration read-only governance', () => {
       // Fonctions reference is fetched for everyone
       expect(apiGetMock).toHaveBeenCalledWith('/employees/admin/fonctions-reference')
     })
+  })
+
+  it('le header de page utilise BRAND_GRADIENT (pas de rouge #ce2b2b)', async () => {
+    const { container } = render(<Administration />)
+    await waitFor(() => screen.getByRole('button', { name: /Entités/i }))
+    const allDivs = container.querySelectorAll('div[style]')
+    const headerDiv = Array.from(allDivs).find(
+      d => d.style.background && d.style.background.includes('02162e')
+    )
+    expect(headerDiv).toBeTruthy()
+    expect(headerDiv.style.background).toBe(BRAND_GRADIENT)
+    expect(headerDiv.style.background).not.toContain('ce2b2b')
+  })
+
+  it('le header de page contient le titre Administration', async () => {
+    render(<Administration />)
+    await waitFor(() => screen.getByRole('button', { name: /Entités/i }))
+    expect(screen.getByText('Administration')).toBeTruthy()
+    expect(screen.getByText(/Paramètres et configuration du système/i)).toBeTruthy()
   })
 })

@@ -4,6 +4,7 @@ import { Settings, Building2, GitBranch, LayoutGrid, Briefcase, Plus, Pencil, Tr
 import OrgChart from './OrgChart'
 import { useAuth } from '../contexts/AuthContext'
 import { confirmDialog } from '../components/ui/bridge'
+import { BRAND_GRADIENT } from '../theme'
 export default function Administration() {
   const { user } = useAuth()
   const role = String(user?.role || '').toUpperCase()
@@ -483,7 +484,7 @@ export default function Administration() {
     <div style={{ padding: '12px', background: 'linear-gradient(135deg, #f7f8fb 0%, #e8f4f8 100%)', minHeight: '100vh' }}>
       <div
         style={{
-          background: 'linear-gradient(90deg, #021630 0%, #ce2b2b 100%)',
+          background: BRAND_GRADIENT,
           color: 'white',
           padding: '16px 14px',
           borderRadius: '10px',

@@ -978,7 +978,7 @@ export default function PermissionsPage() {
                 {peutCreerPourAutrui && (
                   <div className="form-group">
                     <label>Matricule cible (optionnel)</label>
-                    <input type="text" pattern="[A-Za-z0-9-]+" value={matriculeCible} onChange={(e) => setMatriculeCible(e.target.value)} placeholder="Laisser vide pour moi-même" />
+                    <input type="text" pattern="[-A-Za-z0-9]+" value={matriculeCible} onChange={(e) => setMatriculeCible(e.target.value)} placeholder="Laisser vide pour moi-même" />
                   </div>
                 )}
                 <div className="form-row">
@@ -1042,7 +1042,7 @@ export default function PermissionsPage() {
               {peutCreerPourAutrui && (
                 <div className="form-group">
                   <label>Matricule cible (optionnel)</label>
-                  <input type="text" pattern="[A-Za-z0-9-]+" value={matriculeCible} onChange={(e) => setMatriculeCible(e.target.value)} placeholder="Laisser vide pour moi-même" />
+                  <input type="text" pattern="[-A-Za-z0-9]+" value={matriculeCible} onChange={(e) => setMatriculeCible(e.target.value)} placeholder="Laisser vide pour moi-même" />
                 </div>
               )}
               <div className="form-row">

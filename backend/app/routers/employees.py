@@ -1293,10 +1293,14 @@ def update_employee(matricule: str, payload: schemas.EmployeUpdate, request: Req
     # contre les payloads partiels (form, API tierce, tests) qui omettent ou
     # envoient null/"" pour des champs qu'ils n'ont pas l'intention de modifier.
     NEVER_BLANK_PROTECTED = {'matricule', 'nom', 'prenom'}
+    CLEARABLE_DB_COLS = {'dept_id', 'id_direction', 'id_localisation'}
     cleaned = {}
     for k, v in data.items():
         if k in NEVER_BLANK_PROTECTED:
             cleaned[k] = v
+            continue
+        if v is None and k in CLEARABLE_DB_COLS:
+            cleaned[k] = None   # effacement explicite autorisé
             continue
         if v is None:
             continue

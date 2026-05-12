@@ -230,4 +230,57 @@ describe('Employees page', () => {
       expect(screen.getByText('5 employés trouvés')).toBeInTheDocument()
     })
   })
+
+  it('recharge la liste sur événement ems:dataChanged', async () => {
+    const api = (await import('../services/api')).default
+    api.get.mockImplementation((url) => {
+      if (url === '/employees/scoped') return Promise.resolve({ data: Array.from({ length: 35 }, (_, i) => makeEmployee(i + 1)) })
+      return Promise.resolve({ data: [] })
+    })
+
+    renderPage()
+    await waitFor(() => expect(screen.getByText('35 employés trouvés')).toBeInTheDocument())
+
+    const callsBefore = api.get.mock.calls.filter(c => c[0] === '/employees/scoped').length
+
+    window.dispatchEvent(new CustomEvent('ems:dataChanged'))
+
+    await waitFor(() => {
+      const callsAfter = api.get.mock.calls.filter(c => c[0] === '/employees/scoped').length
+      expect(callsAfter).toBeGreaterThan(callsBefore)
+    })
+  })
+
+  it("recharge la liste au retour sur l'onglet (visibilitychange)", async () => {
+    const api = (await import('../services/api')).default
+    api.get.mockImplementation((url) => {
+      if (url === '/employees/scoped') return Promise.resolve({ data: Array.from({ length: 35 }, (_, i) => makeEmployee(i + 1)) })
+      return Promise.resolve({ data: [] })
+    })
+
+    renderPage()
+    await waitFor(() => expect(screen.getByText('35 employés trouvés')).toBeInTheDocument())
+
+    const callsBefore = api.get.mock.calls.filter(c => c[0] === '/employees/scoped').length
+
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true, configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    await waitFor(() => {
+      const callsAfter = api.get.mock.calls.filter(c => c[0] === '/employees/scoped').length
+      expect(callsAfter).toBeGreaterThan(callsBefore)
+    })
+  })
+
+  it('polling 30s: setInterval est configuré avec 30000ms au montage', async () => {
+    const intervalSpy = vi.spyOn(global, 'setInterval')
+
+    renderPage()
+    await waitFor(() => expect(screen.getByText('35 employés trouvés')).toBeInTheDocument())
+
+    const pollingCalls = intervalSpy.mock.calls.filter(([, ms]) => ms === 30000)
+    expect(pollingCalls.length).toBeGreaterThan(0)
+
+    intervalSpy.mockRestore()
+  })
 })

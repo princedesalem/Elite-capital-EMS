@@ -149,7 +149,7 @@ describe('EmployeeForm', () => {
     expect(entiteInput).toHaveValue('ELCAM')
 
     // Page must still be rendered (no crash)
-    expect(screen.getByPlaceholderText('Direction (optionnelle)')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Direction')).toBeInTheDocument()
   })
 
   it('submits without direction or department (nullable fields)', async () => {
@@ -247,7 +247,7 @@ describe('EmployeeForm', () => {
 
     // Fields with null should render as empty or default, not null
     expect(screen.getByPlaceholderText('Fonction *')).toHaveValue('PCA')
-    expect(screen.getByPlaceholderText('Direction (optionnelle)')).toHaveValue('')
+    expect(screen.getByPlaceholderText('Direction')).toHaveValue('')
 
     consoleSpy.mockRestore()
   })
@@ -283,5 +283,39 @@ describe('EmployeeForm', () => {
     expect(await screen.findByText(/Salaire brut/i)).toBeInTheDocument()
     // Devise selector default to XAF
     expect(screen.getByDisplayValue('XAF')).toBeInTheDocument()
+  })
+
+  it('le champ matricule a un pattern regex Chrome-compatible (tiret en fin)', async () => {
+    renderPage()
+    const input = await screen.findByPlaceholderText('Matricule')
+    const pattern = input.getAttribute('pattern')
+    expect(pattern).toBe('[A-Za-z0-9-]+')
+    expect(() => new RegExp(pattern)).not.toThrow()
+  })
+
+  it('dispatche ems:dataChanged après POST réussi (création)', async () => {
+    const dispatched = []
+    const spy = vi.spyOn(window, 'dispatchEvent').mockImplementation((e) => { dispatched.push(e.type) })
+
+    const api = (await import('../services/api')).default
+    api.post.mockResolvedValue({ data: {} })
+
+    renderPage()
+    await screen.findByPlaceholderText('Matricule')
+
+    fireEvent.change(screen.getByPlaceholderText('Matricule'), { target: { value: 'MAT01' } })
+    fireEvent.change(screen.getByPlaceholderText('Nom'), { target: { value: 'Toto' } })
+    fireEvent.change(screen.getByPlaceholderText('Prénom'), { target: { value: 'Titi' } })
+    fireEvent.change(screen.getByPlaceholderText('Entité *'), { target: { value: 'ELCAM' } })
+    fireEvent.change(screen.getByPlaceholderText('Fonction *'), { target: { value: 'Analyste' } })
+    const dateInputs = document.querySelectorAll('input[type="date"]')
+    fireEvent.change(dateInputs[1], { target: { value: '2020-01-01' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled())
+    await waitFor(() => expect(dispatched).toContain('ems:dataChanged'))
+
+    spy.mockRestore()
   })
 })

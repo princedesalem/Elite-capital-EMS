@@ -97,6 +97,14 @@ describe('TasksPage', () => {
     expect(await screen.findByText(/aucune tâche/i)).toBeInTheDocument()
   })
 
+  it('header de page : aucun gradient rouge (#ce2b2b)', async () => {
+    const { container } = render(<MemoryRouter><TasksPage /></MemoryRouter>)
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalled())
+    Array.from(container.querySelectorAll('div[style]'))
+      .filter(d => d.style.background && d.style.background.includes('gradient'))
+      .forEach(d => { expect(d.style.background).not.toContain('ce2b2b') })
+  })
+
   it('opens creation form on "Nouvelle tâche" click', async () => {
     render(<MemoryRouter><TasksPage /></MemoryRouter>)
     const btn = await screen.findByText(/nouvelle tâche/i)

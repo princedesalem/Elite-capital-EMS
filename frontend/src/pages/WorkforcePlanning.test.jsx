@@ -61,4 +61,12 @@ describe('WorkforcePlanning', () => {
     fireEvent.click(tabBtn)
     expect(await screen.findByText('Chef de projet')).toBeInTheDocument()
   })
+
+  it('header de page : aucun gradient rouge (#ce2b2b)', async () => {
+    const { container } = render(<MemoryRouter><WorkforcePlanning /></MemoryRouter>)
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalled())
+    Array.from(container.querySelectorAll('div[style]'))
+      .filter(d => d.style.background && d.style.background.includes('gradient'))
+      .forEach(d => { expect(d.style.background).not.toContain('ce2b2b') })
+  })
 })

@@ -416,21 +416,59 @@ export default function EmployeeForm(){
     if (!form.date_embauche) { setErr("La date d'embauche est obligatoire"); return }
     try{
       const toInt = (v) => (v === '' || v === null || v === undefined) ? null : Number(v)
+      const toFloat = (v) => (v === '' || v === null || v === undefined) ? null : Number(v)
+      const toDate = (v) => (v === '' || v === null || v === undefined) ? null : v
       const payload = {
         ...form,
         id_localisation: toInt(form.id_localisation),
         nombre_enfants: toInt(form.nombre_enfants),
         annee_experience: toInt(form.annee_experience),
         solde_conges: form.solde_conges !== '' && form.solde_conges !== null ? Number(form.solde_conges) : 0,
+        salaire_brut: toFloat(form.salaire_brut),
+        date_naissance: toDate(form.date_naissance),
+        date_embauche: toDate(form.date_embauche),
       }
       if(id && id!=='new') await api.put(`/employees/${id}`, payload)
       else await api.post('/employees/', payload)
+      window.dispatchEvent(new CustomEvent('ems:dataChanged'))
       nav('/employees')
     }catch(e){
       const detail = e?.response?.data?.detail
+      // Traduction des messages Pydantic courants en français
+      const PYDANTIC_FR = {
+        'Input should be a valid date': 'Date invalide',
+        'Input should be a valid number': 'Nombre invalide',
+        'Input should be a valid integer': 'Nombre entier invalide',
+        'Field required': 'Champ obligatoire',
+        'String should have at most': 'Texte trop long',
+        'String should have at least': 'Texte trop court',
+        'Value error': 'Valeur incorrecte',
+      }
+      const translateMsg = (msg) => {
+        if (!msg) return msg
+        for (const [en, fr] of Object.entries(PYDANTIC_FR)) {
+          if (msg.includes(en)) return fr
+        }
+        return msg
+      }
+      const FIELD_FR = {
+        date_naissance: 'Date de naissance',
+        date_embauche: "Date d'embauche",
+        salaire_brut: 'Salaire brut',
+        matricule: 'Matricule',
+        nom: 'Nom',
+        prenom: 'Prénom',
+        email: 'E-mail',
+        telephone: 'Téléphone',
+        n1: 'N+1',
+      }
       let msg
       if (typeof detail === 'string') msg = detail
-      else if (Array.isArray(detail)) msg = detail.map(d => d?.msg || JSON.stringify(d)).join(' ; ')
+      else if (Array.isArray(detail)) msg = detail.map(d => {
+        const field = FIELD_FR[d?.loc?.[d?.loc?.length - 1]] || d?.loc?.[d?.loc?.length - 1] || ''
+        const translated = translateMsg(d?.msg)
+        return field ? `${field} : ${translated}` : translated
+      }).join(' | ')
       else msg = 'Erreur lors de la sauvegarde'
       setErr(msg)
     }

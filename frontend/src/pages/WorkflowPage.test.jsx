@@ -389,5 +389,17 @@ describe('WorkflowPage', () => {
     const nextTrigger = vi.mocked(ProgressionValidation).mock.calls.at(-1)[0].refreshTrigger ?? 0
     expect(nextTrigger).toBeGreaterThan(firstTrigger)
   })
+
+  it('header de page : aucun gradient rouge (#ce2b2b)', async () => {
+    apiGetMock.mockImplementation((url) => {
+      if (String(url).includes('/api/workflow/boite/')) return Promise.resolve({ data: WORKFLOW_BOITE })
+      return Promise.resolve({ data: [] })
+    })
+    const { container } = render(<MemoryRouter><WorkflowPage /></MemoryRouter>)
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalled())
+    Array.from(container.querySelectorAll('div[style]'))
+      .filter(d => d.style.background && d.style.background.includes('gradient'))
+      .forEach(d => { expect(d.style.background).not.toContain('ce2b2b') })
+  })
 })
 

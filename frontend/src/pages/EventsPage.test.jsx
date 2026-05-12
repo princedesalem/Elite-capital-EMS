@@ -53,4 +53,12 @@ describe('EventsPage', () => {
     render(<MemoryRouter><EventsPage /></MemoryRouter>)
     expect(await screen.findByText(/créer un événement/i)).toBeInTheDocument()
   })
+
+  it('header de page : aucun gradient rouge (#ce2b2b)', async () => {
+    const { container } = render(<MemoryRouter><EventsPage /></MemoryRouter>)
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalled())
+    Array.from(container.querySelectorAll('div[style]'))
+      .filter(d => d.style.background && d.style.background.includes('gradient'))
+      .forEach(d => { expect(d.style.background).not.toContain('ce2b2b') })
+  })
 })
