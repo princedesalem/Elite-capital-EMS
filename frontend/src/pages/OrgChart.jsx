@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+﻿import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
-import { GitBranch, Search, X, ChevronDown, ChevronUp, Pencil, XCircle, MapPin, Briefcase, AlignLeft, Save, Building2, FileDown, Image as ImageIcon, FileSpreadsheet } from 'lucide-react'
+import { GitBranch, Search, X, ChevronDown, Pencil, XCircle, MapPin, Briefcase, AlignLeft, Save, Building2, FileDown, Image as ImageIcon, FileSpreadsheet } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { jsPDF } from 'jspdf'
 import * as XLSX from 'xlsx'
@@ -11,68 +11,192 @@ const ACCENT = '#ce2b2b'
 const DARK   = '#021630'
 const LINE   = '#94a3b8'
 
+// ── Logo par entité (fichiers dans /public/logos/) ───────────────────────────
+const ENTITY_LOGO_MAP = {
+  'ECG':   '/logos/ecg.jpg',
+  'ELCAM': '/logos/elcam.jpg',
+  'EXCA':  '/logos/exca.jpg',
+}
+
+// Charge une image et résout avec l'élément ou null (pas de rejet).
+function _loadImage(src) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload  = () => resolve(img)
+    img.onerror = () => resolve(null)
+    img.src = src
+  })
+}
+
+// Compose le rendu final.
+// Canvas = dimensions exactes de l'arbre capture (1:1, jamais d'upscale = net).
+// Logo zone (blanc) en haut, banniere (bleu) en dessous, arbre, pied de page.
+async function _composeOrgExport(treeDataUrl, entityName) {
+  const treeImg = await _loadImage(treeDataUrl)
+  if (!treeImg) return null
+
+  const CG = "'Century Gothic', CenturyGothic, 'Apple Gothic', 'Trebuchet MS', sans-serif"
+
+  const ENTITY_FULL = {
+    'ECG':   'Elite Capital Group (ECG)',
+    'ELCAM': 'Elite Capital Asset Management (ELCAM)',
+    'EXCA':  'Elite Capital Securities Central Africa (EXCA)',
+  }
+
+  // Largeur = largeur reelle de l'image capturee (deja a pixelRatio 3).
+  // On n'upscale jamais : le dessin est toujours 1:1.
+  const W = treeImg.naturalWidth
+  const PAD = Math.round(W * 0.016)
+
+  // Hauteurs proportionnelles a la largeur
+  const LOGO_H   = Math.round(W * 0.052)
+  const BANNER_H = Math.round(W * 0.036)
+  const FOOTER_H = Math.round(W * 0.032)
+  const H = LOGO_H + BANNER_H + treeImg.naturalHeight + FOOTER_H
+
+  const logoKey  = (entityName || '').toUpperCase()
+  const logoSrc  = ENTITY_LOGO_MAP[logoKey] || ENTITY_LOGO_MAP['ECG']
+  const logoImg  = await _loadImage(logoSrc)
+  const fullName = ENTITY_FULL[logoKey] || (entityName === 'Tous' ? 'Toutes les entites' : entityName)
+
+  const canvas  = document.createElement('canvas')
+  canvas.width  = W
+  canvas.height = H
+  const ctx     = canvas.getContext('2d')
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+
+  // ── 1. Zone logo (fond blanc) ────────────────────────────────────────────
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, W, LOGO_H)
+  ctx.fillStyle = '#e8edf4'
+  ctx.fillRect(0, LOGO_H - 2, W, 2)
+
+  if (logoImg) {
+    const lH = Math.round(LOGO_H * 0.70)
+    const lW = Math.round(lH * (logoImg.naturalWidth / logoImg.naturalHeight))
+    const lY = Math.round((LOGO_H - lH) / 2)
+    ctx.drawImage(logoImg, PAD, lY, lW, lH)
+  }
+
+  // ── 2. Banniere bleue ────────────────────────────────────────────────────
+  ctx.fillStyle = '#02162e'
+  ctx.fillRect(0, LOGO_H, W, BANNER_H)
+
+  const lineH = Math.max(3, Math.round(BANNER_H * 0.060))
+  ctx.fillStyle = '#ce2b2b'
+  ctx.fillRect(0, LOGO_H + BANNER_H - lineH, W, lineH)
+
+  const textMidY = LOGO_H + Math.round((BANNER_H - lineH) / 2)
+
+  // "ORGANIGRAMME   Nom complet (SIGLE)" — sans tiret, centree, meme couleur
+  const bannerText = `ORGANIGRAMME   ${fullName}`
+  const fBanner    = Math.round(BANNER_H * 0.28)
+  ctx.font         = `300 ${fBanner}px ${CG}`
+  ctx.fillStyle    = 'rgba(255,255,255,0.90)'
+  ctx.textAlign    = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.letterSpacing = `${Math.round(fBanner * 0.06)}px`
+  ctx.fillText(bannerText, W / 2, textMidY)
+  ctx.letterSpacing = '0px'
+
+  const dateStr = new Date().toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' })
+  const fDate   = Math.round(BANNER_H * 0.18)
+  ctx.font      = `300 ${fDate}px ${CG}`
+  ctx.fillStyle = 'rgba(255,255,255,0.28)'
+  ctx.textAlign = 'right'
+  ctx.fillText(dateStr, W - PAD, textMidY)
+
+  // ── 3. Arbre pixel-perfect (1:1, zéro upscale) ───────────────────────────
+  const TREE_Y = LOGO_H + BANNER_H
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, TREE_Y, W, treeImg.naturalHeight)
+  ctx.drawImage(treeImg, 0, TREE_Y)   // drawImage sans redimensionnement = net
+
+  // ── 4. Pied de page (fond blanc, pas de forme) ──────────────────────────
+  const footerY = TREE_Y + treeImg.naturalHeight
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, footerY, W, FOOTER_H)
+
+  const fCY   = footerY + FOOTER_H / 2
+  const fLeft = Math.round(FOOTER_H * 0.28)
+  ctx.font         = `600 ${fLeft}px ${CG}`
+  ctx.fillStyle    = '#021630'
+  ctx.textAlign    = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('ELITE CAPITAL Group S.A.', PAD, fCY)
+
+  const fRight = Math.round(FOOTER_H * 0.24)
+  ctx.font      = `300 ${fRight}px ${CG}`
+  ctx.fillStyle = '#64748b'
+  ctx.textAlign = 'right'
+  ctx.fillText(`EMS Platform \u2014 Document confidentiel \u2014 G\u00e9n\u00e9r\u00e9 le ${dateStr}`, W - PAD, fCY)
+
+  return canvas
+}
+
 const CSS = `
-.oc-scroll { overflow-x: auto; overflow-y: auto; padding: 20px 16px 32px; min-height: 200px; }
+.oc-scroll { overflow-x: auto; overflow-y: visible; padding: 32px 24px 40px; min-height: 200px; width: 100%; box-sizing: border-box; }
 .oc-node   { display: inline-flex; flex-direction: column; align-items: center; }
-/* Garantie hiérarchique : un responsable (parent) doit toujours apparaître
-   au-dessus de ses subordonnés. flex-direction:column + ordre du DOM
-   (parent rendu avant .oc-row) verrouille cette règle visuellement. */
-.oc-node > .oc-box { order: 0; }
+.oc-node > .oc-box  { order: 0; }
 .oc-node > .oc-stem { order: 1; }
-.oc-node > .oc-row { order: 2; }
-.oc-stem   { width: 2px; height: 18px; background: #94a3b8; flex-shrink: 0; }
+.oc-node > .oc-row  { order: 2; }
+.oc-stem   { width: 2px; height: 12px; background: #cbd5e1; flex-shrink: 0; }
 .oc-row    { display: flex; flex-wrap: nowrap; }
-.oc-col    { position: relative; display: flex; flex-direction: column; align-items: center; align-self: flex-start; padding: 18px 6px 0; }
-.oc-col::before { content:''; position:absolute; top:0; height:2px; background:#94a3b8; }
+.oc-col    { position: relative; display: flex; flex-direction: column; align-items: center; align-self: flex-start; padding: 12px 10px 0; }
+.oc-col::before { content:''; position:absolute; top:0; height:2px; background:#cbd5e1; }
 .oc-col:only-child::before { display:none; }
 .oc-col:first-child:not(:only-child)::before { left:50%; right:0; }
 .oc-col:last-child:not(:only-child)::before  { left:0; right:50%; }
 .oc-col:not(:first-child):not(:last-child)::before { left:0; right:0; }
-.oc-col::after { content:''; position:absolute; top:0; left:50%; transform:translateX(-50%); width:2px; height:var(--oc-col-stem,18px); background:#94a3b8; }
+.oc-col::after { content:''; position:absolute; top:0; left:50%; transform:translateX(-50%); width:2px; height:var(--oc-col-stem,12px); background:#cbd5e1; }
 
 .oc-box {
-  min-width: 100px; max-width: 160px;
-  height: 96px; box-sizing: border-box; overflow: hidden;
+  width: 185px; height: 120px; box-sizing: border-box;
   display: flex; flex-direction: column;
-  background: #fff;
-  border: 1.5px solid #cdd5df;
-  border-radius: 4px;
-  padding: 7px 9px 6px;
+  background: #ffffff;
+  border: 1.5px solid #dde3ec;
+  border-radius: 6px;
+  padding: 10px 12px 8px;
   text-align: center;
   cursor: default;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.07);
-  transition: box-shadow .15s, border-color .15s;
+  box-shadow: none;
+  transition: border-color .15s;
   flex-shrink: 0;
   user-select: none;
   position: relative;
+  overflow: hidden;
 }
 .oc-box.oc-clickable { cursor: pointer; }
-.oc-box.oc-clickable:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.15); border-color: #021630; }
-.oc-box.oc-d0 { min-width:100px; max-width:160px; border-color:#021630; border-width:2px; background:#f8f9fb; }
+.oc-box.oc-clickable:hover { border-color: #021630; background: #f7f9fc; }
+.oc-box.oc-d0 { border-color: #021630; border-width: 2px; background: #f0f4fa; border-top: 4px solid #021630; }
 .oc-box.oc-d1 { border-top: 3px solid #ce2b2b; }
-.oc-box.oc-hit { border-color:#ce2b2b; box-shadow: 0 0 0 2px rgba(206,43,43,.2); }
+.oc-box.oc-d2 { border-top: 2px solid #3b5a8a; }
+.oc-box.oc-hit { border-color:#ce2b2b; box-shadow: 0 0 0 3px rgba(206,43,43,.18); }
 .oc-box.oc-group { border-color:#021630; background:#f0f4fa; }
 
-.oc-label { font-weight: 700; color: #021630; font-size: 0.72rem; line-height: 1.25; margin-bottom: 2px; word-break: break-word; }
-.oc-sub  { font-size: 0.62rem; color: #64748b; word-break: break-word; }
-.oc-foot { display:flex; align-items:center; justify-content:space-between; margin-top: auto; padding-top:4px; border-top:1px solid #f1f5f9; font-size:0.6rem; color:#94a3b8; }
+.oc-label { font-weight: 600; color: #021630; font-size: 0.90rem; line-height: 1.25; margin-bottom: 3px; word-break: break-word; letter-spacing: 0; }
+.oc-sub   { font-size: 0.78rem; color: #475569; line-height: 1.3; word-break: break-word; }
+.oc-foot  { display:flex; align-items:center; justify-content:space-between; margin-top: auto; padding-top: 5px; border-top: 1px solid #eef2f7; font-size: 0.60rem; color: #94a3b8; }
 
 .oc-edit-btn {
-  position: absolute; top: 3px; right: 3px;
-  background: none; border: none; cursor: pointer; padding: 1px; line-height: 1;
+  position: absolute; top: 5px; right: 5px;
+  background: none; border: none; cursor: pointer; padding: 2px; line-height: 1;
   color: #94a3b8; opacity: 0; transition: opacity .15s;
+  border-radius: 4px;
 }
 .oc-box:hover .oc-edit-btn { opacity: 1; }
-.oc-edit-btn:hover { color: #ce2b2b; }
+.oc-edit-btn:hover { color: #ce2b2b; background: #fff5f5; }
 
-.tab-btn { padding: 6px 11px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.78rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; transition: background .15s; white-space: nowrap; }
+.tab-btn { padding: 7px 13px; border: none; border-radius: 7px; cursor: pointer; font-size: 0.80rem; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; transition: background .15s; white-space: nowrap; }
 
-.ent-pill { padding: 5px 12px; border-radius: 20px; border: 1.5px solid #e2e8f0; background: white; cursor: pointer; font-size: 0.75rem; font-weight: 600; transition: all .15s; white-space: nowrap; color: #475569; }
+.ent-pill { padding: 6px 14px; border-radius: 20px; border: 1.5px solid #e2e8f0; background: white; cursor: pointer; font-size: 0.77rem; font-weight: 600; transition: all .15s; white-space: nowrap; color: #475569; }
 .ent-pill:hover { border-color: #021630; color: #021630; }
 .ent-pill.active { background: #021630; color: white; border-color: #021630; }
 
-.n1-drop { position:absolute; top:100%; left:0; right:0; background:white; border:1.5px solid #e2e8f0; border-radius:7px; box-shadow:0 4px 16px rgba(0,0,0,0.12); z-index:200; max-height:220px; overflow-y:auto; margin-top:3px; }
-.n1-opt { padding:8px 10px; cursor:pointer; font-size:0.82rem; border-bottom:1px solid #f1f5f9; }
+.n1-drop { position:absolute; top:100%; left:0; right:0; background:white; border:1.5px solid #e2e8f0; border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,0.12); z-index:200; max-height:220px; overflow-y:auto; margin-top:4px; }
+.n1-opt { padding:9px 12px; cursor:pointer; font-size:0.83rem; border-bottom:1px solid #f1f5f9; }
 .n1-opt:hover { background:#f0f4fa; color:#021630; }
 .n1-opt:last-child { border-bottom:none; }
 `
@@ -88,11 +212,17 @@ const CSS = `
 // même s'il n'a pas de N1 renseigné (il serait alors une racine de l'arbre).
 export function niveauFonctionnel(employe) {
   const f = String(employe?.fonction || '').toLowerCase()
-  // Word boundaries pour éviter les faux positifs : "manager" contient "ag",
-  // "responsable" contient "pa"... On utilise \b pour matcher les mots entiers.
-  if (/\b(directeur|directrice|dg|pca|président|présidente|presidente|ag|administrateur)\b/.test(f)) return 0
-  if (/\b(chef|responsable|manager|superviseur|sup|head|lead)\b/.test(f)) return 1
-  return 2
+  // 5 niveaux : 0=AG/PCA, 1=DG filiale, 2=Directeur département, 3=Responsable/Chef, 4=Autres
+  // "Administrateur Général" (sans directeur) = nf 0
+  // "Administrateur Directeur Général" (les deux mots) = nf 1
+  if (/\b(pca|pdg|président|présidente|presidente)\b/.test(f)) return 0
+  if (/\badministrateur\b/.test(f) && !/\bdirecteur\b/.test(f)) return 0
+  if (/\b(dg|dga)\b/.test(f)) return 1
+  if (/\bdirecteur\s+g[eé]n[eé]ral/.test(f)) return 1
+  if (/\badministrateur\b/.test(f) && /\bdirecteur\b/.test(f)) return 1
+  if (/\b(directeur|directrice)\b/.test(f)) return 2
+  if (/\b(responsable|chef|manager|superviseur|head|lead)\b/.test(f)) return 3
+  return 4
 }
 
 // Calcule la rangée VISUELLE d'un nœud, en alignant les rôles entre branches :
@@ -104,12 +234,12 @@ export function computeOrgRow(node, parentRow) {
   if (parentRow == null || parentRow < 0) {
     return node?._isGroup ? 0 : niveauFonctionnel(node)
   }
-  const nf = node?._isGroup ? parentRow + 1 : niveauFonctionnel(node) + 1
+  const nf = node?._isGroup ? parentRow + 1 : niveauFonctionnel(node)
   return Math.max(parentRow + 1, nf)
 }
 
 function _sortByHierarchy(list) {
-  const fonctionWeight = (e) => niveauFonctionnel(e) === 2 ? 5 : niveauFonctionnel(e)
+  const fonctionWeight = niveauFonctionnel
   return [...list].sort((a, b) => {
     const wa = fonctionWeight(a)
     const wb = fonctionWeight(b)
@@ -207,7 +337,7 @@ function Box({ node, depth, collapsed, hasChildren, onToggle, hitSet, onEdit, ed
   const cls = [
     'oc-box',
     hasChildren ? 'oc-clickable' : '',
-    niveauVisuel === 0 ? 'oc-d0' : niveauVisuel === 1 ? 'oc-d1' : '',
+    niveauVisuel === 0 ? 'oc-d0' : niveauVisuel === 1 ? 'oc-d1' : niveauVisuel === 2 ? 'oc-d2' : '',
     node._isGroup ? 'oc-group' : '',
     isHit ? 'oc-hit' : '',
   ].filter(Boolean).join(' ')
@@ -233,8 +363,8 @@ function Box({ node, depth, collapsed, hasChildren, onToggle, hitSet, onEdit, ed
       )}
       {hasChildren && (
         <div className="oc-foot">
-          <span>{node.children.length}?</span>
-          <span>{collapsed ? <ChevronDown size={11} /> : <ChevronUp size={11} />}</span>
+          <span>{node.children.length} subordonn{node.children.length > 1 ? 'és' : 'é'}</span>
+          <span style={{ fontSize: '0.70rem', lineHeight: 1 }}>{collapsed ? '\u25BC' : '\u25B2'}</span>
         </div>
       )}
     </div>
@@ -252,11 +382,10 @@ function TreeNode({ node, depth = 0, myRow = null, hitSet, expandOverride, onEdi
     if (expandOverride === 'reset') setCollapsed(startCollapsed)
   }, [expandOverride])
 
-  // LEVEL_PX = BOX_HEIGHT + 2 × stem (18px each) = 96 + 36 = 132.
-  // Avec des boîtes de hauteur fixe (96px), cette valeur garantit que
-  // les boîtes au même niveau fonctionnel s'alignent parfaitement
+  // LEVEL_PX = BOX_HEIGHT(120) + stem(12) + col_pad(12) = 144.
+  // Boîtes de taille fixe 185×120px : garantit l'alignement parfait
   // entre toutes les branches, quel que soit leur profondeur dans l'arbre.
-  const LEVEL_PX = 132
+  const LEVEL_PX = 144
   const resolvedRow = myRow == null ? computeOrgRow(node, -1) : myRow
 
   return (
@@ -273,13 +402,13 @@ function TreeNode({ node, depth = 0, myRow = null, hitSet, expandOverride, onEdi
             {node.children.map((child) => {
               const cRow = computeOrgRow(child, resolvedRow)
               const extra = cRow - (resolvedRow + 1)
-              const stemH = 18 + Math.max(0, extra) * LEVEL_PX
-              // On force toujours --oc-col-stem (m\u00eame quand extra=0) pour
-              // \u00e9viter l'h\u00e9ritage d'une valeur plus grande venant d'un anc\u00eatre :
-              // sinon le trait ::after d'un enfant peut d\u00e9border sous sa bo\u00eete.
+              const stemH = 12 + Math.max(0, extra) * LEVEL_PX
+              // On force toujours --oc-col-stem (même quand extra=0) pour
+              // éviter l'héritage d'une valeur plus grande venant d'un ancêtre :
+              // sinon le trait ::after d'un enfant peut déborder sous sa boîte.
               const colStyle = extra > 0
                 ? { paddingTop: stemH, '--oc-col-stem': `${stemH}px` }
-                : { '--oc-col-stem': '18px' }
+                : { '--oc-col-stem': '12px' }
               return (
                 <div key={child._key || child.matricule} className="oc-col" style={colStyle}>
                   <TreeNode
@@ -596,62 +725,75 @@ export default function OrgChart() {
   }, [employees])
 
   // Filter by selected entity
+  // Pour ELCAM et EXCA : Paul Nfor (ECG, matricule 9001) est injecté comme
+  // nœud virtuel PCA en tête — ses ADGs filiales ont n1=9001, ce qui les
+  // rattache naturellement à lui dans l'arbre N+1.
   const filteredEmps = useMemo(() => {
     if (selectedEntity === 'Tous') return employees
-    return employees.filter(e =>
+    const base = employees.filter(e =>
       (e.nom_entite || e.entite || '') === selectedEntity
     )
+    if (selectedEntity === 'ELCAM' || selectedEntity === 'EXCA') {
+      const paulNfor = employees.find(e => String(e.matricule) === '9001')
+      if (paulNfor && !base.find(e => String(e.matricule) === '9001')) {
+        const pca = {
+          ...paulNfor,
+          fonction: "Président du Conseil d'Administration (PCA)",
+          nom_entite: selectedEntity,
+          entite: selectedEntity,
+          n1: null,
+        }
+        return [pca, ...base]
+      }
+    }
+    return base
   }, [employees, selectedEntity])
 
   // --- Exports organigramme -------------------------------------------------
-  // PDF : capture le sous-arbre en PNG via html-to-image, puis intègre
-  // l'image dans un PDF A3 paysage avec jsPDF et force le téléchargement.
+  // pixelRatio:3 = capture ultra-nette. Canvas = largeur image (1:1).
+  // PDF A4 paysage : jsPDF adapte le canvas a 297x210mm sans perte.
   const exportPDF = useCallback(async () => {
     const node = treeRef.current
     if (!node) { toast.error?.('Arbre non disponible'); return }
     try {
-      const dataUrl = await toPng(node, { backgroundColor: '#ffffff', pixelRatio: 2 })
-      const img = new Image()
-      img.src = dataUrl
-      await new Promise(res => { img.onload = res })
-      // A3 paysage en mm : 420 × 297
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' })
-      const pageW = pdf.internal.pageSize.getWidth()
-      const pageH = pdf.internal.pageSize.getHeight()
-      const margin = 10
-      const maxW = pageW - margin * 2
-      const maxH = pageH - margin * 2 - 12  // 12 mm réservé pour le titre
-      const ratio = Math.min(maxW / img.width, maxH / img.height)
-      const drawW = img.width * ratio
-      const drawH = img.height * ratio
-      const x = margin + (maxW - drawW) / 2
-      // Titre
-      pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(13)
-      pdf.text(`Organigramme — ${selectedEntity}`, margin, margin + 7)
-      // Image
-      pdf.addImage(dataUrl, 'PNG', x, margin + 12, drawW, drawH)
+      const treeDataUrl = await toPng(node, {
+        backgroundColor: '#ffffff',
+        pixelRatio: 3,
+        width:  node.scrollWidth,
+        height: node.scrollHeight,
+        style:  { overflow: 'visible', transform: 'none' },
+      })
+      const canvas = await _composeOrgExport(treeDataUrl, selectedEntity)
+      if (!canvas) { toast.error?.('Composition impossible'); return }
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 297, 210)
       pdf.save(`organigramme_${selectedEntity}.pdf`.replace(/\s+/g, '_'))
     } catch (e) {
-      toast.error?.('Échec de l\'export PDF')
+      toast.error?.("Echec de l'export PDF")
     }
   }, [selectedEntity])
 
-  // PNG : capture le sous-arbre via html-to-image puis force le téléchargement.
   const exportPNG = useCallback(async () => {
     const node = treeRef.current
     if (!node) { toast.error?.('Arbre non disponible'); return }
     try {
-      const dataUrl = await toPng(node, { backgroundColor: '#ffffff', pixelRatio: 2 })
+      const treeDataUrl = await toPng(node, {
+        backgroundColor: '#ffffff',
+        pixelRatio: 3,
+        width:  node.scrollWidth,
+        height: node.scrollHeight,
+        style:  { overflow: 'visible', transform: 'none' },
+      })
+      const canvas = await _composeOrgExport(treeDataUrl, selectedEntity)
+      if (!canvas) { toast.error?.('Composition impossible'); return }
       const a = document.createElement('a')
-      a.href = dataUrl
+      a.href     = canvas.toDataURL('image/png')
       a.download = `organigramme_${selectedEntity}.png`.replace(/\s+/g, '_')
       a.click()
     } catch (e) {
-      toast.error?.('Échec de l’export PNG')
+      toast.error?.("Echec de l'export PNG")
     }
   }, [selectedEntity])
-
   // Excel : exporte la liste plate des employés visibles (filtre entité courant).
   const exportExcel = useCallback(() => {
     if (!filteredEmps || filteredEmps.length === 0) {
@@ -731,13 +873,13 @@ export default function OrgChart() {
       <style>{CSS}</style>
 
       {/* Header */}
-      <div style={{ background: 'linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%)', color: 'white', padding: '14px 18px', borderRadius: 10, marginBottom: 10 }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
-          <div>
-            <h1 style={{ margin:0, fontSize:'1.1rem', fontWeight:800, display:'flex', alignItems:'center', gap:7 }}>
-              <GitBranch size={18} /> Organigramme
+      <div style={{ background: '#02162e', color: 'white', padding: '5px 12px', borderRadius: 6, marginBottom: 8 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:6 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <h1 style={{ margin:0, fontSize:'0.82rem', fontWeight:600, display:'flex', alignItems:'center', gap:5 }}>
+              <GitBranch size={13} /> Organigramme
             </h1>
-            <p style={{ margin:'3px 0 0', fontSize:'0.78rem', opacity:0.8 }}>
+            <p style={{ margin:0, fontSize:'0.70rem', opacity:0.65 }}>
               {selectedEntity === 'Tous'
                 ? `${employees.length} employés — toutes entités`
                 : `${filteredEmps.length} employés — ${selectedEntity}`}
@@ -849,14 +991,14 @@ export default function OrgChart() {
 
       {/* Tree views */}
       {view !== 'nom' && (
-        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius:10, overflow:'hidden' }}>
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius:10 }}>
           {visibleRoots.length === 0 ? (
             <div style={{ textAlign:'center', padding:32, color:'#94a3b8', fontSize:'0.85rem' }}>
               {searchQ ? `Aucun résultat pour « ${searchQ} »` : "Aucune donnée"}
             </div>
           ) : (
             <div className="oc-scroll" ref={treeRef}>
-              <div style={{ display:'flex', gap:32, flexWrap:'wrap', justifyContent:'center' }}>
+              <div style={{ display:'inline-flex', gap:40, flexWrap:'nowrap', minWidth:'max-content' }}>
                 {visibleRoots.map(root => (
                   <TreeNode
                     key={root._key || root.matricule}
