@@ -46,6 +46,32 @@ const SVG = {
   monitor:(p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,
   brain:  (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44A2.5 2.5 0 0 1 4.5 17V8a2.5 2.5 0 0 1 2.5-2.5A2.5 2.5 0 0 1 9.5 2z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44A2.5 2.5 0 0 0 19.5 17V8a2.5 2.5 0 0 0-2.5-2.5A2.5 2.5 0 0 0 14.5 2z"/></svg>,
   microscope:(p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18h8"/><path d="M3 22h18"/><path d="M14 22a7 7 0 1 0 0-14h-1"/><path d="M9 14h2"/><path d="M8 6h4"/><path d="M13 10V6.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3a.5.5 0 0 0 .5-.5V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v7"/></svg>,
+  /* ── Icônes sémantiques supplémentaires ─── */
+  cart:       (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>,
+  truck:      (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 6v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
+  shield:     (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+  users:      (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  megaphone:  (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>,
+  trendingUp: (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+  coins:      (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></svg>,
+  clipboard:  (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>,
+  folder:     (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
+  server:     (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>,
+  handshake:  (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.42 4.58a5.4 5.4 0 0 0-7.65 0l-.77.78-.77-.78a5.4 5.4 0 0 0-7.65 0C1.46 6.7 1.33 10.28 4 13l8 8 8-8c2.67-2.72 2.54-6.3.42-8.42z"/></svg>,
+  lightning:  (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+  compass:    (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>,
+  network:      (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><rect x="2" y="18" width="6" height="4" rx="1"/><rect x="16" y="18" width="6" height="4" rx="1"/><line x1="12" y1="6" x2="12" y2="10"/><line x1="12" y1="10" x2="5" y2="20"/><line x1="12" y1="10" x2="19" y2="20"/></svg>,
+  /* ── Icônes supplémentaires ─── */
+  calendar:     (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  clock:        (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+  key:          (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>,
+  lock:         (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+  leaf:         (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 8C8 10 5.9 16.17 3.82 22h3.17c1.28-2.78 2.73-5.68 5.01-8 3-3.17 8-4 8-4 0 0-1 5-4.5 8.5C13 21 12 22 12 22h3.5C19 18 21 12 21 7c0 0-1.5.5-4 1z"/></svg>,
+  layers:       (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>,
+  alertTriangle:(p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+  pencil:       (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  userPlus:     (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>,
+  pieChart:     (p={}) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>,
 }
 
 const BADGE_META = {
@@ -62,7 +88,71 @@ const LEVEL_COLORS = {
   Avancé:        { background: '#fef3c7', color: '#b45309' },
 }
 
-const CARD_ICONS = [SVG.books, SVG.monitor, SVG.chart, SVG.brain, SVG.target, SVG.microscope, SVG.briefcase, SVG.globe, SVG.tool, SVG.rocket, SVG.cap, SVG.flame]
+/* Mapping sémantique titre → icône (1 icône unique par formation) */
+const TITRE_ICON = {
+  /* ── Onboarding ─── (spéciaux traités dans FormationCard) */
+  'Bienvenue chez Elite Capital Group':          null, // → logo ECG (voir FormationCard)
+  "Prise en main de l'extranet EMS":             null, // → texte "EMS" (voir FormationCard)
+  /* ── Ressources Humaines ─── */
+  'Gestion des conges et absences':              SVG.calendar,
+  'Permissions et sorties':                      SVG.key,
+  'Pointage et presence':                        SVG.clock,
+  'Procedures disciplinaires':                   SVG.shield,
+  'Score comportemental':                        SVG.star,
+  'Demandes d\'explication':                     SVG.clipboard,
+  'Gestion des remplacants':                     SVG.userPlus,
+  /* ── Opérations & Finance ─── */
+  'Gestion des missions':                        SVG.briefcase,
+  'Notes de frais et remboursements':            SVG.coins,
+  'Operations terrain':                          SVG.tool,
+  /* ── Performance ─── */
+  'Evaluations et entretiens annuels':           SVG.medal,
+  'Performance reviews et objectifs':            SVG.trophy,
+  /* ── Organisation ─── */
+  'Fiche de poste : redaction et mise a jour':   SVG.pencil,
+  'Organisation et organigramme':                SVG.network,
+  /* ── Productivité ─── */
+  'Workflow et gestion des taches':              SVG.lightning,
+  'Assistant IA et productivite':                SVG.brain,
+  'Documentation et base de connaissances':      SVG.books,
+  /* ── Stratégie RH ─── */
+  'Talent management':                           SVG.award,
+  'Workforce planning':                          SVG.globe,
+  /* ── Data & Analytics ─── */
+  'Analytics et tableaux de bord':               SVG.chart,
+  /* ── Conformité ─── */
+  'Securite, confidentialite et bonnes pratiques': SVG.lock,
+  /* ── Administration ─── */
+  'Administration et parametrage EMS':           SVG.cog,
+  /* ── Achats ─── */
+  'Achats : fondamentaux':                       SVG.cart,
+  'Achats : negociation et performance':         SVG.handshake,
+  /* ── Commercial ─── */
+  'Commercial : techniques de vente':            SVG.trendingUp,
+  'Commercial : pilotage du pipeline':           SVG.target,
+  /* ── Marketing ─── */
+  'Marketing : strategie et positionnement':     SVG.rocket,
+  'Marketing digital et content':                SVG.megaphone,
+  /* ── Communication ─── */
+  'Communication interne et externe':            SVG.users,
+  'Communication : prise de parole et media training': SVG.flame,
+  /* ── Système d'Information ─── */
+  'SI : architecture et urbanisation':           SVG.layers,
+  'SI : cybersecurite et gouvernance des donnees': SVG.server,
+  /* ── Flotte ─── */
+  'Flotte : gestion operationnelle':             SVG.truck,
+  'Flotte : optimisation TCO et eco-conduite':   SVG.leaf,
+  /* ── Audit ─── */
+  'Audit interne : fondamentaux':                SVG.microscope,
+  'Audit : controle interne et gestion des risques': SVG.alertTriangle,
+  /* ── Projets ─── */
+  'Gestion de projet : les essentiels':          SVG.folder,
+  'Methodes agiles : Scrum et Kanban':           SVG.gem,
+  /* ── CRM ─── */
+  'CRM : fondamentaux et parcours client':       SVG.compass,
+  'CRM : segmentation, scoring et automation':   SVG.pieChart,
+}
+const _FALLBACK_ICONS = [SVG.books, SVG.briefcase, SVG.globe, SVG.rocket, SVG.cap, SVG.flame, SVG.microscope, SVG.star]
 const CARD_GRADIENTS = [
   'linear-gradient(135deg, #021630, #1f4ba8)',
   'linear-gradient(135deg, #0b2456, #2563eb)',
@@ -79,8 +169,11 @@ function FormationCard({ formation, onEnroll, onOpen }) {
   const [hover, setHover] = useState(false)
   const pct = formation.progress ?? 0
   const levelColor = LEVEL_COLORS[formation.niveau] || LEVEL_COLORS['Débutant']
-  const IconComp = CARD_ICONS[(formation.id || 0) % CARD_ICONS.length]
+  const titreLookup = TITRE_ICON[formation.titre]
+  const IconComp = titreLookup !== undefined ? titreLookup : (_FALLBACK_ICONS[(formation.id || 0) % _FALLBACK_ICONS.length])
   const gradient = CARD_GRADIENTS[(formation.id || 0) % CARD_GRADIENTS.length]
+  const isEcgWelcome = formation.titre === 'Bienvenue chez Elite Capital Group'
+  const isEmsIntro = formation.titre?.includes("extranet EMS") || formation.titre?.includes("Prise en main")
 
   return (
     <div
@@ -100,7 +193,37 @@ function FormationCard({ formation, onEnroll, onOpen }) {
       onMouseLeave={() => setHover(false)}
       onClick={() => onOpen(formation)}
     >
-      {formation.image_url ? (
+      {isEcgWelcome ? (
+        <div style={{
+          height: 170, background: gradient,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative',
+        }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.18), transparent 60%)' }} />
+          <img
+            src="/logos/ecg-white.png"
+            alt="Elite Capital Group"
+            style={{
+              position: 'relative',
+              maxWidth: '80%', maxHeight: 110, objectFit: 'contain',
+            }}
+          />
+        </div>
+      ) : isEmsIntro ? (
+        <div style={{
+          height: 170, background: 'linear-gradient(135deg, #021630, #0b2456)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative',
+        }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.12), transparent 60%)' }} />
+          <span style={{
+            position: 'relative',
+            fontSize: 58, fontWeight: 900, color: '#fff',
+            letterSpacing: '0.12em', fontFamily: 'Century Gothic, Arial, sans-serif',
+            filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.4))',
+          }}>EMS</span>
+        </div>
+      ) : formation.image_url ? (
         <img src={formation.image_url} alt="" style={{ width: '100%', height: 170, objectFit: 'cover' }} />
       ) : (
         <div style={{

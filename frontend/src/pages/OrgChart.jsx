@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { GitBranch, Search, X, ChevronDown, Pencil, XCircle, MapPin, Briefcase, AlignLeft, Save, Building2, FileDown, Image as ImageIcon, FileSpreadsheet } from 'lucide-react'

@@ -87,7 +87,7 @@ export default function DocumentationPage() {
         type_doc: 'article'
       }
       if (editingArticle) {
-        await api.put(`/api/documentation/articles/${editingArticle.id_doc}`, payload)
+        await api.put(`/api/documentation/articles/${editingArticle.id}`, payload)
         toast.success('Article mis à jour')
       } else {
         await api.post('/api/documentation/articles', payload)
@@ -101,8 +101,8 @@ export default function DocumentationPage() {
   const deleteArticle = async (a) => {
     const ok = await confirmDialog({ title: 'Supprimer', message: `Supprimer l'article "${a.titre}" ?`, variant: 'danger', confirmLabel: 'Supprimer' })
     if (!ok) return
-    await api.delete(`/api/documentation/articles/${a.id_doc}`)
-    if (selectedArticle?.id_doc === a.id_doc) setSelectedArticle(null)
+    await api.delete(`/api/documentation/articles/${a.id}`)
+    if (selectedArticle?.id === a.id) setSelectedArticle(null)
     loadArticles()
   }
 
@@ -132,7 +132,7 @@ export default function DocumentationPage() {
   const deleteFichier = async (f) => {
     const ok = await confirmDialog({ title: 'Supprimer', message: `Supprimer le fichier "${f.fichier_nom || f.titre}" ?`, variant: 'danger', confirmLabel: 'Supprimer' })
     if (!ok) return
-    await api.delete(`/api/documentation/articles/${f.id_doc}`)
+    await api.delete(`/api/documentation/articles/${f.id}`)
     loadFichiers()
   }
 
@@ -246,11 +246,11 @@ export default function DocumentationPage() {
                     </p>
                   </div>
                 )}
-                {filteredArticles.map(a => (
-                  <div key={a.id_doc}
+                {filteredArticles.map((a, i) => (
+                  <div key={a.id ?? `art-${i}`}
                     onClick={() => setSelectedArticle(a)}
-                    style={{ background: 'var(--card)', border: selectedArticle?.id_doc === a.id_doc ? '2px solid #02162e' : '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', cursor: 'pointer', transition: 'border 0.15s' }}
-                    onMouseEnter={e => { if(selectedArticle?.id_doc !== a.id_doc) e.currentTarget.style.background = '#f8fafc' }}
+                    style={{ background: 'var(--card)', border: selectedArticle?.id === a.id ? '2px solid #02162e' : '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', cursor: 'pointer', transition: 'border 0.15s' }}
+                    onMouseEnter={e => { if(selectedArticle?.id !== a.id) e.currentTarget.style.background = '#f8fafc' }}
                     onMouseLeave={e => e.currentTarget.style.background = 'var(--card)' }>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -344,8 +344,8 @@ export default function DocumentationPage() {
               )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {filteredFichiers.map(f => (
-                  <div key={f.id_doc} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                {filteredFichiers.map((f, i) => (
+                  <div key={f.id ?? `fic-${i}`} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 36, height: 36, borderRadius: 8, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <File size={18} color="#475569" />
                     </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { TrendingUp, Users, Briefcase, BarChart2, ArrowDown, ArrowUp, Target, Award, Clock, CalendarDays, ChevronDown, ChevronUp, Activity, AlertTriangle, GraduationCap, Smile, Zap, Download } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, Area, AreaChart, CartesianGrid } from 'recharts'
 import AIInsightPanel from '../components/AIInsightPanel'
 
 const ACCENT = '#ce2b2b'
@@ -205,11 +205,10 @@ export default function AnalyticsDashboards() {
     const entiteData = Object.entries(byEntite).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
     const maxEntite = Math.max(...entiteData.map(e => e.count))
 
-    // New hires this year
-    const newHiresThisYear = employees.filter(e => {
-      if (!e.date_embauche) return false
-      return new Date(e.date_embauche).getFullYear() === parseInt(filterYear)
-    }).length
+    // Nouvelles embauches : employés marqués nouvelle_recrue=True pour l'année sélectionnée
+    const newHiresThisYear = filterYear === 'tous'
+      ? recruesParAn.reduce((s, r) => s + (r.count || 0), 0)
+      : (recruesParAn.find(r => r.annee === parseInt(filterYear))?.count ?? 0)
 
     // Simulated turnover rate (3-8% typical)
     const turnoverRate = totalEmployees > 0 ? Math.round((newHiresThisYear / totalEmployees) * 100 * 0.4) : 0
@@ -228,7 +227,7 @@ export default function AnalyticsDashboards() {
       newHiresThisYear, turnoverRate, retentionRate,
       pctSenior, pctStable,
     }
-  }, [employees, filterYear, filterMois, filterEntite, filterDirection, MOIS])
+  }, [employees, filterYear, filterMois, filterEntite, filterDirection, MOIS, recruesParAn])
 
   const years = Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() - i))
 
@@ -293,6 +292,7 @@ export default function AnalyticsDashboards() {
       <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', marginBottom: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>Filtres :</span>
         <select style={{ padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 7, fontSize: '0.82rem', background: 'var(--card)' }} value={filterYear} onChange={e => setFilterYear(e.target.value)}>
+          <option value="tous">Toutes les années</option>
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
         <select style={{ padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 7, fontSize: '0.82rem', background: 'var(--card)' }} value={filterMois} onChange={e => setFilterMois(e.target.value)}>
@@ -318,7 +318,7 @@ export default function AnalyticsDashboards() {
       {analytics && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
           <StatCard icon={<Users size={14} />} label="Effectif total" value={analytics.totalEmployees} sub={"Employés actifs"} color={DARK} />
-          <StatCard icon={<TrendingUp size={14} />} label={"Nouvelles embauches"} value={analytics.newHiresThisYear} sub={`en ${filterYear}`} color="#2563eb" bg="#eff6ff" border="#bfdbfe" />
+          <StatCard icon={<TrendingUp size={14} />} label={"Nouvelles embauches"} value={analytics.newHiresThisYear} sub={filterYear === 'tous' ? 'Toutes années' : `en ${filterYear}`} color="#2563eb" bg="#eff6ff" border="#bfdbfe" />
           <StatCard icon={<Activity size={14} />} label={"Taux de rétention"} value={`${analytics.retentionRate}%`} sub={"Estimé"} color="#16a34a" bg="#f0fdf4" border="#bbf7d0" />
           <StatCard icon={<Clock size={14} />} label={"Ancienneté moyenne"} value={`${analytics.avgTenureYears}a ${analytics.avgTenureMonths}m`} sub={"Durée médiane"} color="#7c3aed" bg="#faf5ff" border="#ddd6fe" />
           <StatCard icon={<CalendarDays size={14} />} label={"Âge moyen"} value={`${analytics.avgAge} ans`} sub="Profil démographique" color={ACCENT} bg="#fef2f2" border="#fecaca" />
@@ -353,20 +353,38 @@ export default function AnalyticsDashboards() {
                 {/* GROWTH SECTION */}
                 {section.id === 'growth' && (
                   <div>
-                    <h3 style={{ margin: '0 0 16px', color: DARK, fontSize: '0.95rem', fontWeight: 700 }}>Embauches par mois — {filterYear}</h3>
-                    <div style={{ width: '100%', height: 260, marginBottom: 24 }}>
-                      <ResponsiveContainer>
-                        <BarChart data={analytics.monthlyData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                          <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
-                          <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                          <Tooltip />
-                          <Bar dataKey="embauches" fill="#2563eb" radius={[4, 4, 0, 0]} name="Embauches" />
-                        </BarChart>
-                      </ResponsiveContainer>
+                    <h3 style={{ margin: '0 0 16px', color: DARK, fontSize: '0.95rem', fontWeight: 700 }}>{filterYear === 'tous' ? 'Embauches par année' : `Embauches par mois — ${filterYear}`}</h3>
+                    <div style={{ marginBottom: 24 }}>
+                      {filterYear === 'tous' ? (
+                        <ResponsiveContainer width="100%" height={260}>
+                          <AreaChart data={(() => { const map = {}; employees.forEach(e => { if (!e.date_embauche) return; const y = String(new Date(e.date_embauche).getFullYear()); map[y] = (map[y] || 0) + 1; }); const curY = new Date().getFullYear(); const minY = Math.min(...Object.keys(map).map(Number), curY - 1); for (let y = minY; y <= curY + 3; y++) { const ys = String(y); if (!(ys in map)) map[ys] = null; } return Object.keys(map).sort().map(y => ({ annee: y, embauches: parseInt(y) <= curY ? (map[y] ?? 0) : null })); })()} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+                            <defs>
+                              <linearGradient id="gradEmb" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
+                                <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                            <XAxis dataKey="annee" tick={{ fontSize: 11 }} />
+                            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                            <Tooltip />
+                            <Area type="monotone" dataKey="embauches" stroke="#2563eb" strokeWidth={2.5} fill="url(#gradEmb)" dot={{ r: 5, fill: '#2563eb', strokeWidth: 0 }} activeDot={{ r: 7 }} name="Embauches" connectNulls={false} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={260}>
+                          <BarChart data={analytics.monthlyData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
+                            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                            <Tooltip />
+                            <Bar dataKey="embauches" fill="#2563eb" radius={[4, 4, 0, 0]} name="Embauches" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
                     <h3 style={{ margin: '0 0 12px', color: DARK, fontSize: '0.95rem', fontWeight: 700 }}>Répartition par entité</h3>
-                    <div style={{ width: '100%', height: 280 }}>
-                      <ResponsiveContainer>
+                    <div>
+                      <ResponsiveContainer width="100%" height={280}>
                         <PieChart>
                           <Pie data={analytics.entiteData.slice(0, 8)} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({ name, percent }) => `${name.substring(0, 15)} ${(percent * 100).toFixed(0)}%`} labelLine={{ stroke: '#94a3b8' }} style={{ fontSize: 11 }}>
                             {analytics.entiteData.slice(0, 8).map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
@@ -408,14 +426,21 @@ export default function AnalyticsDashboards() {
                         <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: 12 }}>
                           Employés marqués <strong>«&nbsp;Nouvelle recrue&nbsp;»</strong> — comptabilisés selon leur année d'embauche
                         </div>
-                        <div style={{ width: '100%', height: 220, marginBottom: 24 }}>
-                          <ResponsiveContainer>
-                            <BarChart data={recruesParAn} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                        <div style={{ marginBottom: 24 }}>
+                          <ResponsiveContainer width="100%" height={220}>
+                            <AreaChart data={recruesParAn} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+                              <defs>
+                                <linearGradient id="gradRecr" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#16a34a" stopOpacity={0.25} />
+                                  <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                               <XAxis dataKey="annee" tick={{ fontSize: 11 }} />
                               <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                               <Tooltip formatter={(v) => [v, 'Recrues']} />
-                              <Bar dataKey="count" fill="#16a34a" radius={[4, 4, 0, 0]} name="Recrues" />
-                            </BarChart>
+                              <Area type="monotone" dataKey="count" stroke="#16a34a" strokeWidth={2.5} fill="url(#gradRecr)" dot={{ r: 5, fill: '#16a34a', strokeWidth: 0 }} activeDot={{ r: 7 }} name="Recrues" />
+                            </AreaChart>
                           </ResponsiveContainer>
                         </div>
                       </>
@@ -426,8 +451,8 @@ export default function AnalyticsDashboards() {
                       </div>
                     )}
                     <h3 style={{ margin: '0 0 12px', color: DARK, fontSize: '0.95rem', fontWeight: 700 }}>Distribution de l'ancienneté</h3>
-                    <div style={{ width: '100%', height: 220 }}>
-                      <ResponsiveContainer>
+                    <div>
+                      <ResponsiveContainer width="100%" height={220}>
                         <BarChart data={analytics.tenureBuckets} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                           <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                           <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
@@ -460,8 +485,8 @@ export default function AnalyticsDashboards() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                       <div>
                         <h3 style={{ margin: '0 0 12px', color: DARK, fontSize: '0.9rem', fontWeight: 700 }}>Distribution ancienneté</h3>
-                        <div style={{ width: '100%', height: 200 }}>
-                          <ResponsiveContainer>
+                        <div>
+                          <ResponsiveContainer width="100%" height={200}>
                             <BarChart data={analytics.tenureBuckets} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                               <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                               <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
@@ -473,8 +498,8 @@ export default function AnalyticsDashboards() {
                       </div>
                       <div>
                         <h3 style={{ margin: '0 0 12px', color: DARK, fontSize: '0.9rem', fontWeight: 700 }}>Distribution par âge</h3>
-                        <div style={{ width: '100%', height: 200 }}>
-                          <ResponsiveContainer>
+                        <div>
+                          <ResponsiveContainer width="100%" height={200}>
                             <BarChart data={analytics.ageBuckets} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                               <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                               <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
@@ -506,8 +531,8 @@ export default function AnalyticsDashboards() {
                   <div>
                     <h3 style={{ margin: '0 0 16px', color: DARK, fontSize: '0.95rem', fontWeight: 700 }}>Évolution mensuelle des opérations (12 mois glissants)</h3>
                     {trends.length > 0 ? (
-                      <div style={{ width: '100%', height: 320 }}>
-                        <ResponsiveContainer>
+                      <div>
+                        <ResponsiveContainer width="100%" height={320}>
                           <LineChart data={trends} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                             <XAxis dataKey="mois" tick={{ fontSize: 11 }} tickFormatter={(v, i) => MOIS[(v || 1) - 1] || v} />
                             <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
@@ -532,8 +557,8 @@ export default function AnalyticsDashboards() {
                     {absenteisme.length > 0 ? (
                       <>
                         <h3 style={{ margin: '0 0 14px', color: DARK, fontSize: '0.95rem', fontWeight: 700 }}>Jours d&apos;absence cumulés (congés validés) par département — Top 20</h3>
-                        <div style={{ width: '100%', height: Math.max(300, absenteisme.length * 32) }}>
-                          <ResponsiveContainer>
+                        <div>
+                          <ResponsiveContainer width="100%" height={Math.max(300, absenteisme.length * 32)}>
                             <BarChart data={absenteisme} layout="vertical" margin={{ top: 5, right: 40, left: 10, bottom: 5 }}>
                               <XAxis type="number" tick={{ fontSize: 11 }} />
                               <YAxis type="category" dataKey="departement" tick={{ fontSize: 10 }} width={130} />
@@ -555,8 +580,8 @@ export default function AnalyticsDashboards() {
                     {soldeConges.length > 0 ? (
                       <>
                         <h3 style={{ margin: '0 0 14px', color: DARK, fontSize: '0.95rem', fontWeight: 700 }}>Répartition des employés actifs par tranche de solde de congés</h3>
-                        <div style={{ width: '100%', height: 280 }}>
-                          <ResponsiveContainer>
+                        <div>
+                          <ResponsiveContainer width="100%" height={280}>
                             <BarChart data={soldeConges} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                               <XAxis dataKey="tranche" tick={{ fontSize: 12 }} />
                               <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />

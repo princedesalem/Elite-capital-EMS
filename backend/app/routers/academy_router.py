@@ -1041,9 +1041,26 @@ def get_stats_employes(db: Session = Depends(get_db)):
 
 
 # ── PDF Certificat ────────────────────────────────────────────────────────────
+# Design premium : fond blanc, bandeau navy avec logo transparent, charte ECG
+
+_MOIS_FR = {1:'janvier',2:'février',3:'mars',4:'avril',5:'mai',6:'juin',
+            7:'juillet',8:'août',9:'septembre',10:'octobre',11:'novembre',12:'décembre'}
+
+def _date_fr(dt) -> str:
+    from datetime import date as _date
+    d = dt if dt else _date.today()
+    return f"{d.day} {_MOIS_FR[d.month]} {d.year}"
 
 def _build_certificat_pdf(emp, formation, insc) -> bytes:
     from fpdf import FPDF
+
+    # Palette charte ECG
+    NAVY    = (2,   22,  48)    # #021630
+    ACCENT  = (206, 43,  43)    # #ce2b2b
+    WHITE   = (255, 255, 255)
+    GRAY    = (100, 116, 139)   # slate-500 — textes secondaires
+    LGRAY   = (203, 213, 225)   # slate-300 — séparateurs fins
+    W, H    = 297, 210          # A4 paysage mm
 
     pdf = FPDF(orientation='L', format='A4')
     pdf.set_auto_page_break(auto=False)
@@ -1051,82 +1068,137 @@ def _build_certificat_pdf(emp, formation, insc) -> bytes:
 
     has_cg = os.path.exists(_CG_REGULAR) and os.path.exists(_CG_BOLD)
     if has_cg:
-        pdf.add_font('CenturyGothic', '', _CG_REGULAR, uni=True)
-        pdf.add_font('CenturyGothic', 'B', _CG_BOLD, uni=True)
+        pdf.add_font('CenturyGothic', '',  _CG_REGULAR, uni=True)
+        pdf.add_font('CenturyGothic', 'B', _CG_BOLD,    uni=True)
         font = 'CenturyGothic'
     else:
         font = 'Helvetica'
 
-    # Fond dégradé simulé par rectangle
-    pdf.set_fill_color(10, 22, 40)
-    pdf.rect(0, 0, 297, 210, 'F')
+    # ── Fond blanc total ──────────────────────────────────────────────────────
+    pdf.set_fill_color(*WHITE)
+    pdf.rect(0, 0, W, H, 'F')
 
-    # Bordure décorative
-    pdf.set_draw_color(206, 43, 43)
-    pdf.set_line_width(3)
-    pdf.rect(8, 8, 281, 194)
-    pdf.set_draw_color(255, 215, 0)
-    pdf.set_line_width(0.5)
-    pdf.rect(12, 12, 273, 186)
+    # ── Double cadre élégant (navy extérieur + intérieur fin) ─────────────────
+    pdf.set_draw_color(*NAVY)
+    pdf.set_line_width(1.4)
+    pdf.rect(6, 6, W - 12, H - 12)
+    pdf.set_line_width(0.3)
+    pdf.rect(9, 9, W - 18, H - 18)
 
-    # Titre
-    pdf.set_font(font, 'B', 32)
-    pdf.set_text_color(255, 215, 0)
-    pdf.set_xy(0, 30)
-    pdf.cell(297, 16, 'CERTIFICAT DE RÉUSSITE', align='C', ln=1)
+    # ── Bandeau navy header (0–58mm) ──────────────────────────────────────────
+    HEADER_H = 58
+    pdf.set_fill_color(*NAVY)
+    pdf.rect(0, 0, W, HEADER_H, 'F')
 
-    # Sous-titre
-    pdf.set_font(font, '', 14)
-    pdf.set_text_color(200, 210, 230)
-    pdf.set_x(0)
-    pdf.cell(297, 8, 'Elite Academy — ELITE CAPITAL GROUP', align='C', ln=1)
+    # ── Liseré rouge sous le bandeau (58–62mm) ────────────────────────────────
+    pdf.set_fill_color(*ACCENT)
+    pdf.rect(0, HEADER_H, W, 4, 'F')
 
-    pdf.ln(8)
+    # ── Logo ECG blanc transparent centré dans bandeau ────────────────────────
+    logo_white = os.path.join(_LOGOS_DIR, 'ecg-white.png')
+    if os.path.exists(logo_white):
+        # Aspect ratio 2744×798 ≈ 3.438 → à h=30 : w≈103mm
+        LOGO_H = 30
+        LOGO_W = LOGO_H * 2744 / 798
+        pdf.image(logo_white, x=(W - LOGO_W) / 2, y=8, h=LOGO_H)
+    elif os.path.exists(_ENTITY_LOGOS.get('ECG', '')):
+        pdf.image(_ENTITY_LOGOS['ECG'], x=121, y=12, h=24)
+    else:
+        pdf.set_font(font, 'B', 16)
+        pdf.set_text_color(*WHITE)
+        pdf.set_xy(0, 20)
+        pdf.cell(W, 10, 'ELITE CAPITAL GROUP', align='C')
 
-    # Texte principal
-    pdf.set_font(font, '', 13)
-    pdf.set_text_color(240, 245, 255)
-    pdf.set_x(0)
-    pdf.cell(297, 8, 'Ce certificat est décerné à', align='C', ln=1)
+    # ── "ELITE ACADEMY" dans le bandeau ──────────────────────────────────────
+    pdf.set_font(font, '', 7)
+    pdf.set_text_color(160, 190, 225)
+    pdf.set_xy(0, HEADER_H - 13)
+    pdf.cell(W, 8, 'E L I T E   A C A D E M Y', align='C')
 
+    # ── Titre principal ───────────────────────────────────────────────────────
     pdf.set_font(font, 'B', 26)
-    pdf.set_text_color(255, 255, 255)
+    pdf.set_text_color(*NAVY)
+    pdf.set_xy(0, 70)
+    pdf.cell(W, 12, 'CERTIFICAT DE RÉUSSITE', align='C')
+
+    # ── Ornement : lignes rouges + ellipse centrale ───────────────────────────
+    ORN_Y = 85
+    MX    = W / 2
+    pdf.set_draw_color(*ACCENT)
+    pdf.set_fill_color(*ACCENT)
+    pdf.set_line_width(0.8)
+    pdf.line(MX - 62, ORN_Y, MX - 7,  ORN_Y)
+    pdf.ellipse(MX - 5, ORN_Y - 2.5, 10, 5, 'F')
+    pdf.line(MX + 7,  ORN_Y, MX + 62, ORN_Y)
+
+    # ── "Ce certificat est décerné à" ─────────────────────────────────────────
+    pdf.set_font(font, '', 11)
+    pdf.set_text_color(*GRAY)
+    pdf.set_xy(0, 90)
+    pdf.cell(W, 7, 'Ce certificat est décerné à', align='C')
+
+    # ── Nom du bénéficiaire ───────────────────────────────────────────────────
     nom_complet = f"{emp.prenom} {emp.nom}" if emp else "—"
-    pdf.set_x(0)
-    pdf.cell(297, 14, nom_complet, align='C', ln=1)
+    pdf.set_font(font, 'B', 26)
+    pdf.set_text_color(*NAVY)
+    pdf.set_xy(0, 98)
+    pdf.cell(W, 13, nom_complet, align='C')
 
-    pdf.set_font(font, '', 12)
-    pdf.set_text_color(180, 200, 230)
-    pdf.set_x(0)
-    pdf.cell(297, 7, 'pour avoir complété avec succès la formation', align='C', ln=1)
+    # ── Séparateur léger ──────────────────────────────────────────────────────
+    pdf.set_draw_color(*LGRAY)
+    pdf.set_line_width(0.25)
+    pdf.line(65, 114, W - 65, 114)
 
-    pdf.set_font(font, 'B', 18)
-    pdf.set_text_color(206, 43, 43)
-    pdf.set_x(0)
+    # ── "pour avoir complété..." ──────────────────────────────────────────────
+    pdf.set_font(font, '', 10.5)
+    pdf.set_text_color(*GRAY)
+    pdf.set_xy(0, 117)
+    pdf.cell(W, 7, 'pour avoir complété avec succès la formation', align='C')
+
+    # ── Titre de la formation ─────────────────────────────────────────────────
     titre_formation = formation.titre if formation else '—'
-    pdf.cell(297, 12, titre_formation, align='C', ln=1)
+    pdf.set_font(font, 'B', 17)
+    pdf.set_text_color(*ACCENT)
+    pdf.set_xy(0, 125)
+    pdf.cell(W, 10, titre_formation, align='C')
 
-    # Score si disponible
+    # ── Ligne fine avant zone info ────────────────────────────────────────────
+    pdf.set_draw_color(*LGRAY)
+    pdf.set_line_width(0.25)
+    pdf.line(65, 139, W - 65, 139)
+
+    # ── Zone info : deux pills navy (score gauche, date droite) ───────────────
+    Y_PILL = 143
+    PILL_H = 11
+    # Score
     if insc and insc.score_final is not None:
-        pdf.set_font(font, '', 11)
-        pdf.set_text_color(200, 220, 200)
-        pdf.set_x(0)
-        pdf.cell(297, 7, f"Score final : {float(insc.score_final):.0f} / 100", align='C', ln=1)
+        score_val = float(insc.score_final)
+        pdf.set_fill_color(*NAVY)
+        pdf.rect(72, Y_PILL, 68, PILL_H, 'F')
+        pdf.set_font(font, 'B', 9.5)
+        pdf.set_text_color(*WHITE)
+        pdf.set_xy(72, Y_PILL + 2)
+        pdf.cell(68, 7, f'Score final : {score_val:.0f} / 100', align='C')
 
-    pdf.ln(6)
+    # Date
+    date_str = _date_fr(insc.date_completion if insc and insc.date_completion else None)
+    pdf.set_fill_color(*NAVY)
+    pdf.rect(157, Y_PILL, 68, PILL_H, 'F')
+    pdf.set_font(font, '', 9.5)
+    pdf.set_text_color(*WHITE)
+    pdf.set_xy(157, Y_PILL + 2)
+    pdf.cell(68, 7, f'Émis le {date_str}', align='C')
 
-    # Date d'émission
-    date_str = insc.date_completion.strftime('%d %B %Y') if insc and insc.date_completion else date.today().strftime('%d %B %Y')
-    pdf.set_font(font, '', 10)
-    pdf.set_text_color(160, 180, 200)
-    pdf.set_x(0)
-    pdf.cell(297, 6, f"Émis le {date_str}", align='C', ln=1)
+    # ── Bande rouge bas ───────────────────────────────────────────────────────
+    pdf.set_fill_color(*ACCENT)
+    pdf.rect(0, H - 9, W, 9, 'F')
 
-    # Pied de page
-    pdf.set_font(font, '', 8)
-    pdf.set_text_color(100, 120, 150)
-    pdf.set_xy(0, 190)
-    pdf.cell(297, 6, 'Document généré automatiquement par EMS — ELITE CAPITAL GROUP S.A', align='C')
+    # ── Pied de page ─────────────────────────────────────────────────────────
+    pdf.set_font(font, '', 7)
+    pdf.set_text_color(*GRAY)
+    pdf.set_xy(0, H - 18)
+    pdf.cell(W, 6, 'Document officiel généré par EMS — ELITE CAPITAL GROUP S.A', align='C')
 
     out = pdf.output(dest='S')
     return out.encode('latin-1') if isinstance(out, str) else bytes(out)
+

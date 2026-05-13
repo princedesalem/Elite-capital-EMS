@@ -1,3 +1,5 @@
+// @encoding-test-intentional — ce fichier contient des patterns mojibake dans ses
+// assertions pour vérifier que les exports ne contiennent PAS ces séquences corrompues.
 import React from 'react'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'

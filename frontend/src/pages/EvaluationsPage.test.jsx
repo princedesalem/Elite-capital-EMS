@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React from 'react'
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import axios from 'axios'

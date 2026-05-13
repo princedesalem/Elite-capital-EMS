@@ -254,3 +254,77 @@ def test_shuffle_different_between_two_employees(client, db_session, seed_refere
         or any(r_a[i]['options'] != r_b[i]['options'] for i in range(min(len(r_a), len(r_b))))
     )
     assert diff, "Le shuffle doit différer entre deux employés distincts"
+
+
+# ─── Certificat PDF ───────────────────────────────────────────────────────────
+
+def _inscrire_et_terminer(db_session, formation_id, employe_id='1001'):
+    """Crée une inscription avec statut 'termine' directement en base."""
+    insc = models.InscriptionFormation(
+        employe_id=employe_id,
+        formation_id=formation_id,
+        statut=models.StatutInscriptionEnum.TERMINE,
+        date_inscription=__import__('datetime').datetime.utcnow(),
+        date_completion=__import__('datetime').datetime.utcnow(),
+        score_final=85.0,
+    )
+    db_session.add(insc)
+    db_session.commit()
+    db_session.refresh(insc)
+    return insc
+
+
+def test_certificat_404_inscription_introuvable(client, db_session, seed_reference_data):
+    """POST /certificat/{id} → 404 si l'inscription n'existe pas."""
+    r = client.post('/api/academy/certificat/99999')
+    assert r.status_code == 404
+    assert 'introuvable' in r.json()['detail'].lower()
+
+
+def test_certificat_400_formation_non_terminee(client, db_session, seed_reference_data):
+    """POST /certificat/{id} → 400 si l'inscription n'est pas terminée."""
+    f = _make_formation(db_session, titre='Formation Non Terminée', categorie='Achats')
+    # Inscription en_cours
+    insc = models.InscriptionFormation(
+        employe_id='1001',
+        formation_id=f.id,
+        statut=models.StatutInscriptionEnum.EN_COURS,
+        date_inscription=__import__('datetime').date.today(),
+    )
+    db_session.add(insc)
+    db_session.commit()
+    db_session.refresh(insc)
+
+    r = client.post(f'/api/academy/certificat/{insc.id}')
+    assert r.status_code == 400
+    assert 'terminée' in r.json()['detail'] or 'termin' in r.json()['detail'].lower()
+
+
+def test_certificat_retourne_pdf_quand_termine(client, db_session, seed_reference_data):
+    """POST /certificat/{id} → bytes PDF (content-type application/pdf) pour une inscription terminée."""
+    f = _make_formation(db_session, titre='Formation PDF Test', categorie='Commercial')
+    insc = _inscrire_et_terminer(db_session, f.id, employe_id='1001')
+
+    r = client.post(f'/api/academy/certificat/{insc.id}')
+    assert r.status_code == 200
+    assert r.headers['content-type'] == 'application/pdf'
+    # Un PDF commence par %PDF
+    assert r.content[:4] == b'%PDF'
+    assert f'certificat_{f.id}_1001' in r.headers.get('content-disposition', '')
+
+
+def test_certificat_idempotent(client, db_session, seed_reference_data):
+    """Deux appels successifs au même certificat ne créent pas de doublon en base."""
+    f = _make_formation(db_session, titre='Formation Idempotent', categorie='RH')
+    insc = _inscrire_et_terminer(db_session, f.id, employe_id='1001')
+
+    r1 = client.post(f'/api/academy/certificat/{insc.id}')
+    r2 = client.post(f'/api/academy/certificat/{insc.id}')
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+
+    count = db_session.query(models.CertificatFormation).filter(
+        models.CertificatFormation.employe_id == '1001',
+        models.CertificatFormation.formation_id == f.id,
+    ).count()
+    assert count == 1, "Un seul enregistrement CertificatFormation attendu (idempotent)"

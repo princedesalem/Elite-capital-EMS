@@ -490,7 +490,7 @@ export default function EmployeeForm(){
         <h2>{id && id!=='new' ? "Modifier l'employé" : "Nouvel employé"}</h2>
         <form onSubmit={submit} style={{display:'grid',gap:8}}>
           <div className="form-row">
-            <input className="input" placeholder="Matricule" pattern="[A-Za-z0-9-]+" title="Lettres, chiffres et tirets uniquement" value={form.matricule} onChange={e=>setField('matricule',e.target.value)} required />
+            <input className="input" placeholder="Matricule" pattern="[A-Za-z0-9\-]+" title="Lettres, chiffres et tirets uniquement" value={form.matricule} onChange={e=>setField('matricule',e.target.value)} required />
             <input className="input" placeholder="Nom" value={form.nom} onChange={e=>setField('nom',e.target.value)} required />
           </div>
           <div className="form-row">
@@ -647,6 +647,7 @@ export default function EmployeeForm(){
               ))}
             </div>
             {(form.type_contrat==='CDD'||form.type_contrat==='Stagiaire')&&(
+              <>
               <div style={{display:'flex',gap:12,flexWrap:'wrap',marginTop:4}}>
                 <div style={{flex:'1 1 180px'}}>
                   <label style={{fontSize:'0.78rem',color:'#64748b',display:'block',marginBottom:3}}>Date de début</label>
@@ -656,16 +657,34 @@ export default function EmployeeForm(){
                   <label style={{fontSize:'0.78rem',color:'#64748b',display:'block',marginBottom:3}}>Date de fin *</label>
                   <input className="input" type="date" value={form.date_fin_contrat||''} onChange={e=>setField('date_fin_contrat',e.target.value)} required={form.type_contrat!=='CDI'} />
                 </div>
-                {form.date_debut_contrat&&form.date_fin_contrat&&(()=>{
-                  const d1=new Date(form.date_debut_contrat),d2=new Date(form.date_fin_contrat)
-                  const days=Math.round((d2-d1)/(86400000))
-                  const months=Math.round(days/30.4375)
-                  if(isNaN(days)||days<=0) return null
-                  return <div style={{alignSelf:'flex-end',marginBottom:6,fontSize:'0.8rem',fontWeight:700,color:'#021630',background:'#e0e7ff',padding:'4px 12px',borderRadius:20}}>
-                    Durée : {months>=2?`${months} mois`:`${days} jours`}
-                  </div>
-                })()}
               </div>
+              {(()=>{
+                if(!form.date_debut_contrat||!form.date_fin_contrat) return null
+                const d1=new Date(form.date_debut_contrat), d2=new Date(form.date_fin_contrat)
+                const days=Math.round((d2-d1)/86400000)
+                if(isNaN(days)||days<=0) return (
+                  <div style={{marginTop:6,padding:'8px 14px',background:'#fff1f2',border:'1.5px solid #fca5a5',borderRadius:8,fontSize:'0.82rem',color:'#b91c1c',fontWeight:600}}>
+                    ⚠ La date de fin doit être après la date de début
+                  </div>
+                )
+                const months=Math.floor(days/30.4375)
+                const remDays=days-Math.round(months*30.4375)
+                let label=''
+                if(months>=12){const y=Math.floor(months/12),m=months%12;label=m>0?`${y} an${y>1?'s':''} et ${m} mois`:`${y} an${y>1?'s':''}`}
+                else if(months>=1) label=remDays>0?`${months} mois et ${remDays} jours`:`${months} mois`
+                else label=`${days} jours`
+                return (
+                  <div style={{marginTop:6,display:'flex',alignItems:'center',gap:10,padding:'10px 16px',background:'#eff6ff',border:'1.5px solid #93c5fd',borderRadius:8}}>
+                    <span style={{fontSize:'1.1rem'}}>⏱</span>
+                    <div>
+                      <div style={{fontSize:'0.74rem',color:'#64748b',fontWeight:500}}>Durée du contrat</div>
+                      <div style={{fontSize:'1rem',fontWeight:800,color:'#021630'}}>{label}</div>
+                    </div>
+                    <span style={{marginLeft:'auto',fontSize:'0.75rem',color:'#3b82f6',background:'#dbeafe',padding:'3px 10px',borderRadius:12,fontWeight:700}}>{days} jours au total</span>
+                  </div>
+                )
+              })()}
+              </>
             )}
           </div>
           {/* Nouvelle recrue — juste avant enregistrer, bien visible */}
@@ -675,11 +694,12 @@ export default function EmployeeForm(){
                 type="checkbox"
                 checked={!!form.nouvelle_recrue}
                 onChange={e=>setField('nouvelle_recrue',e.target.checked)}
-                style={{width:18,height:18,accentColor:'#16a34a',cursor:'pointer',flexShrink:0}}
+                disabled={!!form.nouvelle_recrue}
+                style={{width:18,height:18,accentColor:'#16a34a',cursor:form.nouvelle_recrue?'not-allowed':'pointer',flexShrink:0,opacity:form.nouvelle_recrue?0.7:1}}
               />
               <div>
                 <div style={{fontWeight:700,fontSize:'0.9rem',color:'#15803d'}}>Nouvelle recrue</div>
-                <div style={{fontSize:'0.75rem',color:'#4ade80',marginTop:1}}>Cocher si c&apos;est une nouvelle embauche — comptabilisé dans les statistiques de recrutement</div>
+                <div style={{fontSize:'0.75rem',color:'#4ade80',marginTop:1}}>Cocher si c&apos;est une nouvelle embauche — comptabilisé dans les statistiques de recrutement{form.nouvelle_recrue&&<span style={{color:'#86efac',marginLeft:6}}>(se réinitialise automatiquement 1 an après la date d&apos;embauche)</span>}</div>
               </div>
               <span style={{marginLeft:'auto',fontSize:'0.74rem',color:'#15803d',background:'#dcfce7',padding:'3px 10px',borderRadius:12,fontWeight:700,flexShrink:0}}>Recrutement</span>
             </label>

@@ -483,7 +483,9 @@ def _prepare_employee_payload(payload: schemas.EmployeBase, db: Session):
     valid_fields = {
         'matricule', 'nom', 'prenom', 'date_naissance', 'sexe', 'telephone', 'email',
         'diplome', 'solde_conges', 'date_embauche', 'fonction', 'annee_experience', 'n1', 'n1_fonction',
-        'statut_employe', 'photo_url', 'signature_url', 'contact_urgence', 'statut_matrimonial', 'nombre_enfants'
+        'statut_employe', 'photo_url', 'signature_url', 'contact_urgence', 'statut_matrimonial', 'nombre_enfants',
+        'nouvelle_recrue', 'salaire_brut', 'salaire_devise',
+        'type_contrat', 'date_debut_contrat', 'date_fin_contrat',
     }
     cleaned = {k: v for k, v in source.items() if k in valid_fields}
 

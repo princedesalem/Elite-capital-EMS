@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Tests unitaires — OrgChart
  * Framework : Vitest + React Testing Library
  * Exécuter : npx vitest run src/pages/__tests__/OrgChart.test.jsx
