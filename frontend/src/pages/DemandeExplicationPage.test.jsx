@@ -1,9 +1,17 @@
 import React from 'react'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import axios from 'axios'
 
-vi.mock('axios')
+const { apiMock } = vi.hoisted(() => ({
+  apiMock: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+    patch: vi.fn(),
+  }
+}))
+vi.mock('../services/api', () => ({ default: apiMock }))
 
 const mockUseAuth = vi.fn(() => ({
   user: { matricule: 'RH001', sub: 'RH001', role: 'RH', prenom: 'Alice', nom: 'Martin' },
@@ -54,13 +62,13 @@ const autocompleteData = [
 ]
 
 function setup() {
-  axios.get.mockImplementation((url) => {
+  apiMock.get.mockImplementation((url) => {
     if (url.includes('/api/de/')) return Promise.resolve({ data: deList })
     if (url.includes('/employees/autocomplete/employes')) return Promise.resolve({ data: autocompleteData })
     return Promise.reject(new Error(`Unmocked GET ${url}`))
   })
-  axios.post.mockResolvedValue({ data: { ...deList[0], id_de: 3 } })
-  axios.put.mockResolvedValue({ data: { ...deList[1], statut: 'CLOS', clos_le: new Date().toISOString() } })
+  apiMock.post.mockResolvedValue({ data: { ...deList[0], id_de: 3 } })
+  apiMock.put.mockResolvedValue({ data: { ...deList[1], statut: 'CLOS', clos_le: new Date().toISOString() } })
 }
 
 function renderPage() {
@@ -164,7 +172,7 @@ describe('DemandeExplicationPage — vue RH', () => {
 
     // Simuler matricule renseigné directement (autocomplete non testé ici)
     // Pour le test: on doit simuler que l'autocomplete a sélectionné un matricule
-    // On passe par un hack : on appelle axios.post manuellement via submit si possible
+    // On passe par un hack : on appelle apiMock.post manuellement via submit si possible
     // Ici on vérifie juste que le bouton Envoyer est présent
     expect(screen.getByText(/Envoyer/i)).toBeInTheDocument()
   })
@@ -176,7 +184,7 @@ describe('DemandeExplicationPage — vue Employé', () => {
     mockUseAuth.mockReturnValue({
       user: { matricule: 'EMP001', role: 'EMPLOYE', prenom: 'Jean', nom: 'Dupont' },
     })
-    axios.get.mockImplementation((url) => {
+    apiMock.get.mockImplementation((url) => {
       if (url.includes('/api/de/mes-demandes')) return Promise.resolve({ data: [deList[0]] })
       return Promise.reject(new Error(`Unmocked GET ${url}`))
     })

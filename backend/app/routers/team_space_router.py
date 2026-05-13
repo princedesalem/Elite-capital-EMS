@@ -355,7 +355,8 @@ def create_post(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_d
 
 
 @router.post('/posts/{id_post}/like')
-def toggle_like(id_post: int, payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)):
+@router.patch('/posts/{id_post}/like')
+def toggle_like(id_post: int, payload: Dict[str, Any] = Body(default={}), db: Session = Depends(get_db)):
     """Toggle like: 1 like par personne, illimité en nombre de clics mais compte 1 fois."""
     post = db.query(models.TeamSpacePost).filter(models.TeamSpacePost.id_post == id_post).first()
     if not post:
@@ -363,7 +364,7 @@ def toggle_like(id_post: int, payload: Dict[str, Any] = Body(...), db: Session =
 
     matricule = str(payload.get('matricule') or '').strip()
     if not matricule:
-        raise HTTPException(status_code=400, detail='Matricule requis')
+        matricule = 'ANONYMOUS'
 
     existing = db.query(models.TeamSpacePostLike).filter(
         models.TeamSpacePostLike.post_id == id_post,

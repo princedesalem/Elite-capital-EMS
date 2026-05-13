@@ -39,25 +39,33 @@ describe('OrgChart', () => {
 })
 
 describe('niveauFonctionnel (niveau visuel par fonction)', () => {
-  it('met les Directeurs / DG / PCA au niveau 0', () => {
-    expect(niveauFonctionnel({ fonction: 'Directeur Général' })).toBe(0)
-    expect(niveauFonctionnel({ fonction: 'DG' })).toBe(0)
+  it('met PCA/PDG/Président au niveau 0', () => {
     expect(niveauFonctionnel({ fonction: 'PCA' })).toBe(0)
-    expect(niveauFonctionnel({ fonction: 'Directrice Financière' })).toBe(0)
+    expect(niveauFonctionnel({ fonction: 'Administrateur Général' })).toBe(0)
   })
 
-  it('met les Responsables / Chefs / Managers au niveau 1', () => {
-    expect(niveauFonctionnel({ fonction: 'Responsable RH' })).toBe(1)
-    expect(niveauFonctionnel({ fonction: 'Chef de service' })).toBe(1)
-    expect(niveauFonctionnel({ fonction: 'Manager IT' })).toBe(1)
+  it('met DG et Directeur Général au niveau 1', () => {
+    expect(niveauFonctionnel({ fonction: 'Directeur Général' })).toBe(1)
+    expect(niveauFonctionnel({ fonction: 'DG' })).toBe(1)
   })
 
-  it('met les autres fonctions au niveau 2 (employés)', () => {
-    expect(niveauFonctionnel({ fonction: 'Comptable' })).toBe(2)
-    expect(niveauFonctionnel({ fonction: 'Développeur' })).toBe(2)
-    expect(niveauFonctionnel({ fonction: '' })).toBe(2)
-    expect(niveauFonctionnel({})).toBe(2)
-    expect(niveauFonctionnel(null)).toBe(2)
+  it('met les Directeurs de département au niveau 2', () => {
+    expect(niveauFonctionnel({ fonction: 'Directrice Financière' })).toBe(2)
+    expect(niveauFonctionnel({ fonction: 'Directeur des Opérations' })).toBe(2)
+  })
+
+  it('met les Responsables / Chefs / Managers au niveau 3', () => {
+    expect(niveauFonctionnel({ fonction: 'Responsable RH' })).toBe(3)
+    expect(niveauFonctionnel({ fonction: 'Chef de service' })).toBe(3)
+    expect(niveauFonctionnel({ fonction: 'Manager IT' })).toBe(3)
+  })
+
+  it('met les autres fonctions au niveau 4 (employés)', () => {
+    expect(niveauFonctionnel({ fonction: 'Comptable' })).toBe(4)
+    expect(niveauFonctionnel({ fonction: 'Développeur' })).toBe(4)
+    expect(niveauFonctionnel({ fonction: '' })).toBe(4)
+    expect(niveauFonctionnel({})).toBe(4)
+    expect(niveauFonctionnel(null)).toBe(4)
   })
 
   it("garantit qu'un Responsable ne peut JAMAIS être au même niveau qu'un Directeur (régression)", () => {
@@ -78,42 +86,42 @@ describe('computeOrgRow (alignement visuel par rôle)', () => {
     expect(computeOrgRow(dg, null)).toBe(0)
   })
 
-  it('place un Directeur enfant du DG sur la ligne 1', () => {
+  it('place un Directeur enfant du DG sur la ligne 2', () => {
     const dgRow = computeOrgRow(dg, -1)
-    expect(computeOrgRow(directeur, dgRow)).toBe(1)
+    expect(computeOrgRow(directeur, dgRow)).toBe(2)
   })
 
-  it('place un Responsable enfant direct du DG sur la ligne 2 (saute la ligne Directeurs)', () => {
+  it('place un Responsable enfant direct du DG sur la ligne 3 (saute la ligne Directeurs)', () => {
     const dgRow = computeOrgRow(dg, -1)
-    expect(computeOrgRow(responsable, dgRow)).toBe(2)
+    expect(computeOrgRow(responsable, dgRow)).toBe(3)
   })
 
-  it('place un Responsable enfant d\'un Directeur sur la ligne 2', () => {
-    const directeurRow = 1
-    expect(computeOrgRow(responsable, directeurRow)).toBe(2)
+  it('place un Responsable enfant d\'un Directeur sur la ligne 3', () => {
+    const directeurRow = 2
+    expect(computeOrgRow(responsable, directeurRow)).toBe(3)
   })
 
-  it('place un employé enfant direct d\'un Directeur sur la ligne 3 (saute la ligne Responsables)', () => {
-    const directeurRow = 1
-    // Carlos sous Fabrice : profondeur d'arbre = 2, mais doit s'afficher ligne 3.
-    expect(computeOrgRow(employe, directeurRow)).toBe(3)
+  it('place un employé enfant direct d\'un Directeur sur la ligne 4 (saute la ligne Responsables)', () => {
+    const directeurRow = 2
+    // Carlos sous Fabrice : profondeur d'arbre = 2, mais doit s'afficher ligne 4.
+    expect(computeOrgRow(employe, directeurRow)).toBe(4)
   })
 
-  it('place un employé enfant d\'un Responsable sur la ligne 3', () => {
-    const responsableRow = 2
-    // Samuel sous Cédric : profondeur d'arbre = 3, ligne 3.
-    expect(computeOrgRow(employe, responsableRow)).toBe(3)
+  it('place un employé enfant d\'un Responsable sur la ligne 4', () => {
+    const responsableRow = 3
+    // Samuel sous Cédric : profondeur d'arbre = 3, ligne 4.
+    expect(computeOrgRow(employe, responsableRow)).toBe(4)
   })
 
   it('garantit que TOUS les employés finissent sur la même ligne (régression)', () => {
-    // Carlos (sous Directeur, depth=2) et Samuel (sous Responsable, depth=3)
+    // Carlos (sous Directeur) et Samuel (sous Responsable)
     // doivent atterrir sur la MÊME ligne visuelle.
-    const carlos = computeOrgRow(employe, /* parent Directeur */ 1)
-    const samuel = computeOrgRow(employe, /* parent Responsable */ 2)
-    const rachel = computeOrgRow(employe, /* parent Responsable */ 2)
+    const carlos = computeOrgRow(employe, /* parent Directeur */ 2)
+    const samuel = computeOrgRow(employe, /* parent Responsable */ 3)
+    const rachel = computeOrgRow(employe, /* parent Responsable */ 3)
     expect(carlos).toBe(samuel)
     expect(carlos).toBe(rachel)
-    expect(carlos).toBe(3)
+    expect(carlos).toBe(4)
   })
 
   it('garantit que TOUS les Directeurs finissent sur la même ligne', () => {
@@ -121,14 +129,14 @@ describe('computeOrgRow (alignement visuel par rôle)', () => {
     const dirA = computeOrgRow({ fonction: 'Directeur A' }, dgRow)
     const dirB = computeOrgRow({ fonction: 'Directrice B' }, dgRow)
     expect(dirA).toBe(dirB)
-    expect(dirA).toBe(1)
+    expect(dirA).toBe(2)
   })
 
   it('garantit que TOUS les Responsables finissent sur la même ligne (sous Directeur ou DG)', () => {
-    const sousDG = computeOrgRow(responsable, /* DG */ 0)
-    const sousDirecteur = computeOrgRow(responsable, /* Directeur */ 1)
+    const sousDG = computeOrgRow(responsable, /* DG */ 1)
+    const sousDirecteur = computeOrgRow(responsable, /* Directeur */ 2)
     expect(sousDG).toBe(sousDirecteur)
-    expect(sousDG).toBe(2)
+    expect(sousDG).toBe(3)
   })
 
   it('ne descend jamais au-dessus de parentRow + 1 (cas d\'un Directeur sous un Responsable, théorique)', () => {

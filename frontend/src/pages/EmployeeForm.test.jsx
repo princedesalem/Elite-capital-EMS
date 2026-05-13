@@ -285,11 +285,11 @@ describe('EmployeeForm', () => {
     expect(screen.getByDisplayValue('XAF')).toBeInTheDocument()
   })
 
-  it('le champ matricule a un pattern regex Chrome-compatible (tiret en fin)', async () => {
+  it('le champ matricule a un pattern regex Chrome-compatible (tiret échappé)', async () => {
     renderPage()
     const input = await screen.findByPlaceholderText('Matricule')
     const pattern = input.getAttribute('pattern')
-    expect(pattern).toBe('[A-Za-z0-9-]+')
+    expect(pattern).toBe('[A-Za-z0-9\\-]+')
     expect(() => new RegExp(pattern)).not.toThrow()
   })
 

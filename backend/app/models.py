@@ -848,6 +848,11 @@ class WorkforcePosition(Base):
     annee = Column(String(10), nullable=True)
     budget = Column(DECIMAL(15, 2), nullable=True)
     priorite = Column(String(50), default='moyenne')
+    statut = Column(String(50), default='planifie')
+    notes = Column(Text, nullable=True)
+    created_by = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=True, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=True, default=datetime.utcnow)
 
 
 # ── Gestion des contrats ─────────────────────────────────────────────────────
