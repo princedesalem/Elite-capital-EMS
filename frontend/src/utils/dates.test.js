@@ -9,10 +9,10 @@ describe('utils/dates', () => {
   })
 
   it('formatDate returns placeholder for invalid / empty', () => {
-    expect(formatDate('')).toBe('—')
-    expect(formatDate(null)).toBe('—')
-    expect(formatDate(undefined)).toBe('—')
-    expect(formatDate('not-a-date')).toBe('—')
+    expect(formatDate('')).toBe('')
+    expect(formatDate(null)).toBe('')
+    expect(formatDate(undefined)).toBe('')
+    expect(formatDate('not-a-date')).toBe('')
   })
 
   it('formatDateTime includes time portion', () => {

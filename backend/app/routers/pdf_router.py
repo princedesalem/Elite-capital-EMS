@@ -303,7 +303,7 @@ def _add_remplacants_section(pdf: PDFReport, id_operation: int, db: Session):
     """Add accepted replacements section to a PDF if any exist."""
     remplacants = db.query(models.RemplacantPropose).filter(
         models.RemplacantPropose.id_operation == id_operation,
-        models.RemplacantPropose.est_accepte == True,
+        models.RemplacantPropose.est_accepte.is_(True),
     ).all()
     if not remplacants:
         return

@@ -78,7 +78,7 @@ describe('FicheDePostePage — encodage des textes', () => {
     await waitFor(() => {
       const body = document.body.textContent
       // Aucun des patterns de corruption ne doit apparaître dans le rendu
-      expect(body).not.toMatch(/Ã©|Ã |Ã¨|Ã´|â€¢|â€"|â€¦|â†/)
+      expect(body).not.toMatch(/é|Ã |è|ô|•|â€"|â€¦|â†/)
     })
   })
 

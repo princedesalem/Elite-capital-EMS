@@ -46,6 +46,7 @@ function Icon({name, size = 18, stroke = 1.8}) {
     key: (<><path d="M21 2l-2 2" /><path d="M17.5 5.5A4.5 4.5 0 1 1 14 4l7-2-1.5 3.5Z" /><path d="M6 14l-4 4 2 2 4-4" /></>),
     lock: (<><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 1 1 8 0v3" /></>),
     score: (<><path d="M3.05 13a9 9 0 1 1 17.9 0" /><path d="M12 13l3.5-5.5" /><circle cx="12" cy="13" r="1.5" fill="currentColor" /><path d="M5.6 17.4 6.65 16.35M18.4 17.4l-1.05-1.05M4 11h1.5M18.5 11H20" /></>),
+    gavel: (<><path d="M14 4l6 6" /><path d="m3.5 20.5 10-10" /><path d="m8 8 8 8" /><path d="M4 20h2" /><path d="m12.5 3.5 8 8" /><path d="M3 21l4.5-4.5" /></>),
   }
 
   return <svg {...common}>{icons[name]}</svg>
@@ -83,9 +84,16 @@ const MODULES = [
       {label: 'Gestion des talents',   path: '/rh/talent'},
       {label: 'Club Review',           path: '/rh/club-review'},
       {label: 'Sandbox',               path: '/rh/sandbox'},
-      {label: 'Demandes d\'explication', path: '/rh/demandes-explication'},
-      {label: 'Disciplinaire',         path: '/rh/disciplinaire'},
       {label: 'Assistant IA',          path: '/rh/ai-assistant'},
+    ]
+  },
+  {
+    id: 'gestion-disciplinaire',
+    icon: 'gavel',
+    label: 'Gestion disciplinaire',
+    subs: [
+      {label: "Demandes d'explication", path: '/rh/demandes-explication'},
+      {label: 'Disciplinaire',          path: '/rh/disciplinaire'},
     ]
   },
   {

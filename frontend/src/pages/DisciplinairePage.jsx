@@ -1,9 +1,81 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/ui/ToastProvider'
 import { ShieldAlert, Plus, Pencil, Trash2, Loader, RefreshCw, X } from 'lucide-react'
-const ROLES_RH = ['RH', 'ADMIN', 'DIRECTEUR', 'DG', 'PCA']
+const ROLES_RH = ['RH', 'DIRECTEUR', 'DG', 'PCA', 'AG', 'RESPONSABLE']
+
+// ── Autocomplete employé (réutilisable, même pattern que DemandeExplicationPage) ──
+function EmployeeAutocomplete({ value, onChange, initialQuery }) {
+  const [query, setQuery] = useState(initialQuery || '')
+  const [suggestions, setSuggestions] = useState([])
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const ref = useRef()
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const fetchSuggestions = useCallback(async (q) => {
+    setLoading(true)
+    try {
+      const r = await api.get('/employees/autocomplete/employes', { params: { q: q || '', limit: 20 } })
+      setSuggestions(Array.isArray(r.data) ? r.data : [])
+      setOpen(true)
+    } catch { setSuggestions([]) }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => {
+    if (!query.trim()) { setSuggestions([]); setOpen(false); return }
+    const timer = setTimeout(() => fetchSuggestions(query), 180)
+    return () => clearTimeout(timer)
+  }, [query, fetchSuggestions])
+
+  const select = (emp) => {
+    onChange(emp.matricule)
+    setQuery(`${emp.matricule} — ${(emp.nom || '').toUpperCase()} ${emp.prenom || ''}`.trim())
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <input
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); if (!e.target.value) onChange('') }}
+        onFocus={() => { if (suggestions.length > 0) setOpen(true) }}
+        placeholder="Nom ou matricule de l'employé"
+        autoComplete="off"
+        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', borderRadius: 8, border: '1.5px solid #cbd5e1', fontSize: '0.88rem' }}
+      />
+      {loading && <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: '0.75rem', color: '#94a3b8' }}>…</span>}
+      {open && suggestions.length > 0 && (
+        <ul style={{
+          position: 'absolute', top: '110%', left: 0, right: 0, zIndex: 300,
+          background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)', margin: 0, padding: 0,
+          listStyle: 'none', maxHeight: 240, overflowY: 'auto',
+        }}>
+          {suggestions.map((emp) => (
+            <li
+              key={emp.matricule}
+              onMouseDown={() => select(emp)}
+              style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = '#fff' }}
+            >
+              <div style={{ fontSize: '0.88rem', color: '#021630' }}>{(emp.nom || '').toUpperCase()} {emp.prenom}</div>
+              <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{emp.matricule}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
 
 const TYPE_LABELS = {
   blame: 'Blâme',
@@ -103,7 +175,16 @@ function ModalMesure({ initial, onClose, onSaved }) {
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={18} /></button>
         </div>
 
-        {field('Matricule employé *', 'matricule')}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#475569', marginBottom: 5 }}>
+            Employé concerné *
+          </label>
+          <EmployeeAutocomplete
+            value={form.matricule}
+            onChange={(m) => setForm((f) => ({ ...f, matricule: m }))}
+            initialQuery={initial?.matricule || ''}
+          />
+        </div>
         {field('Type de mesure *', 'type_mesure', 'text', {
           select: true,
           options: Object.entries(TYPE_LABELS).map(([v, l]) => ({ value: v, label: l })),
@@ -139,18 +220,20 @@ export default function DisciplinairePage() {
   const toast = useToast()
 
   const isRH = ROLES_RH.includes((user?.role || '').toUpperCase())
+  const matricule = user?.matricule || user?.sub
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await api.get('/api/disciplinaire/')
+      const endpoint = isRH ? '/api/disciplinaire/' : `/api/disciplinaire/employe/${matricule}`
+      const r = await api.get(endpoint)
       setMesures(Array.isArray(r.data) ? r.data : [])
     } catch {
       toast.error('Impossible de charger les mesures disciplinaires.')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isRH, matricule])
 
   useEffect(() => { load() }, [load])
 

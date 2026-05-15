@@ -43,7 +43,7 @@ describe('Utilisateurs', () => {
 
   it('shows user names', async () => {
     render(<MemoryRouter><Utilisateurs /></MemoryRouter>)
-    // Names are rendered as 'prenom nom' join — text may be split across elements
+    // Names are rendered as 'prenom nom' join  text may be split across elements
     await waitFor(() => {
       expect(document.body.textContent).toMatch(/Alice/)
       expect(document.body.textContent).toMatch(/Bob/)
