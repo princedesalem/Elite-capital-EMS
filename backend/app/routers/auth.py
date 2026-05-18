@@ -13,6 +13,17 @@ import os
 router = APIRouter(prefix='/auth', tags=['auth'])
 
 
+def _role_effectif(user: models.Utilisateur, db: Session) -> str:
+    """Retourne le rôle effectif de l'utilisateur.
+    Si son employé a la fonction 'Directeur financier et Comptable',
+    le rôle DFC est déduit automatiquement — aucune assignation manuelle requise.
+    """
+    from ..models import Employe as _Employe
+    employe = db.query(_Employe).filter(_Employe.matricule == user.matricule).first()
+    if employe and employe.fonction and 'directeur financier' in employe.fonction.lower():
+        return 'DFC'
+    return user.role.name if user.role else 'Utilisateur'
+
 
 @router.post('/login/email')
 def send_login_email_request(background_tasks: BackgroundTasks, db: Session = Depends(get_db), email: str = Form(...)):
@@ -20,7 +31,7 @@ def send_login_email_request(background_tasks: BackgroundTasks, db: Session = De
     # respond OK even if user not found (no enumeration)
     if not user:
         return {"ok": True}
-    token = create_access_token({"matricule": user.matricule, "role": user.role.name if user.role else 'Utilisateur', "email_login": True}, expires_minutes=15)
+    token = create_access_token({"matricule": user.matricule, "role": _role_effectif(user, db), "email_login": True}, expires_minutes=15)
     link = f"{os.getenv('APP_URL','http://localhost:5173')}/login/email/callback?token={token}"
     body = f"Cliquez sur ce lien pour vous connecter : {link}\n(valable 15 minutes)"
     background_tasks.add_task(mailer.send_email, email, "Lien de connexion ELITE CAPITAL", body)
@@ -35,7 +46,7 @@ def login_email_validate(token: str, db: Session = Depends(get_db)):
     user = db.query(models.Utilisateur).filter(models.Utilisateur.matricule == matricule).first()
     if not user:
         raise HTTPException(status_code=404, detail='Utilisateur non trouvé')
-    access_token = create_access_token({"matricule": user.matricule, "role": user.role.name if user.role else 'Utilisateur'}, expires_minutes=525600)
+    access_token = create_access_token({"matricule": user.matricule, "role": _role_effectif(user, db)}, expires_minutes=525600)
     return {"access_token": access_token}
 
 @router.post('/register')
@@ -116,8 +127,8 @@ def login(request: Request, matricule: str = Form(...), password: str = Form(...
     
     # Générer le token
     token = create_access_token({
-        "matricule": user.matricule, 
-        "role": user.role.name if user.role else 'Utilisateur'
+        "matricule": user.matricule,
+        "role": _role_effectif(user, db)
     }, expires_minutes=525600)
     
     # Vérifier si mot de passe temporaire

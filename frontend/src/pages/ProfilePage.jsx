@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { confirmDialog } from '../components/ui/bridge'
+import SignatureCanvas from '../components/SignatureCanvas'
 export default function ProfilePage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -11,6 +12,7 @@ export default function ProfilePage() {
   const [err, setErr] = useState(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [uploadingSignature, setUploadingSignature] = useState(false)
+  const [showDrawSig, setShowDrawSig] = useState(false)
   const [success, setSuccess] = useState(null)
   const fileRef = useRef(null)
   const signatureRef = useRef(null)
@@ -114,6 +116,28 @@ export default function ProfilePage() {
     } finally {
       setUploadingSignature(false)
       if (signatureRef.current) signatureRef.current.value = ''
+    }
+  }
+
+  async function handleDrawSignatureSave(dataUrl) {
+    setUploadingSignature(true)
+    setErr(null)
+    setSuccess(null)
+    try {
+      const fetchRes = await fetch(dataUrl)
+      const blob = await fetchRes.blob()
+      const form = new FormData()
+      form.append('signature', blob, 'signature.png')
+      const res = await api.post(`/employees/${user.matricule}/signature`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setProfile(prev => ({ ...prev, signature_url: res.data.signature_url }))
+      setSuccess('Signature mise à jour avec succès')
+      setShowDrawSig(false)
+    } catch {
+      setErr("Erreur lors de l'enregistrement de la signature")
+    } finally {
+      setUploadingSignature(false)
     }
   }
 
@@ -229,7 +253,15 @@ export default function ProfilePage() {
                 disabled={uploadingSignature}
                 style={{ padding: '5px 14px', fontSize: '0.8rem' }}
               >
-                {uploadingSignature ? "Envoi en cours..." : profile?.signature_url ? "Changer la signature" : "Ajouter une signature"}
+                {uploadingSignature ? 'Envoi en cours...' : profile?.signature_url ? 'Changer la signature' : 'Ajouter une signature'}
+              </button>
+              <button
+                className="button"
+                onClick={() => setShowDrawSig(s => !s)}
+                disabled={uploadingSignature}
+                style={{ padding: '5px 14px', fontSize: '0.8rem', background: 'rgb(2,22,46)' }}
+              >
+                {showDrawSig ? 'Annuler le dessin' : 'Dessiner ma signature'}
               </button>
               {profile?.signature_url && (
                 <button
@@ -238,10 +270,24 @@ export default function ProfilePage() {
                   disabled={uploadingSignature}
                   style={{ padding: '5px 14px', fontSize: '0.8rem', background: 'rgb(208,32,43)' }}
                 >
-                  {"Supprimer"}
+                  {'Supprimer'}
                 </button>
               )}
             </div>
+
+            {showDrawSig && (
+              <div style={{ marginTop: 12, padding: '12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: '#64748b' }}>
+                  Dessinez votre signature ci-dessous, puis cliquez sur Enregistrer.
+                </p>
+                <SignatureCanvas
+                  width={360}
+                  height={120}
+                  onSave={handleDrawSignatureSave}
+                  onClear={() => {}}
+                />
+              </div>
+            )}
           </div>
 
           {err && <p style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: 8 }}>{err}</p>}

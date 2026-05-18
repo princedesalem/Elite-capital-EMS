@@ -59,6 +59,9 @@ class EmployeBase(BaseModel):
     id_direction: Optional[int] = None
     dept_id: Optional[int] = None
     nouvelle_recrue: Optional[bool] = None
+    type_contrat: Optional[str] = None
+    date_debut_contrat: Optional[date] = None
+    date_fin_contrat: Optional[date] = None
 
     @field_validator('matricule', mode='before')
     @classmethod

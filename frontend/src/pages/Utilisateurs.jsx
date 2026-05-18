@@ -64,7 +64,10 @@ export default function Utilisateurs() {
   const adminRoleOptions = useMemo(() => {
     const fromApi = (rolesData || []).map((r) => String(r.name || '').trim()).filter(Boolean)
     const fromUsers = (utilisateursData || []).map((u) => String(u.role || '').trim()).filter(Boolean)
-    return Array.from(new Set([...fromApi, ...fromUsers])).sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }))
+    // DFC n'est plus assignable manuellement — déduit de la fonction
+    return Array.from(new Set([...fromApi, ...fromUsers]))
+      .filter((r) => r.toUpperCase() !== 'DFC')
+      .sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }))
   }, [rolesData, utilisateursData])
 
   const utilisateursStats = useMemo(() => {

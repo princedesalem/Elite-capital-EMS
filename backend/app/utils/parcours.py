@@ -20,7 +20,10 @@ _FIELD_LABELS = {
     'id_entite': 'Entité',
     'id_localisation': 'Localisation',
     'fonction': 'Fonction',
+    'type_contrat': 'Type de contrat',
 }
+
+_CONTRATS_INFERIEURS = {'CDD', 'Stagiaire'}
 
 
 def _role_label(db: Session, role_id) -> Optional[str]:
@@ -150,4 +153,26 @@ def record_employee_diff(
             actor=actor,
         )
         entries.append(entry)
+
+    # Changement de type de contrat : CDD/Stagiaire → CDI = PROMOTION
+    old_contrat = str(before.get('type_contrat') or '').strip()
+    new_contrat = str(after.get('type_contrat') or '').strip()
+    if old_contrat and new_contrat and old_contrat != new_contrat:
+        if new_contrat == 'CDI' and old_contrat in _CONTRATS_INFERIEURS:
+            contrat_type_action = models.TypeParcoursEnum.PROMOTION
+        else:
+            contrat_type_action = models.TypeParcoursEnum.AUTRE
+        libelle = f"Type de contrat : {old_contrat} → {new_contrat}"
+        entry = record_event(
+            db,
+            matricule=matricule,
+            type_action=contrat_type_action,
+            champ_modifie='type_contrat',
+            ancienne_valeur=old_contrat,
+            nouvelle_valeur=new_contrat,
+            libelle=libelle,
+            actor=actor,
+        )
+        entries.append(entry)
+
     return entries

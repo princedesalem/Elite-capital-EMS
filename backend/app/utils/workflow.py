@@ -274,7 +274,37 @@ def obtenir_validateur_pour_role(
             if utilisateur:
                 return utilisateur.matricule
     
-    elif role in ['RH', 'DFC', 'DG', 'PCA', 'AG']:
+    elif role == 'DFC':
+        # Priorité 1 : trouver par fonction (source de vérité, pas par rôle assigné)
+        # même entité d'abord
+        if employe.id_entite:
+            emp_dfc = db.query(Employe).join(
+                Utilisateur, Utilisateur.matricule == Employe.matricule
+            ).filter(
+                Employe.fonction.ilike('%directeur financier%'),
+                Employe.id_entite == employe.id_entite
+            ).first()
+            if emp_dfc:
+                return emp_dfc.matricule
+        # toutes entités
+        emp_dfc = db.query(Employe).join(
+            Utilisateur, Utilisateur.matricule == Employe.matricule
+        ).filter(
+            Employe.fonction.ilike('%directeur financier%')
+        ).first()
+        if emp_dfc:
+            return emp_dfc.matricule
+        # Fallback compatibilité descendante : chercher via role_id
+        role_obj = db.query(Role).filter(Role.name == 'DFC').first()
+        if role_obj:
+            u = db.query(Utilisateur).filter(Utilisateur.role_id == role_obj.id).first()
+            if u:
+                return u.matricule
+            emp_v = db.query(Employe).filter(Employe.id_role == role_obj.id).first()
+            if emp_v:
+                return emp_v.matricule
+
+    elif role in ['RH', 'DG', 'PCA', 'AG']:
         # PCA et AG sont interchangeables : un seul rôle terminal existe généralement
         roles_candidats = [role]
         if role == 'AG':
@@ -836,6 +866,11 @@ def obtenir_role_validateur(matricule: str, db: Session) -> str:
         role = db.query(Role).filter(Role.id == employe_obj.id_role).first()
         if role:
             return _normaliser_role(role.name)
+
+    # Déduction DFC par fonction : pas besoin d'assignation manuelle du rôle
+    if employe_obj and employe_obj.fonction:
+        if 'directeur financier' in employe_obj.fonction.lower():
+            return 'DFC'
     
     return 'EMPLOYE'
 

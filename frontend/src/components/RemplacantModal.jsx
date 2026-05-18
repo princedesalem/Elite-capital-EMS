@@ -46,13 +46,15 @@ function CommentaireRemplacant({ initial, onSave }) {
 export default function RemplacantModal({ operationId, userRole, userMatricule, onClose }) {
   const [propositions, setPropositions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
 
   const isAdmin = ADMIN_ROLES.includes(String(userRole || '').toUpperCase())
 
-  const load = async () => {
-    setLoading(true)
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true)
+    else setRefreshing(true)
     setError('')
     try {
       const res = await api.get(`/api/remplacants/propositions/${operationId}`)
@@ -61,6 +63,7 @@ export default function RemplacantModal({ operationId, userRole, userMatricule, 
       setError('Erreur lors du chargement des propositions')
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -71,7 +74,7 @@ export default function RemplacantModal({ operationId, userRole, userMatricule, 
     setError('')
     try {
       await api.post(`/api/remplacants/generer/${operationId}`)
-      await load()
+      await load(true)
     } catch (e) {
       setError(e?.response?.data?.detail || 'Erreur lors de la génération')
     } finally {
@@ -83,7 +86,7 @@ export default function RemplacantModal({ operationId, userRole, userMatricule, 
     setError('')
     try {
       await api.post(`/api/remplacants/${operationId}/demander/${matricule}`)
-      await load()
+      await load(true)
     } catch (e) {
       setError(e?.response?.data?.detail || 'Erreur lors de l\'envoi de la demande')
     }
@@ -93,7 +96,7 @@ export default function RemplacantModal({ operationId, userRole, userMatricule, 
     setError('')
     try {
       await api.post(`/api/remplacants/${operationId}/accepter/${matricule}`)
-      await load()
+      await load(true)
     } catch (e) {
       setError(e?.response?.data?.detail || 'Erreur lors de l\'acceptation')
     }
@@ -118,6 +121,9 @@ export default function RemplacantModal({ operationId, userRole, userMatricule, 
         <button onClick={onClose} style={{ position: 'absolute', top: 14, right: 14, background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={18} /></button>
         <h2 style={{ margin: '0 0 16px', fontSize: '1rem', fontWeight: 700, color: '#021630', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Users2 size={18} /> Remplaçant(s) — Opération #{operationId}
+          {refreshing && (
+            <RefreshCw size={13} style={{ marginLeft: 'auto', color: '#94a3b8', animation: 'spin 1s linear infinite' }} />
+          )}
         </h2>
 
         {error && <div style={{ background: '#fee2e2', color: '#991b1b', padding: '8px 12px', borderRadius: 8, marginBottom: 12, fontSize: '0.82rem' }}>{error}</div>}

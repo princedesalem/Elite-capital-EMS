@@ -48,3 +48,108 @@ def test_employee_role_change_creates_promotion_entry(db_session, seed_reference
 
     rows = db_session.query(models.ParcoursEmploye).filter_by(matricule=emp.matricule).all()
     assert any(r.type_action == models.TypeParcoursEnum.PROMOTION for r in rows)
+
+
+# ---------------------------------------------------------------------------
+# Tests type_contrat — persistance + parcours
+# ---------------------------------------------------------------------------
+
+def test_type_contrat_change_persists(db_session, seed_reference_data, client, auth_headers):
+    """Modifier type_contrat via PUT doit persister en base (bug fix)."""
+    emp = seed_reference_data['employe']
+    rh = seed_reference_data['rh']
+    headers = auth_headers(rh.matricule, 'RH')
+
+    # L'employé démarre en CDI (default)
+    assert emp.type_contrat in (models.TypeContratEnum.CDI, None)
+
+    res = client.put(
+        f'/employees/{emp.matricule}',
+        json={'type_contrat': 'CDD'},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+    db_session.expire(emp)
+    refreshed = db_session.query(models.Employe).filter_by(matricule=emp.matricule).first()
+    assert refreshed.type_contrat == models.TypeContratEnum.CDD
+
+
+def test_cdd_to_cdi_creates_promotion_in_parcours(db_session, seed_reference_data, client, auth_headers):
+    """Passage CDD → CDI doit créer une entrée PROMOTION dans le parcours."""
+    emp = seed_reference_data['employe']
+    rh = seed_reference_data['rh']
+
+    # Forcer le contrat à CDD en base
+    emp.type_contrat = models.TypeContratEnum.CDD
+    db_session.commit()
+    db_session.refresh(emp)
+
+    headers = auth_headers(rh.matricule, 'RH')
+    res = client.put(
+        f'/employees/{emp.matricule}',
+        json={'type_contrat': 'CDI'},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+    rows = db_session.query(models.ParcoursEmploye).filter_by(
+        matricule=emp.matricule, champ_modifie='type_contrat'
+    ).all()
+    assert len(rows) == 1
+    assert rows[0].type_action == models.TypeParcoursEnum.PROMOTION
+    assert rows[0].ancienne_valeur == 'CDD'
+    assert rows[0].nouvelle_valeur == 'CDI'
+
+
+def test_stagiaire_to_cdi_creates_promotion_in_parcours(db_session, seed_reference_data, client, auth_headers):
+    """Passage Stagiaire → CDI doit créer une entrée PROMOTION dans le parcours."""
+    emp = seed_reference_data['employe']
+    rh = seed_reference_data['rh']
+
+    emp.type_contrat = models.TypeContratEnum.STAGIAIRE
+    db_session.commit()
+    db_session.refresh(emp)
+
+    headers = auth_headers(rh.matricule, 'RH')
+    res = client.put(
+        f'/employees/{emp.matricule}',
+        json={'type_contrat': 'CDI'},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+    rows = db_session.query(models.ParcoursEmploye).filter_by(
+        matricule=emp.matricule, champ_modifie='type_contrat'
+    ).all()
+    assert len(rows) == 1
+    assert rows[0].type_action == models.TypeParcoursEnum.PROMOTION
+    assert rows[0].ancienne_valeur == 'Stagiaire'
+    assert rows[0].nouvelle_valeur == 'CDI'
+
+
+def test_cdi_to_cdd_no_promotion_in_parcours(db_session, seed_reference_data, client, auth_headers):
+    """Passage CDI → CDD ne doit PAS créer une PROMOTION (type AUTRE attendu)."""
+    emp = seed_reference_data['employe']
+    rh = seed_reference_data['rh']
+
+    # L'employé est en CDI par défaut
+    emp.type_contrat = models.TypeContratEnum.CDI
+    db_session.commit()
+    db_session.refresh(emp)
+
+    headers = auth_headers(rh.matricule, 'RH')
+    res = client.put(
+        f'/employees/{emp.matricule}',
+        json={'type_contrat': 'CDD'},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+    rows = db_session.query(models.ParcoursEmploye).filter_by(
+        matricule=emp.matricule, champ_modifie='type_contrat'
+    ).all()
+    assert len(rows) == 1
+    assert rows[0].type_action == models.TypeParcoursEnum.AUTRE
+    assert rows[0].ancienne_valeur == 'CDI'
+    assert rows[0].nouvelle_valeur == 'CDD'

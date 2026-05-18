@@ -364,7 +364,7 @@ def toggle_like(id_post: int, payload: Dict[str, Any] = Body(default={}), db: Se
 
     matricule = str(payload.get('matricule') or '').strip()
     if not matricule:
-        matricule = 'ANONYMOUS'
+        raise HTTPException(status_code=400, detail='matricule requis')
 
     existing = db.query(models.TeamSpacePostLike).filter(
         models.TeamSpacePostLike.post_id == id_post,

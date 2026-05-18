@@ -33,6 +33,7 @@ class TypeNotificationEnum(str, enum.Enum):
     CLOTURE_REQUISE = 'CLOTURE_REQUISE'
     RELANCE_VALIDATION = 'RELANCE_VALIDATION'
     RETARD_POINTAGE = 'RETARD_POINTAGE'
+    ALERTE_CONTRAT = 'ALERTE_CONTRAT'
     AUTRE = 'AUTRE'
 
 class TypeActionEnum(str, enum.Enum):

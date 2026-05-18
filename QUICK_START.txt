@@ -1,0 +1,299 @@
+# 🚀 QUICK START - EMS Server Deployment
+
+**Version** : 1.1 Stable  
+**Date** : 15 Mai 2026  
+**Durée installation** : 60-120 minutes (première fois)
+
+---
+
+## 📦 Fichiers à Utiliser
+
+### 1️⃣ Exécutable Principal
+```
+Installer EMS Server.exe  ← LANCER CELUI-CI AVEC DROITS ADMIN
+(39 KB, compilé C#, pas de virus Kaspersky)
+```
+
+### 2️⃣ Scripts Utilitaires (post-installation)
+```
+manage-ems.ps1           ← Contrôle services (start/stop/logs)
+backup-db-auto.ps1       ← Backup quotidien (auto-programmé)
+test-post-install.ps1    ← Valide l'installation
+```
+
+### 3️⃣ Documentation
+```
+EMS_SERVER_INSTALLATION_GUIDE.md  ← GUIDE COMPLET (25 KB)
+DELIVERY_NOTES.md                  ← Notes de livraison
+INSTALLER_IMPROVEMENTS.md          ← Résumé changements
+CHANGELOG.md                        ← Détails techniques
+```
+
+---
+
+## 🎯 Instructions Rapides (5 étapes)
+
+### Étape 1 : Préparation
+```
+1. Windows 10/11 Pro ou Server 2019+
+2. Droits administrateur
+3. ~16 GB RAM libre
+4. ~50 GB disque libre
+5. Connexion Internet
+```
+
+### Étape 2 : Lancer l'installateur
+```powershell
+# Sur le serveur Windows, clic droit sur:
+Installer EMS Server.exe
+
+# Sélectionner "Exécuter en tant qu'administrateur"
+# Une console blanche s'affichera
+# Progression affichée pour chaque phase
+```
+
+### Étape 3 : Attendre l'installation
+```
+Phase 1 (5 min)   : WSL 2 activation
+Phase 2 (10 min)  : Docker Desktop download + install
+Phase 3 (5 min)   : Git installation
+Phase 4 (5 min)   : Repository clone
+Phase 5 (2 min)   : .env generation
+Phase 6 (30 min)  : Docker build + init database
+Phase 7 (5 min)   : GitHub runner setup
+Phase 8 (2 min)   : Windows services config
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TOTAL : ~60-120 minutes (première fois)
+```
+
+### Étape 4 : Accès Application
+```
+L'installateur affichera à la fin :
+
+  +--------------------------------------------------+
+  |   APPLICATION ACCESSIBLE                      |
+  |   Serveur local : http://localhost:5173        |
+  |   API Docs     : http://localhost:8000/docs    |
+  +--------------------------------------------------+
+
+Identifiants par défaut :
+  User : admin
+  Pwd  : ChangeMe123!@#   ← À changer au premier login !
+```
+
+### Étape 5 : Valider Installation
+```powershell
+# Sur le serveur, ouvrir PowerShell en Admin et :
+Set-Location C:\EMS\extranet
+.\test-post-install.ps1 -TestType all
+
+# Output attendu:
+# ✅ Tous les tests réussis ! Score: 100%
+
+# Ou tester rapidement :
+Invoke-RestMethod http://localhost:8000/health
+```
+
+---
+
+## 📋 Ce Qui Est Automatisé ✅
+
+```
+✅ WSL 2 activation + Docker Desktop installation
+✅ Git installation + repository clone
+✅ Frontend .env génération
+✅ Backend .env génération + SECRET_KEY sécurisée
+✅ Docker image téléchargement (Python, Node, MySQL)
+✅ Database initialization (schéma + admin user + test data)
+✅ Health checks complètes (3 services validés)
+✅ Firewall ports ouverture (8000, 5173)
+✅ GitHub Actions runner installation
+✅ CI/CD deploy job configuration
+✅ Tâche backup quotidienne programmée (minuit)
+✅ Auto-start au boot serveur
+```
+
+---
+
+## 🎮 Gestion Post-Installation
+
+### Contrôle les Services
+
+```powershell
+# Toutes les commandes depuis : C:\EMS\extranet
+
+# Démarrer l'application
+.\manage-ems.ps1 start
+
+# Arrêter l'application
+.\manage-ems.ps1 stop
+
+# Voir les containers en cours
+.\manage-ems.ps1 status
+
+# Logs en temps réel (appuyez Ctrl+C pour quitter)
+.\manage-ems.ps1 logs
+
+# Redémarrer l'application
+.\manage-ems.ps1 restart
+```
+
+### Backups Automatiques
+
+```
+✅ Chaque nuit à minuit : backup quotidien auto
+✅ Stocké dans : C:\EMS\backups\ems-db-YYYY-MM-DD-HHMMSS.sql
+✅ Nettoyage auto : supprime backups > 30 jours
+
+# Voir les backups
+dir C:\EMS\backups\
+
+# Restaurer un backup (si besoin)
+docker compose exec db mysql -u extranet -pextranet EMS_DB < \
+  C:\EMS\backups\ems-db-2026-05-15-000000.sql
+```
+
+### Configuration CI/CD (Auto)
+
+```
+✅ GitHub Actions runner installé automatiquement
+✅ Deploy job programmé dans .github/workflows/ci.yml
+
+Workflow :
+1. Développeur git push origin main
+2. GitHub Actions lance tests (pytest + vitest)
+3. Si tests OK → redéploiement automatique du serveur
+4. Si tests FAIL → pas de déploiement (sécurité)
+
+Logs : https://github.com/princedusalem/Elite-capital-EMS/actions
+```
+
+---
+
+## 🐛 Si Ça Ne Fonctionne Pas...
+
+### Application ne démarre pas
+```powershell
+# 1. Voir l'état
+.\manage-ems.ps1 status
+
+# 2. Voir les erreurs
+.\manage-ems.ps1 logs | head -50
+
+# 3. Redémarrer proprement
+.\manage-ems.ps1 stop
+.\manage-ems.ps1 start
+```
+
+### Port déjà utilisé (5173 ou 8000)
+```powershell
+# Redémarrer Docker
+.\manage-ems.ps1 stop
+Start-Sleep -Seconds 5
+.\manage-ems.ps1 start
+```
+
+### Base de données ne connecte pas
+```powershell
+# Tester connexion
+docker compose exec db mysql -u extranet -pextranet -e "SELECT VERSION();"
+
+# Voir les logs DB
+docker compose logs db | head -50
+```
+
+### GitHub runner ne se lance pas
+```
+Check : https://github.com/settings/actions/runners
+Logs  : C:\actions-runner\_diag\
+Solution : Relancer l'installateur ou contact support
+```
+
+---
+
+## 📞 Support
+
+### Documentation Complète
+👉 Voir `EMS_SERVER_INSTALLATION_GUIDE.md` pour :
+- Installation détaillée
+- Configuration des environnements
+- Troubleshooting complet
+- Maintenance régulière
+- Questions fréquentes
+
+### Fichiers de Logs
+```
+C:\ems-install-log.txt        # Installation (conservé)
+C:\ems-install-state.txt      # État d'installation (éphémère)
+C:\EMS\backup.log             # Logs backups
+docker compose logs           # Logs live services
+```
+
+### Contact
+```
+Email : support@elitecapital.com
+Documentation : EMS_SERVER_INSTALLATION_GUIDE.md
+```
+
+---
+
+## ✅ Checklist Finale
+
+Après installation, vérifier :
+
+- [ ] **Application accessible** : http://localhost:5173 en 200 OK
+- [ ] **Backend API** : http://localhost:8000/health en 200 OK
+- [ ] **Database** : `docker compose exec db mysql ... SELECT 1` OK
+- [ ] **Admin user** : Créé et fonctionnel
+- [ ] **Backup** : Au moins 1 fichier dans C:\EMS\backups\
+- [ ] **Services Windows** : Tâche "EMS-Daily-Backup" visible (schtasks)
+- [ ] **Auto-start** : Registry "EMS-AutoStart" présente
+- [ ] **GitHub runner** : Enregistré et online
+- [ ] **Tous les tests** : `.\test-post-install.ps1` = 100% PASS
+
+---
+
+## 🎁 Bonus
+
+### Production Best Practices
+
+```
+✅ Admin password MUST être changé au premier login
+✅ SECRET_KEY régénéré à chaque installation (aléatoire)
+✅ Backups quotidiens à minuit (automatique)
+✅ Redémarrage auto au boot (automatique)
+✅ Logs centralisés pour audit
+✅ CI/CD pour chaque update du code
+```
+
+### Accès pour Autres Utilisateurs
+
+```
+Depuis le même réseau local :
+  http://192.168.x.x:5173
+  
+(Remplacer x.x par l'IP du serveur)
+
+Pour trouver l'IP du serveur :
+  .\manage-ems.ps1 status
+  (regarde les ports 8000 et 5173)
+```
+
+### Monitoring Health
+
+```powershell
+# Vérifier que tout va bien (manuellement)
+Invoke-RestMethod http://localhost:8000/health -UseBasicParsing | ConvertFrom-Json
+
+# Output (exemple):
+# status        : ok
+# service       : ems-backend
+# version       : 1.1
+# deployed_at   : 2026-05-15T11:55:00
+```
+
+---
+
+**Installation Ready** ✅  
+**Version** : 1.1 Stable  
+**Support** : Voir EMS_SERVER_INSTALLATION_GUIDE.md

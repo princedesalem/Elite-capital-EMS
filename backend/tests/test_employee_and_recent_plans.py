@@ -154,7 +154,10 @@ def test_team_space_create_like_and_vote_poll(client):
     poll = create_response.json()
     poll_id = poll['id']
 
-    like_response = client.patch(f'/api/team-space/posts/{poll_id}/like')
+    like_response = client.patch(
+        f'/api/team-space/posts/{poll_id}/like',
+        json={'matricule': '1001'},
+    )
     assert like_response.status_code == 200
     liked = like_response.json()
     assert liked['likes'] == 1

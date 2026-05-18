@@ -1317,6 +1317,7 @@ def update_employee(matricule: str, payload: schemas.EmployeUpdate, request: Req
         'id_direction': getattr(before, 'id_direction', None),
         'id_entite': getattr(before, 'id_entite', None),
         'id_localisation': getattr(before, 'id_localisation', None),
+        'type_contrat': getattr(getattr(before, 'type_contrat', None), 'value', '') or '',
     }
     # Snapshot complet pour la notification admin (capturé avant crud.update_employe
     # car SQLAlchemy met à jour l'objet en mémoire via l'identity map).
@@ -1360,6 +1361,7 @@ def update_employee(matricule: str, payload: schemas.EmployeUpdate, request: Req
                 'id_direction': getattr(e, 'id_direction', None),
                 'id_entite': getattr(e, 'id_entite', None),
                 'id_localisation': getattr(e, 'id_localisation', None),
+                'type_contrat': getattr(getattr(e, 'type_contrat', None), 'value', '') or '',
             }
             _parcours.record_employee_diff(db, str(matricule).strip().upper(), before_snapshot, after_snapshot, actor=actor_matricule)
         except Exception:

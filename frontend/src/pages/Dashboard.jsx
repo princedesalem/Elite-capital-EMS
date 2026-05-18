@@ -3,6 +3,7 @@ import {useAuth} from '../contexts/AuthContext'
 import api from '../services/api'
 import {Settings, FileDown, Download} from 'lucide-react'
 import AIInsightPanel from '../components/AIInsightPanel'
+import AlerteContrat from '../components/AlerteContrat'
 
 
 export const STATUT_COLORS_MAP = {
@@ -347,6 +348,11 @@ export default function Dashboard(){
 
       {!loading && employe && (
         <>
+          {/* Alertes fin de contrat (RH / ADMIN / DG uniquement) */}
+          {['ADMIN', 'RH', 'DG'].includes(normalizedRole) && (
+            <AlerteContrat userMatricule={user?.matricule} />
+          )}
+
           {/* HEADER COMPACT */}
           {widgets.profil !== false && <div style={{
             background: 'linear-gradient(90deg, #02162e 0%, #02162e 50%, #0a2e57 72%, #274a73 100%)',

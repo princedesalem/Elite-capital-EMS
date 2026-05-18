@@ -37,9 +37,9 @@ describe('usePagination', () => {
 
   it('emits a range label', () => {
     const { result } = renderHook(() => usePagination(items, { pageSize: 20 }))
-    expect(result.current.rangeLabel).toBe('120 sur 47')
+    expect(result.current.rangeLabel).toBe('1–20 sur 47')
     act(() => result.current.setPage(3))
-    expect(result.current.rangeLabel).toBe('4147 sur 47')
+    expect(result.current.rangeLabel).toBe('41–47 sur 47')
   })
 
   it('resets to first page when page size changes', () => {

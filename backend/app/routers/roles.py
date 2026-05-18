@@ -8,7 +8,9 @@ router = APIRouter(prefix='/roles', tags=['roles'])
 
 @router.get('/')
 def list_roles(db: Session = Depends(get_db)):
-    return db.query(models.Role).all()
+    # DFC n'est plus un rôle assignable manuellement : il est déduit
+    # automatiquement de la fonction 'Directeur financier et Comptable'.
+    return db.query(models.Role).filter(models.Role.name != 'DFC').all()
 
 
 @router.post('/')

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import AvatarCircle from '../components/AvatarCircle'
+import AlerteContrat from '../components/AlerteContrat'
 import { BarChart2, LogOut, Star, MessageSquare, ThumbsUp, BarChart, Send, Plus, X, ChevronDown, Search, Gift, Users, Briefcase, Clock, MoreVertical, Pencil, Trash2, CheckCircle, Megaphone, Heart, Wifi, UserCheck, WifiOff, RefreshCw } from 'lucide-react'
 import { toast, confirmDialog } from '../components/ui/bridge'
 import { BRAND_GRADIENT } from '../theme'
@@ -684,6 +685,10 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="container">
+        {/* Alertes de contrat */}
+        {['ADMIN', 'RH', 'DG'].includes(roleAffiche) && (
+          <AlerteContrat userMatricule={user?.matricule || user?.sub} />
+        )}
         {/* Welcome Section */}
         <div
           className="card"
