@@ -120,6 +120,10 @@ const HIDDEN_BY_ROLE_KEYS = {
   RESPONSABLE:new Set(['/rh/tasks', '/rh/workforce', '/rh/talent', '/rh/sandbox']),
   DIRECTEUR:  new Set(['/rh/tasks', '/rh/workforce', '/rh/talent', '/rh/sandbox']),
   DG:         new Set(['/rh/tasks', '/rh/workforce', '/rh/talent', '/rh/sandbox']),
+  RH:         new Set(['/rh/sandbox']),
+  DFC:        new Set(['/rh/sandbox']),
+  PCA:        new Set(['/rh/sandbox']),
+  AG:         new Set(['/rh/sandbox']),
 }
 
 function getInitialOpen(pathname) {
@@ -176,6 +180,8 @@ export default function RHLayout() {
     if (sub.path === '/rh/missions-ig') {
       return String(userFonction).toLowerCase().includes('inspecteur')
     }
+    // Sandbox réservé au rôle ADMIN uniquement
+    if (sub.path === '/rh/sandbox') return role === 'ADMIN'
     if (isFullAccessRole || role === 'RH') return true
     const hidden = HIDDEN_BY_ROLE_KEYS[role]
     if (!hidden) return true

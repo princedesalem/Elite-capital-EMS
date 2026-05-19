@@ -115,7 +115,7 @@ export default function App(){
             <Route path="workforce" element={<WorkforcePlanning />} />
             <Route path="talent" element={<TalentManagement />} />
             <Route path="club-review" element={<ClubReview />} />
-            <Route path="sandbox" element={<SandboxPage />} />
+            <Route path="sandbox" element={<ProtectedRoute allowedRoles={["ADMIN"]}><SandboxPage /></ProtectedRoute>} />
             <Route path="audit-logs" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AuditLogPage /></ProtectedRoute>} />
             <Route path="module/:slug" element={<ModulePlaceholder />} />
             <Route path="profile" element={<ProfilePage />} />
