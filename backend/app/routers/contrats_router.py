@@ -68,7 +68,7 @@ def get_alertes(db: Session = Depends(get_db)):
     alertes = (
         db.query(models.AlerteContrat)
         .filter(models.AlerteContrat.statut == models.StatutAlerteContratEnum.ACTIVE)
-        .order_by(models.AlerteContrat.type_alerte.desc(), models.AlerteContrat.date_generee.asc())
+        .order_by(models.AlerteContrat.type_alerte.asc(), models.AlerteContrat.date_generee.asc())
         .all()
     )
     result = []
@@ -108,6 +108,7 @@ def update_contrat_employe(matricule: str, body: ContratUpdateSchema, db: Sessio
     emp = db.query(models.Employe).filter(models.Employe.matricule == matricule).first()
     if not emp:
         raise HTTPException(status_code=404, detail='Employé non trouvé')
+    old_contrat = getattr(emp.type_contrat, 'value', '') or ''
     try:
         emp.type_contrat = models.TypeContratEnum(body.type_contrat)
     except ValueError:
@@ -115,6 +116,18 @@ def update_contrat_employe(matricule: str, body: ContratUpdateSchema, db: Sessio
     emp.date_debut_contrat = body.date_debut_contrat
     emp.date_fin_contrat = body.date_fin_contrat if body.type_contrat != 'CDI' else None
     db.commit()
+    # Enregistrer la promotion dans le parcours si CDD/Stagiaire → CDI
+    new_contrat = body.type_contrat
+    if old_contrat and new_contrat and old_contrat != new_contrat:
+        try:
+            from ..utils import parcours as _parcours
+            _parcours.record_employee_diff(
+                db, matricule,
+                {'type_contrat': old_contrat},
+                {'type_contrat': new_contrat},
+            )
+        except Exception:
+            pass
     return {'ok': True}
 
 
@@ -145,6 +158,7 @@ def action_contrat(matricule: str, body: ActionContratSchema, db: Session = Depe
         a.traite_par = body.fait_par
 
     # Appliquer l'action sur le contrat
+    old_contrat = getattr(emp.type_contrat, 'value', '') or ''
     if body.action == 'renouvellement':
         if not body.date_fin_nouvelle:
             raise HTTPException(status_code=400, detail='date_fin_nouvelle requise pour renouvellement')
@@ -155,6 +169,18 @@ def action_contrat(matricule: str, body: ActionContratSchema, db: Session = Depe
     # arret → ne pas modifier le contrat, juste logger
 
     db.commit()
+    # Enregistrer la promotion dans le parcours si confirmation CDI
+    if body.action == 'confirmation_cdi' and old_contrat and old_contrat != 'CDI':
+        try:
+            from ..utils import parcours as _parcours
+            _parcours.record_employee_diff(
+                db, matricule,
+                {'type_contrat': old_contrat},
+                {'type_contrat': 'CDI'},
+                actor=body.fait_par,
+            )
+        except Exception:
+            pass
     return {'ok': True, 'action': body.action}
 
 
