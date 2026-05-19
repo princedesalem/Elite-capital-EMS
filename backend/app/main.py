@@ -45,22 +45,6 @@ if not audit_logger.handlers:
 async def lifespan(_: FastAPI):
     """Configure startup jobs using lifespan to avoid deprecated startup events."""
     if not os.getenv('TESTING'):
-        # Auto-reset nouvelle_recrue : employés embauchés il y a > 1 an repassent à False
-        try:
-            from .db import SessionLocal as _SL
-            from .models import Employe as _Emp
-            from datetime import date as _date, timedelta as _td
-            _db = _SL()
-            _cutoff = _date.today() - _td(days=365)
-            _db.query(_Emp).filter(
-                _Emp.nouvelle_recrue == True,  # noqa: E712
-                _Emp.date_embauche.isnot(None),
-                _Emp.date_embauche < _cutoff,
-            ).update({'nouvelle_recrue': False}, synchronize_session=False)
-            _db.commit()
-            _db.close()
-        except Exception as e:
-            logging.error(f"Erreur auto-reset nouvelle_recrue: {e}")
         # Auto-migrations : applique les fichiers SQL manquants avant tout
         try:
             from .utils.auto_migrate import run_migrations

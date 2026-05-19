@@ -699,7 +699,7 @@ export default function EmployeeForm(){
               />
               <div>
                 <div style={{fontWeight:700,fontSize:'0.9rem',color:'#15803d'}}>Nouvelle recrue</div>
-                <div style={{fontSize:'0.75rem',color:'#4ade80',marginTop:1}}>Cocher si c&apos;est une nouvelle embauche — comptabilisé dans les statistiques de recrutement{form.nouvelle_recrue&&<span style={{color:'#86efac',marginLeft:6}}>(se réinitialise automatiquement 1 an après la date d&apos;embauche)</span>}</div>
+                <div style={{fontSize:'0.75rem',color:'#4ade80',marginTop:1}}>Cocher si c&apos;est une nouvelle embauche — comptabilisée dans les statistiques de recrutement de l&apos;année d&apos;embauche</div>
               </div>
               <span style={{marginLeft:'auto',fontSize:'0.74rem',color:'#15803d',background:'#dcfce7',padding:'3px 10px',borderRadius:12,fontWeight:700,flexShrink:0}}>Recrutement</span>
             </label>

@@ -233,6 +233,34 @@ def job_verif_contrats():
         db.close()
 
 
+def job_reset_nouvelle_recrue():
+    """
+    Réinitialise nouvelle_recrue=False pour les employés
+    dont la date d'embauche est antérieure d'exactement 1 an ou plus.
+    Tourne chaque nuit à 1h00.
+    """
+    db = SessionLocal()
+    try:
+        cutoff = date.today() - timedelta(days=365)
+        updated = (
+            db.query(Employe)
+            .filter(
+                Employe.nouvelle_recrue == True,  # noqa: E712
+                Employe.date_embauche.isnot(None),
+                Employe.date_embauche <= cutoff,
+            )
+            .update({'nouvelle_recrue': False}, synchronize_session=False)
+        )
+        db.commit()
+        if updated:
+            print(f"[{datetime.now()}] {updated} employé(s) : nouvelle_recrue remis à False.")
+    except Exception as e:
+        print(f"[{datetime.now()}] Erreur reset nouvelle_recrue: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def job_relances_15min():
     """Relances toutes les 15 minutes en heures ouvrées (L-V 8h-18h).
 
@@ -319,7 +347,14 @@ def configurer_scheduler():
         name='Vérification fins de contrat (8h05)',
         replace_existing=True
     )
-
+    # Reset nouvelle_recrue chaque nuit à 1h00
+    scheduler.add_job(
+        job_reset_nouvelle_recrue,
+        CronTrigger(hour=1, minute=0),
+        id='job_reset_nouvelle_recrue',
+        name='Reset nouvelle recrue (nuit 1h00)',
+        replace_existing=True
+    )
     # Relances toutes les 15 minutes (filtre interne heures ouvr\u00e9es L-V 8h-18h)
     scheduler.add_job(
         job_relances_15min,
