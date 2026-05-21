@@ -2,8 +2,10 @@ from datetime import date
 from io import BytesIO
 
 import pandas as pd
+from openpyxl import load_workbook
 
 from app.routers.employees import AccessImportError
+from app.utils.employee_excel import COLUMNS, workbook_bytes
 
 
 def test_import_employees_csv(client, seed_reference_data, auth_headers):
@@ -65,6 +67,61 @@ def test_import_employees_xlsx(client, seed_reference_data, auth_headers):
     assert check.json()['contact_urgence'] == '+237688000000'
 
 
+def test_import_employees_styled_xlsx_with_new_fields(client, seed_reference_data, auth_headers):
+    stream = workbook_bytes(rows=[{
+        'matricule': '8893',
+        'nom': 'Styled',
+        'prenom': 'Import',
+        'email': '8893@example.com',
+        'telephone': '+237611223344',
+        'sexe': 'F',
+        'date_naissance': '1996-01-15',
+        'date_embauche': '2026-02-06',
+        'entite': 'ELCAM',
+        'direction': 'Direction Generale',
+        'departement': 'Operations',
+        'fonction': 'Analyste',
+        'categorie': 'Cadre moyen',
+        'role': 'EMPLOYE',
+        'n1_fonction': '',
+        'ville': 'Douala',
+        'contact_urgence': '+237655443322',
+        'diplome': 'Master',
+        'solde_conges': '7',
+        'statut_matrimonial': 'Celibataire',
+        'nombre_enfants': '1',
+        'salaire_brut': '350000',
+        'salaire_devise': 'XAF',
+        'annee_experience': '4',
+        'statut_employe': 'ACTIF',
+        'type_contrat': 'CDD',
+        'date_debut_contrat': '2026-02-06',
+        'date_fin_contrat': '2026-12-31',
+        'nouvelle_recrue': 'TRUE',
+    }], mode='export')
+
+    files = {
+        'file': ('employees_styled.xlsx', stream.getvalue(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    }
+
+    response = client.post('/employees/import', files=files, headers=auth_headers(9001, 'ADMIN'))
+    assert response.status_code == 200
+    assert response.json()['imported_rows'] == 1
+
+    check = client.get('/employees/8893', headers=auth_headers(9001, 'ADMIN'))
+    assert check.status_code == 200
+    payload = check.json()
+    assert payload['contact_urgence'] == '+237655443322'
+    assert payload['statut_matrimonial'] == 'Celibataire'
+    assert payload['nombre_enfants'] == 1
+    assert payload['salaire_devise'] == 'XAF'
+    assert float(payload['salaire_brut']) == 350000.0
+    assert payload['type_contrat'] == 'CDD'
+    assert payload['date_debut_contrat'] == '2026-02-06'
+    assert payload['date_fin_contrat'] == '2026-12-31'
+    assert payload['nouvelle_recrue'] is True
+
+
 def test_export_employees_csv(client, seed_reference_data, auth_headers):
     response = client.get('/employees/export?format=csv', headers=auth_headers(9001, 'ADMIN'))
     assert response.status_code == 200
@@ -73,6 +130,10 @@ def test_export_employees_csv(client, seed_reference_data, auth_headers):
     text = response.content.decode('utf-8')
     assert 'matricule,nom,prenom,email' in text
     assert 'contact_urgence' in text
+    assert 'type_contrat' in text
+    assert 'date_debut_contrat' in text
+    assert 'date_fin_contrat' in text
+    assert 'nouvelle_recrue' in text
 
 
 def test_export_employees_xlsx(client, seed_reference_data, auth_headers):
@@ -80,6 +141,16 @@ def test_export_employees_xlsx(client, seed_reference_data, auth_headers):
     assert response.status_code == 200
     assert response.headers.get('content-disposition') == 'attachment; filename=employees_export.xlsx'
     assert len(response.content) > 100
+
+    wb = load_workbook(BytesIO(response.content))
+    assert wb.sheetnames[:3] == ['Employés', 'Instructions', 'Référence']
+
+    ws = wb['Employés']
+    assert str(ws['A1'].value).startswith('EXPORT EMPLOYÉS — EMS')
+    expected_headers = [f"{label} *" if required else label for _key, label, required, _width, _note in COLUMNS]
+    actual_headers = [ws.cell(row=3, column=i).value for i in range(1, len(COLUMNS) + 1)]
+    assert actual_headers == expected_headers
+    assert ws['A4'].value is not None
 
 
 def test_import_employees_mdb(client, seed_reference_data, auth_headers, monkeypatch):

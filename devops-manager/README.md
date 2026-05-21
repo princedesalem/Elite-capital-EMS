@@ -7,6 +7,10 @@ le versioning et les déploiements de l'extranet EMS.
 
 Double-cliquez sur `start.bat`. L'interface s'ouvre sur `http://127.0.0.1:9000`.
 
+Pour creer un raccourci bureau avec icone dediee, executez :
+
+`powershell -ExecutionPolicy Bypass -File .\create-desktop-shortcut.ps1`
+
 Au premier lancement, un venv Python est créé et les dépendances installées
 (FastAPI, Uvicorn, httpx).
 

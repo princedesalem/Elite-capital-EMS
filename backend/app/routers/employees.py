@@ -16,6 +16,7 @@ import pandas as pd
 from ..utils.access_parser import AccessImportError, read_access_dataframe
 from ..utils import notifications as notifications_utils
 from ..utils import email as email_utils
+from ..utils.employee_excel import canonical_import_header, column_keys, workbook_bytes
 
 router = APIRouter(prefix='/employees', tags=['employees'])
 
@@ -643,50 +644,9 @@ def _clean_import_value(value):
 
 
 def _normalize_import_row(raw_row: dict):
-    aliases = {
-        'matricule': 'matricule',
-        'nom': 'nom',
-        'prenom': 'prenom',
-        'date_naissance': 'date_naissance',
-        'date de naissance': 'date_naissance',
-        'sexe': 'sexe',
-        'telephone': 'telephone',
-        'téléphone': 'telephone',
-        'email': 'email',
-        'departement': 'departement',
-        'département': 'departement',
-        'fonction': 'fonction',
-        'ville': 'ville',
-        'contact_urgence': 'contact_urgence',
-        'contact urgence': 'contact_urgence',
-        'diplome': 'diplome',
-        'diplôme': 'diplome',
-        'solde_conges': 'solde_conges',
-        'solde congés': 'solde_conges',
-        'date_embauche': 'date_embauche',
-        'date embauche': 'date_embauche',
-        'entite': 'entite',
-        'entité': 'entite',
-        'role': 'role',
-        'rôle': 'role',
-        'direction': 'direction',
-        'categorie': 'categorie',
-        'catégorie': 'categorie',
-        'n1': 'n1',
-        'n1_fonction': 'n1_fonction',
-        'annee_experience': 'annee_experience',
-        'année_experience': 'annee_experience',
-        'statut_employe': 'statut_employe',
-        'statut employe': 'statut_employe',
-        'statut_matrimonial': 'statut_matrimonial',
-        'statut matrimonial': 'statut_matrimonial',
-        'nombre_enfants': 'nombre_enfants',
-        'nombre d\'enfants': 'nombre_enfants',
-    }
     result = {}
     for key, value in (raw_row or {}).items():
-        normalized_key = str(key or '').strip().lower()
-        mapped = aliases.get(normalized_key)
+        mapped = canonical_import_header(key)
         if not mapped:
             continue
         cleaned_value = _clean_import_value(value)
@@ -709,7 +669,12 @@ def _read_import_dataframe(upload: UploadFile, table: Optional[str] = None):
         if filename.endswith('.csv'):
             return pd.read_csv(BytesIO(content), sep=None, engine='python', dtype=str, keep_default_na=False), None
         if filename.endswith('.xlsx'):
-            return pd.read_excel(BytesIO(content), engine='openpyxl', dtype=str, keep_default_na=False), None
+            workbook = pd.ExcelFile(BytesIO(content), engine='openpyxl')
+            sheet_name = 'Employés' if 'Employés' in workbook.sheet_names else workbook.sheet_names[0]
+            preview = pd.read_excel(BytesIO(content), engine='openpyxl', sheet_name=sheet_name, header=None, nrows=3, dtype=str, keep_default_na=False)
+            header_row = 2 if preview.shape[0] >= 3 and any(canonical_import_header(v) for v in preview.iloc[2].tolist()) else 0
+            df = pd.read_excel(BytesIO(content), engine='openpyxl', sheet_name=sheet_name, header=header_row, dtype=str, keep_default_na=False)
+            return df, None
         if filename.endswith('.xls'):
             return pd.read_excel(BytesIO(content), engine='xlrd', dtype=str, keep_default_na=False), None
         if filename.endswith('.mdb') or filename.endswith('.accdb'):
@@ -726,56 +691,13 @@ def _read_import_dataframe(upload: UploadFile, table: Optional[str] = None):
 
 def _employee_export_rows(db: Session):
     employees = db.query(models.Employe).all()
-    # Build n+1 name cache
-    n1_cache: dict = {}
     rows = []
     for e in employees:
-        data = _serialize_employee(e, db)
-        # Resolve localisation name (city + country)
-        localisation_nom = ''
-        if data.get('ville') and data.get('pays'):
-            localisation_nom = f"{data['ville']}, {data['pays']}"
-        elif data.get('ville'):
-            localisation_nom = data['ville']
-        elif data.get('pays'):
-            localisation_nom = data['pays']
-
-        # Resolve n+1 name
-        n1_mat = e.n1
-        n1_nom = ''
-        if n1_mat:
-            if n1_mat not in n1_cache:
-                n1_emp = db.query(models.Employe).filter(models.Employe.matricule == n1_mat).first()
-                n1_cache[n1_mat] = f"{n1_emp.prenom or ''} {n1_emp.nom or ''}".strip() if n1_emp else str(n1_mat)
-            n1_nom = n1_cache[n1_mat]
-
-        rows.append({
-            'matricule': data.get('matricule'),
-            'nom': data.get('nom'),
-            'prenom': data.get('prenom'),
-            'email': data.get('email'),
-            'date_naissance': data.get('date_naissance'),
-            'sexe': data.get('sexe'),
-            'telephone': data.get('telephone'),
-            'fonction': data.get('fonction'),
-            'departement': data.get('departement'),
-            'direction': data.get('direction'),
-            'entite': data.get('entite'),
-            'role': data.get('role'),
-            'pays': data.get('pays'),
-            'ville': data.get('ville'),
-            'localisation': localisation_nom,
-            'diplome': data.get('diplome'),
-            'contact_urgence': data.get('contact_urgence'),
-            'date_embauche': data.get('date_embauche'),
-            'solde_conges': data.get('solde_conges'),
-            'categorie': data.get('categorie'),
-            'annee_experience': data.get('annee_experience'),
-            'statut_employe': data.get('statut_employe'),
-            'superieur_hierarchique': n1_nom,
-            'statut_matrimonial': data.get('statut_matrimonial'),
-            'nombre_enfants': data.get('nombre_enfants'),
-        })
+        data = _serialize_employee(e, db, viewer_role='ADMIN')
+        row = {key: data.get(key) for key in column_keys()}
+        if isinstance(row.get('nouvelle_recrue'), bool):
+            row['nouvelle_recrue'] = 'TRUE' if row['nouvelle_recrue'] else 'FALSE'
+        rows.append(row)
     return rows
 
 
@@ -999,12 +921,7 @@ def export_employees(
 
     rows = _employee_export_rows(db)
     if format == 'csv':
-        columns = [
-            'matricule', 'nom', 'prenom', 'email', 'date_naissance', 'sexe', 'telephone',
-            'fonction', 'departement', 'direction', 'entite', 'role', 'pays', 'ville', 'localisation', 'diplome', 'contact_urgence',
-            'date_embauche', 'solde_conges', 'categorie', 'annee_experience', 'statut_employe', 'superieur_hierarchique',
-            'statut_matrimonial', 'nombre_enfants'
-        ]
+        columns = column_keys()
         df = pd.DataFrame(rows, columns=columns)
         payload = df.to_csv(index=False).encode('utf-8')
         return StreamingResponse(
@@ -1013,13 +930,12 @@ def export_employees(
             headers={'Content-Disposition': 'attachment; filename=employees_export.csv'}
         )
 
-    df = pd.DataFrame(rows)
-    stream = BytesIO()
     if format == 'xlsx':
-        with pd.ExcelWriter(stream, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='employees')
+        stream = workbook_bytes(rows=rows, mode='export')
         filename = 'employees_export.xlsx'
     else:
+        stream = BytesIO()
+        df = pd.DataFrame(rows, columns=column_keys())
         with pd.ExcelWriter(stream, engine='xlwt') as writer:
             df.to_excel(writer, index=False, sheet_name='employees')
         filename = 'employees_export.xls'

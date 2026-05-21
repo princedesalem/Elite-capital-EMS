@@ -1020,5 +1020,5 @@ if __name__ == "__main__":
 
     BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
     print(f"[DevOps Manager] Projet : {PROJECT_ROOT}")
-    print(f"[DevOps Manager] UI     : http://127.0.0.1:9000")
-    uvicorn.run(app, host="127.0.0.1", port=9000, log_level="info")
+    print(f"[DevOps Manager] UI     : http://192.168.3.186:9000")
+    uvicorn.run(app, host="0.0.0.0", port=9000, log_level="info")
