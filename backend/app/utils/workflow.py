@@ -274,37 +274,7 @@ def obtenir_validateur_pour_role(
             if utilisateur:
                 return utilisateur.matricule
     
-    elif role == 'DFC':
-        # Priorité 1 : trouver par fonction (source de vérité, pas par rôle assigné)
-        # même entité d'abord
-        if employe.id_entite:
-            emp_dfc = db.query(Employe).join(
-                Utilisateur, Utilisateur.matricule == Employe.matricule
-            ).filter(
-                Employe.fonction.ilike('%directeur financier%'),
-                Employe.id_entite == employe.id_entite
-            ).first()
-            if emp_dfc:
-                return emp_dfc.matricule
-        # toutes entités
-        emp_dfc = db.query(Employe).join(
-            Utilisateur, Utilisateur.matricule == Employe.matricule
-        ).filter(
-            Employe.fonction.ilike('%directeur financier%')
-        ).first()
-        if emp_dfc:
-            return emp_dfc.matricule
-        # Fallback compatibilité descendante : chercher via role_id
-        role_obj = db.query(Role).filter(Role.name == 'DFC').first()
-        if role_obj:
-            u = db.query(Utilisateur).filter(Utilisateur.role_id == role_obj.id).first()
-            if u:
-                return u.matricule
-            emp_v = db.query(Employe).filter(Employe.id_role == role_obj.id).first()
-            if emp_v:
-                return emp_v.matricule
-
-    elif role in ['RH', 'DG', 'PCA', 'AG']:
+    elif role in ['RH', 'DFC', 'DG', 'PCA', 'AG']:
         # PCA et AG sont interchangeables : un seul rôle terminal existe généralement
         roles_candidats = [role]
         if role == 'AG':
@@ -842,6 +812,39 @@ def verifier_role_employe(matricule: str, role_name: str, db: Session) -> bool:
     return role_employe == role_recherche
 
 
+def est_dans_dept_ou_direction_rh(matricule: str, db: Session) -> bool:
+    """
+    Retourne True si l'employé appartient à un département ou une direction
+    dont le nom contient 'ressources humaines' (insensible à la casse).
+    """
+    employe = db.query(Employe).filter(Employe.matricule == matricule).first()
+    if not employe:
+        return False
+    if employe.dept_id:
+        dept = db.query(Departement).filter(Departement.dept_id == employe.dept_id).first()
+        if dept and 'ressources humaines' in (dept.nom or '').lower():
+            return True
+    if employe.id_direction:
+        direction = db.query(Direction).filter(Direction.id_direction == employe.id_direction).first()
+        if direction and 'ressources humaines' in (direction.nom or '').lower():
+            return True
+    return False
+
+
+def obtenir_recu_rh_lecture(db: Session) -> list:
+    """
+    Retourne toutes les opérations en attente dont le prochain validateur requis
+    est le rôle 'RH', pour affichage en lecture seule aux employés du département RH.
+    """
+    operations = db.query(Operation).order_by(Operation.date_demande.desc()).all()
+    result = []
+    for op in operations:
+        prochain_role, _ = obtenir_prochain_validateur(op.id_operation, db)
+        if prochain_role == 'RH':
+            result.append(op)
+    return result
+
+
 def obtenir_role_validateur(matricule: str, db: Session) -> str:
     """
     Obtient le rôle d'un validateur.
@@ -866,11 +869,6 @@ def obtenir_role_validateur(matricule: str, db: Session) -> str:
         role = db.query(Role).filter(Role.id == employe_obj.id_role).first()
         if role:
             return _normaliser_role(role.name)
-
-    # Déduction DFC par fonction : pas besoin d'assignation manuelle du rôle
-    if employe_obj and employe_obj.fonction:
-        if 'directeur financier' in employe_obj.fonction.lower():
-            return 'DFC'
     
     return 'EMPLOYE'
 

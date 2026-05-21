@@ -328,7 +328,12 @@ def valider_operation(
     # Vérifier que le motif de refus est obligatoire lors d'un refus
     if statut == 'refusé' and (not commentaire or not commentaire.strip()):
         raise HTTPException(status_code=400, detail="Le motif de refus est obligatoire")
-    
+
+    # Employés du département RH qui n'ont pas le rôle RH → accès lecture seule
+    role_validateur_courant = wf_utils.obtenir_role_validateur(matricule_validateur, db)
+    if role_validateur_courant not in ('RH', 'ADMIN') and wf_utils.est_dans_dept_ou_direction_rh(matricule_validateur, db):
+        raise HTTPException(status_code=403, detail="Accès en lecture seule — seul le responsable RH peut valider")
+
     success, message = wf_utils.valider_operation(
         id_operation, matricule_validateur, statut, commentaire, db
     )
@@ -640,12 +645,27 @@ def obtenir_boite_workflow(matricule: str, db: Session = Depends(get_db)):
 
                 recu_pca_ag = [_serialize_operation_with_demandeur(op, db) for op in ops_pca_ag]
 
+    # Visibilité RH lecture seule : employés du département/direction RH
+    # qui n'ont pas eux-mêmes le rôle RH (ceux-là ont déjà la boîte "recu" standard)
+    est_dept_rh = (
+        role_utilisateur not in ('RH', 'ADMIN')
+        and wf_utils.est_dans_dept_ou_direction_rh(matricule, db)
+    )
+    recu_rh_lecture = []
+    if est_dept_rh:
+        recu_rh_lecture = [
+            _serialize_operation_with_demandeur(op, db)
+            for op in wf_utils.obtenir_recu_rh_lecture(db)
+        ]
+
     return {
         'envoye': envoye,
         'recu': recu,
         'valide': valide,
         'refuse': refuse,
         'recu_pca_ag': recu_pca_ag,
+        'est_dept_rh': est_dept_rh,
+        'recu_rh_lecture': recu_rh_lecture,
     }
 
 

@@ -22,6 +22,8 @@ export default function WorkflowPage() {
   const [aValider, setAValider] = useState([])
   const [mesValidations, setMesValidations] = useState([])
   const [mesRefus, setMesRefus] = useState([])
+  const [estDeptRh, setEstDeptRh] = useState(false)
+  const [recuRhLecture, setRecuRhLecture] = useState([])
 
   const [selectedOperation, setSelectedOperation] = useState(null)
   const [selectedOperationDetails, setSelectedOperationDetails] = useState(null)
@@ -146,6 +148,8 @@ export default function WorkflowPage() {
         setAValider(dedup(boite.data.recu))
         setMesValidations(dedup(boite.data.valide))
         setMesRefus(dedup(boite.data.refuse))
+        setEstDeptRh(!!boite.data.est_dept_rh)
+        setRecuRhLecture(dedup(boite.data.recu_rh_lecture))
       } else {
         const [mes, valider, validations, refus] = await Promise.all([
           api.get(`/api/workflow/mes-demandes/${matricule}`).catch(() => ({ data: [] })),
@@ -274,6 +278,12 @@ export default function WorkflowPage() {
                 <div style={{ fontSize: '0.72rem', color: '#991b1b', textTransform: 'uppercase' }}>{"Refusé par moi"}</div>
                 <div style={{ fontWeight: 700, color: '#7f1d1d' }}>{mesRefus.length}</div>
               </div>
+              {estDeptRh && (
+                <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '8px' }}>
+                  <div style={{ fontSize: '0.72rem', color: '#0369a1', textTransform: 'uppercase' }}>{"Reçu RH — Lecture"}</div>
+                  <div style={{ fontWeight: 700, color: '#075985' }}>{recuRhLecture.length}</div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -487,6 +497,31 @@ export default function WorkflowPage() {
                             {o.motif_refus && <p style={{ fontSize: '0.72em', color: '#c0392b', fontStyle: 'italic' }}>Motif: {o.motif_refus}</p>}
                           </div>
                         ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Reçu RH — Lecture seule (employés du département RH sans rôle validateur RH) */}
+              {estDeptRh && recuRhLecture.length > 0 && (
+                <>
+                  <div style={{ marginTop: '14px', marginBottom: '8px' }}>
+                    <h3 style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: 6, color: '#0369a1' }}>
+                      👁 Reçu RH — Lecture seule
+                      <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#64748b', background: '#f1f5f9', borderRadius: '999px', padding: '2px 8px', marginLeft: 4 }}>Consultation uniquement</span>
+                    </h3>
+                  </div>
+                  <div className="kanban-grid">
+                    <div className="kanban-col" style={{ background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+                      <h3 style={{ color: '#0369a1' }}>En attente validation RH ({recuRhLecture.length})</h3>
+                      {recuRhLecture.map(o => (
+                        <div key={`rh-${o.id_operation}`} className="kanban-card" onClick={() => handleSelectOp(o.id_operation)} style={{ cursor: 'pointer', borderLeft: '3px solid #0369a1' }}>
+                          <span className={seenOps.has(String(o.id_operation)) ? 'kanban-badge-seen' : 'kanban-badge-new'} aria-label={seenOps.has(String(o.id_operation)) ? 'vu' : 'nouveau'} />
+                          <p><strong>#{o.id_operation}</strong> – {o.type_demande}</p>
+                          <p style={{ fontSize: '0.8em', color: '#64748b', marginBottom: 0 }}>{o.demandeur?.nom_complet || o.demandeur?.nom || 'N/A'}</p>
+                          <p style={{ fontSize: '0.72em', color: '#0369a1', marginTop: '2px' }} title="Consultation uniquement">👁 Lecture seule</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </>
