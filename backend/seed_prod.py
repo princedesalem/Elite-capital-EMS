@@ -1,0 +1,197 @@
+"""
+seed_prod.py — Initialise les données système ELITE CAPITAL pour la production.
+
+Usage (depuis le container backend):
+    python3 /app/seed_prod.py
+
+Idempotent : peut être relancé sans risque, ne duplique rien.
+"""
+import sys
+sys.path.insert(0, '/app')
+
+from app.db import SessionLocal
+import sqlalchemy as sa
+
+db = SessionLocal()
+
+def upsert(table, pk_col, rows):
+    """Insert les lignes manquantes uniquement (par clé primaire)."""
+    inserted = 0
+    for row in rows:
+        pk_val = row[pk_col]
+        exists = db.execute(
+            sa.text(f'SELECT 1 FROM `{table}` WHERE `{pk_col}` = :v'),
+            {'v': pk_val}
+        ).fetchone()
+        if not exists:
+            cols = ', '.join(f'`{k}`' for k in row)
+            placeholders = ', '.join(f':{k}' for k in row)
+            db.execute(sa.text(f'INSERT INTO `{table}` ({cols}) VALUES ({placeholders})'), row)
+            inserted += 1
+    db.commit()
+    print(f'  {table}: {inserted} insérées ({len(rows) - inserted} déjà présentes)')
+
+print('\n=== SEED DONNÉES SYSTÈME ELITE CAPITAL ===\n')
+
+# ── PAYS ──────────────────────────────────────────────────────────────────────
+upsert('PAYS', 'id_pays', [
+    {'id_pays': 1, 'nom_pays': 'Cameroun',                  'code_pays': 'CM'},
+    {'id_pays': 2, 'nom_pays': 'Gabon',                     'code_pays': 'GA'},
+    {'id_pays': 3, 'nom_pays': 'Congo',                     'code_pays': 'CG'},
+    {'id_pays': 4, 'nom_pays': 'Tchad',                     'code_pays': 'TD'},
+    {'id_pays': 6, 'nom_pays': 'Guinée équatoriale',        'code_pays': 'GQ'},
+    {'id_pays': 8, 'nom_pays': 'République centrafricaine', 'code_pays': 'CF'},
+])
+
+# ── ENTITE ────────────────────────────────────────────────────────────────────
+upsert('ENTITE', 'id_entite', [
+    {'id_entite': 1, 'nom': 'ELCAM'},
+    {'id_entite': 2, 'nom': 'EXCA'},
+    {'id_entite': 3, 'nom': 'ECG'},
+])
+
+# ── LOCALISATION ──────────────────────────────────────────────────────────────
+upsert('LOCALISATION', 'id_localisation', [
+    {'id_localisation': 1, 'ville': 'Yaoundé',    'id_pays': 1},
+    {'id_localisation': 2, 'ville': 'Douala',     'id_pays': 1},
+    {'id_localisation': 3, 'ville': 'Libreville', 'id_pays': 2},
+    {'id_localisation': 4, 'ville': 'Brazzaville','id_pays': 3},
+])
+
+# ── DIRECTION ─────────────────────────────────────────────────────────────────
+upsert('DIRECTION', 'id_direction', [
+    {'id_direction':  1, 'nom': 'Direction de la Distribution',           'id_entite': 1, 'id_localisation': 1, 'id_directeur': None},
+    {'id_direction':  2, 'nom': 'Conformité et Controle Interne',         'id_entite': 2, 'id_localisation': 1, 'id_directeur': None},
+    {'id_direction':  3, 'nom': 'Developpement et Investissement',        'id_entite': 2, 'id_localisation': 1, 'id_directeur': None},
+    {'id_direction':  4, 'nom': 'Conseils et Financements Structurés',    'id_entite': 2, 'id_localisation': 1, 'id_directeur': None},
+    {'id_direction':  5, 'nom': 'Audit Interne et Inspection Générale',   'id_entite': 3, 'id_localisation': 1, 'id_directeur': None},
+    {'id_direction':  6, 'nom': 'Direction Financière et Comptable',      'id_entite': 3, 'id_localisation': 1, 'id_directeur': None},
+    {'id_direction':  7, 'nom': 'Organisation et Projets',                'id_entite': 3, 'id_localisation': 1, 'id_directeur': None},
+    {'id_direction': 22, 'nom': 'Conformité et Controle Interne',         'id_entite': 1, 'id_localisation': 1, 'id_directeur': None},
+])
+
+# ── DEPARTEMENT ───────────────────────────────────────────────────────────────
+upsert('DEPARTEMENT', 'dept_id', [
+    {'dept_id':  1, 'nom': 'Distribution Grandes Entreprises, Institutions et Fortunes', 'id_entite': 1, 'id_direction':  1, 'id_responsable': None},
+    {'dept_id':  2, 'nom': 'Distribution particuliers et PME',                           'id_entite': 1, 'id_direction':  1, 'id_responsable': None},
+    {'dept_id':  3, 'nom': 'Gestion et Analyse de portefeuille',                         'id_entite': 1, 'id_direction': None, 'id_responsable': None},
+    {'dept_id':  4, 'nom': 'Middle et Back Office',                                      'id_entite': 1, 'id_direction': None, 'id_responsable': None},
+    {'dept_id':  8, 'nom': 'Pool Grandes Entreprises & Fortunes',                        'id_entite': 2, 'id_direction':  3, 'id_responsable': None},
+    {'dept_id':  9, 'nom': 'Pool Particuliers & PME',                                    'id_entite': 2, 'id_direction':  3, 'id_responsable': None},
+    {'dept_id': 10, 'nom': 'Financement & Structuration',                                'id_entite': 2, 'id_direction':  4, 'id_responsable': None},
+    {'dept_id': 11, 'nom': 'Middle & Back Office',                                       'id_entite': 2, 'id_direction': None, 'id_responsable': None},
+    {'dept_id': 12, 'nom': 'Trésorerie(ALM)',                                            'id_entite': 2, 'id_direction': None, 'id_responsable': None},
+    {'dept_id': 16, 'nom': 'Inspection Generale',                                        'id_entite': 3, 'id_direction':  5, 'id_responsable': None},
+    {'dept_id': 17, 'nom': 'Audit interne',                                              'id_entite': 3, 'id_direction':  5, 'id_responsable': None},
+    {'dept_id': 18, 'nom': 'Comptabilité',                                               'id_entite': 3, 'id_direction':  6, 'id_responsable': None},
+    {'dept_id': 19, 'nom': 'Trésorerie et Financement',                                  'id_entite': 3, 'id_direction':  6, 'id_responsable': None},
+    {'dept_id': 20, 'nom': 'Controle de gestion',                                        'id_entite': 3, 'id_direction':  6, 'id_responsable': None},
+    {'dept_id': 21, 'nom': 'Ressources Humaines',                                        'id_entite': 3, 'id_direction': None, 'id_responsable': None},
+    {'dept_id': 22, 'nom': 'Affaires Juridiques & Fiscalité',                            'id_entite': 3, 'id_direction': None, 'id_responsable': None},
+    {'dept_id': 23, 'nom': 'Communication Marketing et Relations Publiques',             'id_entite': 3, 'id_direction': None, 'id_responsable': None},
+    {'dept_id': 24, 'nom': "Gestion des Projets et Systèmes d'Informations",             'id_entite': 3, 'id_direction':  7, 'id_responsable': None},
+    {'dept_id': 25, 'nom': 'Marketing Digital et Opérationnel',                          'id_entite': 3, 'id_direction': None, 'id_responsable': None},
+    {'dept_id': 26, 'nom': 'Moyens Généraux',                                            'id_entite': 3, 'id_direction': None, 'id_responsable': None},
+    {'dept_id': 33, 'nom': 'Développement Commercial',                                   'id_entite': 1, 'id_direction': None, 'id_responsable': None},
+    {'dept_id': 34, 'nom': 'Développement Commercial',                                   'id_entite': 2, 'id_direction': None, 'id_responsable': None},
+    {'dept_id': 35, 'nom': 'Dévelopement commercial ELCAM',                              'id_entite': 1, 'id_direction': None, 'id_responsable': None},
+    {'dept_id': 36, 'nom': 'Dévelopement commercial EXCA',                               'id_entite': 2, 'id_direction': None, 'id_responsable': None},
+])
+
+# ── IMPLANTATION ──────────────────────────────────────────────────────────────
+# Table de jointure ENTITE <-> LOCALISATION (clé composite, pas d'auto-id)
+implantations = [
+    {'id_localisation': 1, 'id_entite': 1},
+    {'id_localisation': 2, 'id_entite': 1},
+    {'id_localisation': 3, 'id_entite': 1},
+    {'id_localisation': 4, 'id_entite': 1},
+    {'id_localisation': 1, 'id_entite': 2},
+    {'id_localisation': 2, 'id_entite': 2},
+    {'id_localisation': 3, 'id_entite': 2},
+    {'id_localisation': 4, 'id_entite': 2},
+    {'id_localisation': 1, 'id_entite': 3},
+]
+inserted = 0
+for row in implantations:
+    exists = db.execute(sa.text(
+        'SELECT 1 FROM Implantation WHERE id_localisation=:l AND id_entite=:e'
+    ), {'l': row['id_localisation'], 'e': row['id_entite']}).fetchone()
+    if not exists:
+        db.execute(sa.text(
+            'INSERT INTO Implantation (id_localisation, id_entite) VALUES (:l, :e)'
+        ), {'l': row['id_localisation'], 'e': row['id_entite']})
+        inserted += 1
+db.commit()
+print(f'  Implantation: {inserted} insérées ({len(implantations) - inserted} déjà présentes)')
+
+# ── FONCTION_REFERENCE ────────────────────────────────────────────────────────
+upsert('FONCTION_REFERENCE', 'id_fonction', [
+    {'id_fonction':   1, 'libelle': 'Administrateur Général',                                                      'id_direction': None, 'dept_id': None},
+    {'id_fonction':   2, 'libelle': 'Directeur Audit Interne et Inspection Générale',                              'id_direction': None, 'dept_id': None},
+    {'id_fonction':   3, 'libelle': 'Inspecteur Générale(IG)',                                                     'id_direction': None, 'dept_id': None},
+    {'id_fonction':   4, 'libelle': 'Auditeur',                                                                    'id_direction':    5, 'dept_id':   17},
+    {'id_fonction':   5, 'libelle': 'Représentants Résidents et responsables de la creation et relation d\'affaires','id_direction': None, 'dept_id': None},
+    {'id_fonction':   6, 'libelle': 'Directeur financier et Comptable(DFC)',                                       'id_direction': None, 'dept_id': None},
+    {'id_fonction':   7, 'libelle': 'comptable et responsable contrôle et consolidation',                          'id_direction':    6, 'dept_id':   18},
+    {'id_fonction':   8, 'libelle': 'responsable Trésorerie et financement',                                       'id_direction': None, 'dept_id': None},
+    {'id_fonction':   9, 'libelle': 'contrôleur de gestion',                                                       'id_direction': None, 'dept_id': None},
+    {'id_fonction':  10, 'libelle': 'comptable',                                                                   'id_direction':    6, 'dept_id':   18},
+    {'id_fonction':  11, 'libelle': 'Responsable des Ressources Humaines',                                         'id_direction': None, 'dept_id':   21},
+    {'id_fonction':  12, 'libelle': 'chargé des resources humaines',                                               'id_direction': None, 'dept_id':   21},
+    {'id_fonction':  13, 'libelle': 'responsable communication et relation publiques',                             'id_direction':    7, 'dept_id':   23},
+    {'id_fonction':  14, 'libelle': 'chargé community management accueil et courrier',                             'id_direction': None, 'dept_id': None},
+    {'id_fonction':  15, 'libelle': 'infographiste et déploiement',                                                'id_direction':    7, 'dept_id':   23},
+    {'id_fonction':  16, 'libelle': 'Responsable affaires juridiques & fiscalité',                                 'id_direction': None, 'dept_id':   22},
+    {'id_fonction':  17, 'libelle': 'chargé de la fiscalité',                                                      'id_direction': None, 'dept_id':   22},
+    {'id_fonction':  18, 'libelle': 'Directeur des Organisations et projets',                                      'id_direction': None, 'dept_id': None},
+    {'id_fonction':  19, 'libelle': "Responsable des systèmes d'information",                                      'id_direction':    7, 'dept_id':   24},
+    {'id_fonction':  20, 'libelle': 'chargé des organisations et projets',                                         'id_direction':    7, 'dept_id':   24},
+    {'id_fonction':  21, 'libelle': 'chargé marketing digital opérationnel',                                       'id_direction':    7, 'dept_id': None},
+    {'id_fonction':  22, 'libelle': 'chargé des moyens généraux',                                                  'id_direction': None, 'dept_id':   26},
+    {'id_fonction':  23, 'libelle': 'Administrateur Directeur Général',                                            'id_direction': None, 'dept_id': None},
+    {'id_fonction':  24, 'libelle': 'Directeur Général Adjoint',                                                   'id_direction': None, 'dept_id': None},
+    {'id_fonction':  25, 'libelle': 'Responsable conformité et contrôle interne',                                  'id_direction': None, 'dept_id': None},
+    {'id_fonction':  26, 'libelle': 'Directeur Développement et investissement',                                   'id_direction': None, 'dept_id': None},
+    {'id_fonction':  27, 'libelle': 'Responsable développement Pool Grande Entreprise & Fortunes',                 'id_direction': None, 'dept_id': None},
+    {'id_fonction':  28, 'libelle': 'Chargé développement Pool Grande Entreprise & Fortunes',                      'id_direction': None, 'dept_id': None},
+    {'id_fonction':  29, 'libelle': 'Responsable développement Pool Particuliers & PME',                           'id_direction': None, 'dept_id': None},
+    {'id_fonction':  30, 'libelle': 'Chargé développement Pool Particuliers & PMEs',                               'id_direction': None, 'dept_id': None},
+    {'id_fonction':  31, 'libelle': 'Responsable Middle & Back Office',                                            'id_direction': None, 'dept_id': None},
+    {'id_fonction':  32, 'libelle': 'Responsable Trésorerie(ALM)',                                                 'id_direction': None, 'dept_id': None},
+    {'id_fonction':  33, 'libelle': 'Chargé de négociation',                                                       'id_direction': None, 'dept_id': None},
+    {'id_fonction':  34, 'libelle': 'Directeur Conseil et Financement structurés',                                 'id_direction': None, 'dept_id': None},
+    {'id_fonction':  35, 'libelle': 'Responsable Financement et structuration',                                    'id_direction': None, 'dept_id': None},
+    {'id_fonction':  36, 'libelle': 'Analyste Financement et structuration',                                       'id_direction': None, 'dept_id': None},
+    {'id_fonction':  37, 'libelle': 'Responsable du Développement',                                                'id_direction': None, 'dept_id': None},
+    {'id_fonction':  38, 'libelle': 'Chargé du développement portefeuille Grandes entreprise et Fortune',          'id_direction': None, 'dept_id': None},
+    {'id_fonction':  39, 'libelle': 'Chargé du développement portefeuille particulier et PME',                     'id_direction': None, 'dept_id': None},
+    {'id_fonction':  40, 'libelle': 'Directeur Conformité et Contrôle interne',                                    'id_direction': None, 'dept_id': None},
+    {'id_fonction':  41, 'libelle': 'Directeur Distribution',                                                      'id_direction': None, 'dept_id': None},
+    {'id_fonction':  42, 'libelle': 'Responsable Distribution Grandes Entreprises Institutions et Fortunes',       'id_direction': None, 'dept_id': None},
+    {'id_fonction':  43, 'libelle': 'Responsable Distribution Particuliers et PME',                                'id_direction': None, 'dept_id': None},
+    {'id_fonction':  44, 'libelle': 'Responsable Gestion et Analyste de portefeuille',                             'id_direction': None, 'dept_id': None},
+    {'id_fonction':  45, 'libelle': 'chargé de Gestions de portefeuille',                                          'id_direction': None, 'dept_id': None},
+    {'id_fonction':  46, 'libelle': 'chargé Analyste de portefeuille',                                             'id_direction': None, 'dept_id': None},
+    {'id_fonction':  47, 'libelle': 'chargé Back Office & operations',                                             'id_direction': None, 'dept_id': None},
+    {'id_fonction':  82, 'libelle': 'Stagiaire professionnel',                                                     'id_direction': None, 'dept_id': None},
+    {'id_fonction':  83, 'libelle': 'Stagiaire académique',                                                        'id_direction': None, 'dept_id': None},
+    {'id_fonction':  84, 'libelle': 'PCA',                                                                         'id_direction': None, 'dept_id': None},
+    {'id_fonction':  85, 'libelle': 'Directeur Général',                                                           'id_direction': None, 'dept_id': None},
+    {'id_fonction':  86, 'libelle': 'Directeur',                                                                   'id_direction': None, 'dept_id': None},
+    {'id_fonction':  87, 'libelle': 'Responsable Département',                                                     'id_direction': None, 'dept_id': None},
+    {'id_fonction':  88, 'libelle': 'DFC',                                                                         'id_direction': None, 'dept_id': None},
+    {'id_fonction':  89, 'libelle': 'Employé',                                                                     'id_direction': None, 'dept_id': None},
+    {'id_fonction':  90, 'libelle': 'RH',                                                                          'id_direction': None, 'dept_id': None},
+    {'id_fonction':  99, 'libelle': 'Responsable Comptable  Contrôle et Consolidation',                            'id_direction':    6, 'dept_id': None},
+    {'id_fonction': 100, 'libelle': 'Chargé Cloud et sécurité',                                                    'id_direction':    7, 'dept_id':   24},
+    {'id_fonction': 101, 'libelle': 'Chargé Communication',                                                        'id_direction':    7, 'dept_id':   23},
+    {'id_fonction': 102, 'libelle': 'Responsable Des Resources Humaines',                                          'id_direction': None, 'dept_id':   21},
+    {'id_fonction': 104, 'libelle': 'Chargé Transformation Digitale, Innovation & Solutions Applicatives',         'id_direction':    7, 'dept_id':   24},
+    {'id_fonction': 105, 'libelle': 'Chargé Administration Systèmes, Réseaux & Support IT',                        'id_direction':    7, 'dept_id':   24},
+    {'id_fonction': 106, 'libelle': 'Assistante Administrateur Général',                                           'id_direction': None, 'dept_id': None},
+])
+
+db.close()
+
+print('\n✓ Seed système terminé.')
+print('\nEtape suivante : exécuter init_db.py pour créer les rôles et le compte admin.')
