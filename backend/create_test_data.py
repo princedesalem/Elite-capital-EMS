@@ -2,7 +2,10 @@
 Script pour créer des demandes de test dans la base de données
 """
 import sys
-sys.path.insert(0, '/app')
+import os
+_here = os.path.dirname(os.path.abspath(__file__))
+if _here not in sys.path:
+    sys.path.insert(0, _here)
 
 from app.db import SessionLocal
 from app import models

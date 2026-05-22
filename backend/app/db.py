@@ -3,7 +3,9 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# Charge le .env depuis backend/ (fonctionne en Docker et en natif)
+_db_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(_db_dir, '..', '.env'))
 
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./extranet.db')
 
