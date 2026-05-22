@@ -7,7 +7,14 @@ Usage (depuis le container backend):
 Idempotent : peut être relancé sans risque, ne duplique rien.
 """
 import sys
-sys.path.insert(0, '/app')
+import os
+# Fonctionne sur Linux/Docker (/app) et Windows (dossier courant du script)
+_here = os.path.dirname(os.path.abspath(__file__))
+if _here not in sys.path:
+    sys.path.insert(0, _here)
+# Charger le .env du backend automatiquement
+from dotenv import load_dotenv
+load_dotenv(os.path.join(_here, '.env'))
 
 from app.db import SessionLocal
 import sqlalchemy as sa
