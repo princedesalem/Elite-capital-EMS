@@ -347,6 +347,21 @@ for fid, titre, desc, *_ in _F:
                     'type': 'quiz',  'contenu': None,    'ordre': 0, 'duree_min': 10})
 upsert('lecons', 'id', _lecons)
 
+# -- EMPLOYE admin 9999 (cree si absent) ---------------------------------------
+print('\n-- Employe admin 9999 --')
+_admin_emp = db.execute(sa.text("SELECT 1 FROM EMPLOYE WHERE matricule = '9999'")).scalar()
+if not _admin_emp:
+    _role_row = db.execute(sa.text("SELECT id FROM roles WHERE name = 'ADMIN' LIMIT 1")).fetchone()
+    _role_id = _role_row[0] if _role_row else None
+    db.execute(sa.text("""
+        INSERT INTO EMPLOYE (matricule, nom, prenom, date_embauche, id_entite, id_role, statut_employe)
+        VALUES ('9999', 'Admin', 'Systeme', '2020-01-01', 1, :role_id, 'ACTIF')
+    """), {'role_id': _role_id})
+    db.commit()
+    print("  EMPLOYE admin 9999 cree")
+else:
+    print("  EMPLOYE admin 9999 deja present")
+
 # -- NETTOYAGE : un seul employe (9999) et un seul utilisateur (9999) ----------
 print('\n-- Nettoyage employes/utilisateurs de test --')
 
