@@ -191,6 +191,205 @@ upsert('FONCTION_REFERENCE', 'id_fonction', [
     {'id_fonction': 106, 'libelle': 'Assistante Administrateur Général',                                           'id_direction': None, 'dept_id': None},
 ])
 
+# ── MIGRATIONS DÉJÀ APPLIQUÉES (évite de re-tenter sur un déploiement neuf) ──
+# init_db.py crée le schéma complet ; on marque toutes les migrations comme
+# déjà appliquées pour que auto_migrate.py ne les rejoue pas.
+upsert('_migrations_appliquees', 'nom', [
+    {'nom': '001_add_mission_segments.sql'},
+    {'nom': '002_add_missionnaires_mission.sql'},
+    {'nom': '003_add_transport_to_segments.sql'},
+    {'nom': '004_add_heure_retour.sql'},
+    {'nom': '005_add_relances_commentaires.sql'},
+    {'nom': '006_add_paiement_frais_mission.sql'},
+    {'nom': '007_add_localisation_to_org.sql'},
+    {'nom': '008_org_structure_audit_report.sql'},
+    {'nom': '009_fix_org_localisation_legacy.sql'},
+    {'nom': '010_add_missing_operation_fields.sql'},
+    {'nom': '011_add_fonction_reference.sql'},
+    {'nom': '012_add_id_operation_to_sortie.sql'},
+    {'nom': '012_remove_departement_localisation.sql'},
+    {'nom': '013_add_localisation_to_departement.sql'},
+    {'nom': '013_add_operation_to_sortie.sql'},
+    {'nom': '014_add_tasks.sql'},
+    {'nom': '015_add_team_space_posts.sql'},
+    {'nom': '016_add_module_store_item.sql'},
+    {'nom': '017_add_employee_localisation_and_emergency_contact.sql'},
+    {'nom': '018_enforce_single_day_sorties.sql'},
+    {'nom': '019_add_solde_deduit_to_operations.sql'},
+    {'nom': '021_drop_departement_localisation.sql'},
+    {'nom': '022_fix_activations_and_soldes.sql'},
+    {'nom': '023_fix_rh_solde.sql'},
+    {'nom': '024_fix_stuck_activations.sql'},
+    {'nom': '025_add_employee_family_fields.sql'},
+    {'nom': '026_add_push_subscriptions.sql'},
+    {'nom': '027_add_mission_comment.sql'},
+    {'nom': '028_add_preuve_permission_table.sql'},
+    {'nom': '029_add_n1_fonction.sql'},
+    {'nom': '030_add_demande_envoyee.sql'},
+    {'nom': '030_add_evaluation_tables.sql'},
+    {'nom': '031_add_fonction_liaisons.sql'},
+    {'nom': '033_add_localisation_to_departement.sql'},
+    {'nom': '034_drop_departement_localisation.sql'},
+    {'nom': '035_add_departement_implantation.sql'},
+    {'nom': '036_add_frais_missionnaire.sql'},
+    {'nom': '037_add_task_assignees.sql'},
+    {'nom': '038_add_commentaire_rh_remplacant.sql'},
+    {'nom': '038_add_user_settings.sql'},
+    {'nom': '039_add_parcours_employe.sql'},
+    {'nom': '040_add_commentaire_remplacant.sql'},
+    {'nom': '051_add_id_segment_to_frais_missionnaire.sql'},
+    {'nom': '052_fix_direction_directeur_and_reroute_notifs.sql'},
+    {'nom': '055_add_salaire_employe.sql'},
+    {'nom': '056_add_notif_relance_and_email_pref.sql'},
+    {'nom': '057_add_pointage.sql'},
+    {'nom': '058_operation_vue.sql'},
+    {'nom': '059_add_fiche_poste_template.sql'},
+    {'nom': '060_add_html_content_fiche_poste.sql'},
+    {'nom': '061_add_fiche_poste_to_employe.sql'},
+    {'nom': '062_add_contrat_fields.sql'},
+    {'nom': '062_evaluation_workflow.sql'},
+    {'nom': '063_academy_tables.sql'},
+    {'nom': '063_add_validator_signatures.sql'},
+    {'nom': '064_add_derniere_connexion.sql'},
+    {'nom': '065_seed_academy_formations.sql'},
+    {'nom': '066_seed_business_modules.sql'},
+    {'nom': '067_add_alerte_contrat_notification_type.sql'},
+])
+
+# ── ELITE ACADEMY ─────────────────────────────────────────────────────────────
+_F = [
+    # (id, titre, description, categorie, niveau, duree_h, est_onboarding)
+    (1,  'Bienvenue chez Elite Capital Group',                 "Decouvrez la vision, les valeurs et l'organisation du groupe. Un parcours essentiel pour toute nouvelle recrue.",               'Onboarding',            'Débutant',      1.5, 1),
+    (2,  "Prise en main de l'extranet EMS",                   'Navigation, raccourcis, profil utilisateur, notifications : maitrisez les bases de la plateforme.',                             'Onboarding',            'Débutant',      1.0, 1),
+    (3,  'Gestion des conges et absences',                     'Demander, valider, suivre vos conges et absences. Comprendre les soldes et les regles RH.',                                    'Ressources Humaines',   'Débutant',      2.0, 0),
+    (4,  'Permissions et sorties',                             'Procedures pour les permissions courtes, les sorties exceptionnelles et les preuves justificatives.',                           'Ressources Humaines',   'Débutant',      1.0, 0),
+    (5,  'Pointage et presence',                               "Pointage quotidien, regles d'assiduite et suivi du temps de travail dans EMS.",                                                'Ressources Humaines',   'Débutant',      0.5, 0),
+    (6,  'Gestion des missions',                               'Creer, planifier et suivre une mission : segments, transports, missionnaires multiples et destinations.',                       'Operations',            'Intermédiaire', 3.0, 0),
+    (7,  'Notes de frais et remboursements',                   'Saisir, justifier et faire valider vos frais professionnels. Bonnes pratiques anti-rejet.',                                    'Finance',               'Débutant',      1.5, 0),
+    (8,  'Operations terrain',                                 'Suivi operationnel, vue operation, sorties et coordination des equipes sur le terrain.',                                       'Operations',            'Intermédiaire', 2.5, 0),
+    (9,  'Evaluations et entretiens annuels',                  'Le cycle complet des evaluations : auto-evaluation, entretien, validation N+1 et plan de developpement.',                     'Performance',           'Intermédiaire', 2.5, 0),
+    (10, 'Performance reviews et objectifs',                   'Fixer des objectifs SMART, suivre les KPIs et conduire un entretien de performance constructif.',                              'Performance',           'Avancé',        3.0, 0),
+    (11, 'Procedures disciplinaires',                          'Cadre legal et procedures internes : avertissement, mise a pied, sanctions et recours.',                                       'Ressources Humaines',   'Avancé',        2.5, 0),
+    (12, 'Score comportemental',                               "Comprendre le score comportemental, ses criteres et son impact sur le parcours de l'employe.",                                 'Ressources Humaines',   'Intermédiaire', 1.5, 0),
+    (13, "Demandes d'explication",                             "Rediger, repondre et traiter une demande d'explication selon les standards du groupe.",                                         'Ressources Humaines',   'Intermédiaire', 1.0, 0),
+    (14, 'Fiche de poste : redaction et mise a jour',          'Construire une fiche de poste complete : missions, responsabilites, competences et liaisons hierarchiques.',                   'Organisation',          'Intermédiaire', 2.0, 0),
+    (15, 'Organisation et organigramme',                       "Lire et maintenir l'organigramme du groupe : directions, departements, fonctions et liaisons.",                                'Organisation',          'Débutant',      1.5, 0),
+    (16, 'Workflow et gestion des taches',                     'Creer, assigner et suivre les taches via le module Workflow. Statuts, filtres et bonnes pratiques.',                           'Productivite',          'Débutant',      1.5, 0),
+    (17, 'Talent management',                                  'Identifier les talents, construire les plans de succession et piloter le developpement des hauts potentiels.',                 'Strategie RH',          'Avancé',        3.0, 0),
+    (18, 'Workforce planning',                                 'Planification des effectifs, anticipation des besoins et optimisation de la masse salariale.',                                 'Strategie RH',          'Avancé',        3.0, 0),
+    (19, 'Gestion des remplacants',                            'Designer, accompagner et suivre les remplacants temporaires ou definitifs.',                                                   'Ressources Humaines',   'Intermédiaire', 1.5, 0),
+    (20, 'Analytics et tableaux de bord',                      'Exploiter les dashboards EMS : indicateurs cles, exports et lecture des tendances.',                                           'Data & Analytics',      'Intermédiaire', 2.0, 0),
+    (21, 'Assistant IA et productivite',                       "Tirer parti de l'assistant IA integre a EMS pour gagner en efficacite au quotidien.",                                          'Productivite',          'Débutant',      1.0, 0),
+    (22, 'Securite, confidentialite et bonnes pratiques',      'Charte informatique, gestion des acces, protection des donnees et reflexes anti-phishing.',                                    'Conformite',            'Débutant',      1.5, 0),
+    (23, 'Administration et parametrage EMS',                  'Pour les administrateurs : gestion des utilisateurs, roles, modules et parametres systeme.',                                   'Administration',        'Avancé',        3.5, 0),
+    (24, 'Documentation et base de connaissances',             'Trouver et contribuer a la documentation interne : standards, procedures et guides metier.',                                   'Productivite',          'Débutant',      0.5, 0),
+    (25, 'Achats : fondamentaux',                              "Cycle achats, sourcing, demande d'achat, bon de commande et reception. Bonnes pratiques de base.",                             'Achats',                'Débutant',      2.0, 0),
+    (26, 'Achats : negociation et performance',                'Strategies de negociation fournisseurs, suivi des KPIs achats et optimisation des couts.',                                     'Achats',                'Avancé',        3.0, 0),
+    (27, 'Commercial : techniques de vente',                   'Prospection, qualification, decouverte des besoins, argumentation et closing.',                                                'Commercial',            'Débutant',      2.5, 0),
+    (28, 'Commercial : pilotage du pipeline',                  'Forecast, taux de transformation, management des opportunites et reporting commercial.',                                       'Commercial',            'Avancé',        2.5, 0),
+    (29, 'Marketing : strategie et positionnement',            'Etude de marche, segmentation, ciblage, positionnement et mix marketing 4P.',                                                  'Marketing',             'Débutant',      2.0, 0),
+    (30, 'Marketing digital et content',                       'SEO, SEA, social media, email marketing et content strategy.',                                                                 'Marketing',             'Intermédiaire', 3.0, 0),
+    (31, 'Communication interne et externe',                   'Plan de communication, relations presse, communication de crise et messages cles.',                                            'Communication',         'Débutant',      1.5, 0),
+    (32, 'Communication : prise de parole et media training',  'Maitriser sa posture, structurer son message, repondre aux medias et au public.',                                              'Communication',         'Avancé',        2.0, 0),
+    (33, 'SI : architecture et urbanisation',                  'Cartographie applicative, urbanisation, integration, API et flux de donnees.',                                                 "Système d'Information", 'Intermédiaire', 2.5, 0),
+    (34, 'SI : cybersecurite et gouvernance des donnees',      'ISO 27001, RGPD, gestion des incidents, sauvegardes et plan de continuite.',                                                   "Système d'Information", 'Avancé',        3.0, 0),
+    (35, 'Flotte : gestion operationnelle',                    'Suivi des vehicules, carburant, entretien, sinistres et conformite reglementaire.',                                            'Flotte',                'Débutant',      1.5, 0),
+    (36, 'Flotte : optimisation TCO et eco-conduite',          "TCO, telematique, eco-conduite et reduction de l'empreinte carbone du parc.",                                                  'Flotte',                'Avancé',        2.0, 0),
+    (37, 'Audit interne : fondamentaux',                       'Cadre de reference IIA, methodologie, conduite de mission et redaction du rapport.',                                           'Audit',                 'Intermédiaire', 2.5, 0),
+    (38, 'Audit : controle interne et gestion des risques',    "Cartographie des risques, dispositif de controle interne et plan d'action correctif.",                                         'Audit',                 'Avancé',        3.0, 0),
+    (39, 'Gestion de projet : les essentiels',                 'Cadrage, planification, suivi, gestion des risques et cloture de projet.',                                                     'Projets',               'Débutant',      2.0, 0),
+    (40, 'Methodes agiles : Scrum et Kanban',                  'Roles, ceremonies, artefacts Scrum et tableau Kanban applique au quotidien.',                                                  'Projets',               'Intermédiaire', 2.5, 0),
+    (41, 'CRM : fondamentaux et parcours client',              "Capter, qualifier et fideliser : cycle de vie client et exploitation d'un CRM.",                                               'CRM',                   'Débutant',      1.5, 0),
+    (42, 'CRM : segmentation, scoring et automation',          "Segmentation comportementale, scoring, workflows d'automation et personnalisation.",                                           'CRM',                   'Avancé',        2.5, 0),
+]
+
+upsert('formations', 'id', [
+    {'id': fid, 'titre': titre, 'description': desc, 'categorie': cat,
+     'niveau': niv, 'image_url': None, 'duree_estimee_h': duree,
+     'est_onboarding': onb, 'est_publie': 1, 'cree_par': '9999'}
+    for fid, titre, desc, cat, niv, duree, onb in _F
+])
+
+# ── MODULES FORMATION (2 par formation : Introduction ordre=0, Validation ordre=99) ──
+# IDs intro : fid <= 24 → id=fid ; fid > 24 → id=fid+7
+# IDs validation : fid+62 pour toutes les formations
+def _mid(fid): return fid if fid <= 24 else fid + 7
+
+_modules = []
+for fid, *_ in _F:
+    _modules.append({'id': _mid(fid), 'formation_id': fid,
+                     'titre': 'Introduction', 'description': 'Premiere prise de contact avec le sujet.', 'ordre': 0})
+    _modules.append({'id': fid + 62,  'formation_id': fid,
+                     'titre': 'Validation',    'description': 'Quiz de validation des acquis.', 'ordre': 99})
+upsert('modules_formation', 'id', _modules)
+
+# ── LECONS (1 par module) ──────────────────────────────────────────────────────
+_FOOT1 = ("Le contenu detaille de cette formation sera enrichi "
+          "prochainement par l'equipe Elite Academy.")
+_FOOT2 = ("Cette formation vous permet de monter en competence sur le sujet. "
+          "Suivez les modules et validez le quiz pour obtenir votre certificat.")
+
+_lecons = []
+for fid, titre, desc, *_ in _F:
+    footer = _FOOT1 if fid <= 24 else _FOOT2
+    mid, vid = _mid(fid), fid + 62
+    contenu = f'<h2>{titre}</h2><p>{desc}</p><p>{footer}</p>'
+    _lecons.append({'id': mid, 'module_id': mid, 'titre': "Vue d'ensemble",
+                    'type': 'texte', 'contenu': contenu, 'ordre': 0, 'duree_min': 15})
+    _lecons.append({'id': vid, 'module_id': vid, 'titre': 'Quiz final',
+                    'type': 'quiz',  'contenu': None,    'ordre': 0, 'duree_min': 10})
+upsert('lecons', 'id', _lecons)
+
+# -- NETTOYAGE : un seul employe (9999) et un seul utilisateur (9999) ----------
+print('\n-- Nettoyage employes/utilisateurs de test --')
+
+_tables_employe = [
+    'Notification', 'SESSION_UTILISATION', 'score_comportemental',
+    'Conges', 'Permission', 'PREUVE_PERMISSION', 'SORTIE', 'Frais',
+    'MissionnairesMission', 'CommentaireMission', 'OPERATION_VUE',
+    'Validation', 'Activation', 'Evaluation', 'reviews_360',
+    'TASK', 'TASK_ASSIGNEE', 'TEAM_SPACE_POST', 'team_space_comment',
+    'team_space_post_like', 'inscriptions_formation', 'progression_lecons',
+    'certificats_formation', 'PARCOURS_EMPLOYE', 'Remplacant_propose',
+    'demande_explication', 'lettres_rh', 'document_interne',
+    'workforce_positions', 'USER_SETTINGS',
+]
+for t in _tables_employe:
+    try:
+        db.execute(sa.text(f"DELETE FROM `{t}` WHERE matricule != '9999'"))
+        db.commit()
+    except Exception:
+        db.rollback()
+
+try:
+    db.execute(sa.text("DELETE FROM `MissionSegment` WHERE id_mission IN (SELECT id_mission FROM Mission WHERE demandeur != '9999')"))
+    db.execute(sa.text("DELETE FROM `Mission` WHERE demandeur != '9999'"))
+    db.commit()
+except Exception:
+    db.rollback()
+
+try:
+    db.execute(sa.text("DELETE FROM `OPERATIONS` WHERE matricule != '9999'"))
+    db.commit()
+except Exception:
+    db.rollback()
+
+try:
+    db.execute(sa.text("DELETE FROM `audit_logs` WHERE user_id NOT IN (SELECT id_user FROM UTILISATEUR WHERE matricule='9999')"))
+    db.commit()
+except Exception:
+    db.rollback()
+
+non_admin = db.execute(sa.text("SELECT COUNT(*) FROM UTILISATEUR WHERE matricule != '9999'")).scalar()
+db.execute(sa.text("DELETE FROM UTILISATEUR WHERE matricule != '9999'"))
+db.commit()
+print(f'  UTILISATEUR: {non_admin} supprime(s), admin 9999 conserve')
+
+non_employe = db.execute(sa.text("SELECT COUNT(*) FROM EMPLOYE WHERE matricule != '9999'")).scalar()
+db.execute(sa.text("DELETE FROM EMPLOYE WHERE matricule != '9999'"))
+db.commit()
+print(f'  EMPLOYE: {non_employe} supprime(s), admin 9999 conserve')
+
 db.close()
 
 print('\n✓ Seed système terminé.')
