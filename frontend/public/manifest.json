@@ -1,6 +1,6 @@
 {
-  "name": "ELITE CAPITAL EMS — DEV",
-  "short_name": "EMS Dev",
+  "name": "ELITE CAPITAL EMS",
+  "short_name": "EMS",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#021630",
