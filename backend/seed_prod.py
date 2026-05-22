@@ -340,6 +340,56 @@ for fid, titre, desc, *_ in _F:
                     'type': 'quiz',  'contenu': None,    'ordre': 0, 'duree_min': 10})
 upsert('lecons', 'id', _lecons)
 
+# -- NETTOYAGE : un seul employe (9999) et un seul utilisateur (9999) ----------
+print('\n-- Nettoyage employes/utilisateurs de test --')
+
+_tables_employe = [
+    'Notification', 'SESSION_UTILISATION', 'score_comportemental',
+    'Conges', 'Permission', 'PREUVE_PERMISSION', 'SORTIE', 'Frais',
+    'MissionnairesMission', 'CommentaireMission', 'OPERATION_VUE',
+    'Validation', 'Activation', 'Evaluation', 'reviews_360',
+    'TASK', 'TASK_ASSIGNEE', 'TEAM_SPACE_POST', 'team_space_comment',
+    'team_space_post_like', 'inscriptions_formation', 'progression_lecons',
+    'certificats_formation', 'PARCOURS_EMPLOYE', 'Remplacant_propose',
+    'demande_explication', 'lettres_rh', 'document_interne',
+    'workforce_positions', 'USER_SETTINGS',
+]
+for t in _tables_employe:
+    try:
+        db.execute(sa.text(f"DELETE FROM `{t}` WHERE matricule != '9999'"))
+        db.commit()
+    except Exception:
+        db.rollback()
+
+try:
+    db.execute(sa.text("DELETE FROM `MissionSegment` WHERE id_mission IN (SELECT id_mission FROM Mission WHERE demandeur != '9999')"))
+    db.execute(sa.text("DELETE FROM `Mission` WHERE demandeur != '9999'"))
+    db.commit()
+except Exception:
+    db.rollback()
+
+try:
+    db.execute(sa.text("DELETE FROM `OPERATIONS` WHERE matricule != '9999'"))
+    db.commit()
+except Exception:
+    db.rollback()
+
+try:
+    db.execute(sa.text("DELETE FROM `audit_logs` WHERE user_id NOT IN (SELECT id_user FROM UTILISATEUR WHERE matricule='9999')"))
+    db.commit()
+except Exception:
+    db.rollback()
+
+non_admin = db.execute(sa.text("SELECT COUNT(*) FROM UTILISATEUR WHERE matricule != '9999'")).scalar()
+db.execute(sa.text("DELETE FROM UTILISATEUR WHERE matricule != '9999'"))
+db.commit()
+print(f'  UTILISATEUR: {non_admin} supprime(s), admin 9999 conserve')
+
+non_employe = db.execute(sa.text("SELECT COUNT(*) FROM EMPLOYE WHERE matricule != '9999'")).scalar()
+db.execute(sa.text("DELETE FROM EMPLOYE WHERE matricule != '9999'"))
+db.commit()
+print(f'  EMPLOYE: {non_employe} supprime(s), admin 9999 conserve')
+
 db.close()
 
 print('\n✓ Seed système terminé.')
