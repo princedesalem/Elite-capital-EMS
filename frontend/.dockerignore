@@ -1,0 +1,14 @@
+node_modules/
+src/
+public/
+.git/
+*.md
+*.config.js
+*.config.ts
+*.config.mjs
+package*.json
+vitest*
+playwright*
+health-check.js
+.env*
+Dockerfile

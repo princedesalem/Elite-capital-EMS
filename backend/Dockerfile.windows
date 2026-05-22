@@ -1,0 +1,20 @@
+# EMS Backend — Windows container (process isolation, ltsc2022)
+# Docker Engine Windows: tcp://localhost:2375
+# Build:  docker build -f Dockerfile.windows -t ems-backend:windows .
+# Run:    via docker-compose.windows.yml
+
+FROM python:3.11-windowsservercore-ltsc2022
+
+WORKDIR C:/app
+
+# Install Python dependencies (Windows-compatible subset — no weasyprint/pyodbc)
+COPY requirements.docker.txt .
+RUN pip install --no-cache-dir -r requirements.docker.txt
+
+# Copy application code (ems.db included — already has admin user matricule=9999)
+COPY . .
+
+EXPOSE 8000
+
+# Shell form: cmd.exe runs `init_db.py` then starts uvicorn
+CMD python init_db.py && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000

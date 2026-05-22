@@ -1,0 +1,21 @@
+# EMS Frontend — Windows container (process isolation, ltsc2022)
+# IMPORTANT: Build the frontend FIRST on the host before building this image:
+#   npm run build   (in C:\EMS\frontend)
+#
+# Build:  docker build -f Dockerfile.windows -t ems-frontend:windows .
+# Run:    via docker-compose.windows.yml
+
+FROM python:3.11-windowsservercore-ltsc2022
+
+WORKDIR C:/app
+
+# Minimal static file server deps
+RUN pip install --no-cache-dir "fastapi" "uvicorn[standard]" "aiofiles"
+
+# Copy pre-built frontend dist + static server script
+COPY dist/ ./dist/
+COPY serve_static.py .
+
+EXPOSE 5173
+
+CMD ["python", "serve_static.py"]
