@@ -1,4 +1,10 @@
 """Restore employee 9005 data wiped by accidental partial PUT tests."""
+import sys
+import os
+_here = os.path.dirname(os.path.abspath(__file__))
+if _here not in sys.path:
+    sys.path.insert(0, _here)
+
 from app.db import SessionLocal
 from app import models
 from sqlalchemy import text

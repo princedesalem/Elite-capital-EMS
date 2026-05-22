@@ -11,8 +11,10 @@ Usage (depuis le container ou en local) :
 import sys
 import os
 
-# Ajoute le répertoire /app au PYTHONPATH (idem que l'app FastAPI)
-sys.path.insert(0, os.path.dirname(__file__))
+# Ajoute le répertoire backend/ au PYTHONPATH (fonctionne Docker et natif)
+_here = os.path.dirname(os.path.abspath(__file__))
+if _here not in sys.path:
+    sys.path.insert(0, _here)
 
 from app.db import SessionLocal
 from app.models import FichePosteTemplate
