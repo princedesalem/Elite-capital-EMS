@@ -12,4 +12,4 @@ RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r re
 COPY backend /app
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
-CMD python init_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+CMD python init_db.py && python seed_prod.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
