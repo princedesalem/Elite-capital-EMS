@@ -399,5 +399,5 @@ print(f'  EMPLOYE: {non_employe} supprime(s), admin 9999 conserve')
 
 db.close()
 
-print('\n✓ Seed système terminé.')
-print('\nEtape suivante : exécuter init_db.py pour créer les rôles et le compte admin.')
+print('\n[OK] Seed systeme termine.')
+print('\nEtape suivante : executer init_db.py pour creer les roles et le compte admin.')
