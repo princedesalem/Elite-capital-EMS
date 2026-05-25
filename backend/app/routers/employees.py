@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 from sqlalchemy.exc import IntegrityError
-from ..db import get_db
+from ..db import get_db, UPLOADS_ROOT
 from .. import crud, schemas, models
 from ..utils import security
 from ..utils.world_data import WORLD_COUNTRIES, WORLD_CITIES
@@ -1296,7 +1296,7 @@ async def upload_photo(matricule: str, request: Request, db: Session = Depends(g
     if not e:
         raise HTTPException(status_code=404, detail='Employé introuvable')
     content_type = request.headers.get('content-type', '')
-    upload_dir = '/app/uploads/photos'
+    upload_dir = str(UPLOADS_ROOT / 'photos')
     os.makedirs(upload_dir, exist_ok=True)
     if 'multipart' in content_type:
         from fastapi import File, UploadFile
@@ -1397,7 +1397,7 @@ async def upload_signature(matricule: str, request: Request, db: Session = Depen
     if not e:
         raise HTTPException(status_code=404, detail='Employé introuvable')
     content_type = request.headers.get('content-type', '')
-    upload_dir = '/app/uploads/signatures'
+    upload_dir = str(UPLOADS_ROOT / 'signatures')
     os.makedirs(upload_dir, exist_ok=True)
     if 'multipart' in content_type:
         form = await request.form()

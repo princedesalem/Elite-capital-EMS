@@ -18,7 +18,7 @@ _CG_REGULAR = os.path.join(_FONTS_DIR, 'GOTHIC.TTF')
 _CG_BOLD = os.path.join(_FONTS_DIR, 'GOTHICB.TTF')
 _CG_ITALIC = os.path.join(_FONTS_DIR, 'GOTHICI.TTF')
 # NOTE: checked dynamically per-request in PDFReport.__init__ so no restart needed
-_BACKEND_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+_BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 # ── Logos entités ──────────────────────────────────────────────────────────
 _LOGOS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logos')

@@ -253,7 +253,22 @@ def get_departements_by_ville(id_localisation: int, db: Session = Depends(get_db
     liaisons = db.query(models.DepartementImplantation).filter(
         models.DepartementImplantation.id_localisation == id_localisation
     ).all()
-    dept_ids = [li.dept_id for li in liaisons]
+    dept_ids = set(li.dept_id for li in liaisons)
+
+    # Fallback : départements liés via les directions implantées dans cette ville
+    if not dept_ids:
+        dir_ids = [
+            d.id_direction
+            for d in db.query(models.Direction).filter(
+                models.Direction.id_localisation == id_localisation
+            ).all()
+        ]
+        if dir_ids:
+            for dep in db.query(models.Departement).filter(
+                models.Departement.id_direction.in_(dir_ids)
+            ).all():
+                dept_ids.add(dep.dept_id)
+
     if not dept_ids:
         return []
 
@@ -525,11 +540,23 @@ def get_all_departements(id_localisation: int = None, id_pays: int = None, db: S
         liaisons = db.query(models.DepartementImplantation).filter(
             models.DepartementImplantation.id_localisation == id_localisation
         ).all()
-        dept_ids = [li.dept_id for li in liaisons]
+        dept_ids = set(li.dept_id for li in liaisons)
+        # Fallback: also include departments linked via their Direction.id_localisation
+        # (covers existing data where DEPARTEMENT_IMPLANTATION wasn't populated)
+        dir_ids_for_loc = [
+            d.id_direction for d in
+            db.query(models.Direction).filter(models.Direction.id_localisation == id_localisation).all()
+        ]
+        if dir_ids_for_loc:
+            extra_depts = db.query(models.Departement).filter(
+                models.Departement.id_direction.in_(dir_ids_for_loc)
+            ).all()
+            for ed in extra_depts:
+                dept_ids.add(ed.dept_id)
         if not dept_ids:
             return []
         departements = db.query(models.Departement).filter(
-            models.Departement.dept_id.in_(dept_ids)
+            models.Departement.dept_id.in_(list(dept_ids))
         ).all()
     else:
         departements = db.query(models.Departement).all()

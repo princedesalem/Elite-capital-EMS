@@ -1,0 +1,96 @@
+name: Deploy → Production
+
+on:
+  push:
+    branches: [main]
+
+# Un seul déploiement à la fois — annule le précédent si déjà en cours
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to 192.168.3.227 (self-hosted runner)
+    runs-on: self-hosted          # runner installé sur le serveur de prod
+    environment: production
+
+    steps:
+      # ── 1. Récupérer le code ──────────────────────────────────────────────
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          clean: false            # garde les fichiers non-versionnés (.env, uploads/)
+
+      # ── 2. Backend — dépendances Python ───────────────────────────────────
+      - name: Install Python dependencies
+        working-directory: backend
+        shell: pwsh
+        run: |
+          if (-not (Test-Path ".venv")) {
+            python -m venv .venv
+          }
+          .venv\Scripts\pip.exe install -q --upgrade pip
+          .venv\Scripts\pip.exe install -q -r requirements.txt
+
+      # ── 3. Backend — migrations auto + seed système ────────────────────────
+      - name: Run migrations & seed
+        working-directory: backend
+        shell: pwsh
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY:   ${{ secrets.SECRET_KEY }}
+        run: |
+          .venv\Scripts\python.exe init_db.py
+          .venv\Scripts\python.exe seed_prod.py
+
+      # ── 4. Backend — redémarrer le service NSSM ───────────────────────────
+      - name: Restart EMS-Backend service
+        shell: pwsh
+        run: |
+          C:\tools\nssm.exe restart EMS-Backend
+          # Attendre que le backend réponde (max 60s)
+          $ok = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            try {
+              $r = Invoke-WebRequest -Uri http://localhost:8000/health -UseBasicParsing -TimeoutSec 2
+              if ($r.StatusCode -eq 200) { $ok = $true; break }
+            } catch {}
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ok) { Write-Error "Backend ne répond pas après redémarrage"; exit 1 }
+          Write-Host "Backend OK"
+
+      # ── 5. Frontend — build statique ──────────────────────────────────────
+      - name: Build frontend
+        working-directory: frontend
+        shell: pwsh
+        env:
+          VITE_API_URL: ""        # vide = même origine (Nginx proxy)
+        run: |
+          npm ci --silent --no-audit --no-fund
+          npm run build
+
+      # ── 6. Copier dist/ vers Nginx www ────────────────────────────────────
+      - name: Deploy frontend to Nginx
+        shell: pwsh
+        run: |
+          $dist  = "frontend\dist"
+          $nginx = "C:\nginx\html"
+          if (Test-Path $nginx) {
+            Remove-Item "$nginx\*" -Recurse -Force
+            Copy-Item "$dist\*" $nginx -Recurse -Force
+            Write-Host "Frontend déployé dans $nginx"
+          } else {
+            Write-Warning "Dossier Nginx $nginx introuvable — dist/ laissé en place"
+          }
+
+      # ── 7. Bump version ───────────────────────────────────────────────────
+      - name: Write VERSION.txt
+        shell: pwsh
+        run: |
+          $sha  = $env:GITHUB_SHA.Substring(0,8)
+          $date = (Get-Date -Format 'yyyy-MM-dd HH:mm')
+          "VERSION=$sha`nDATE=$date" | Out-File backend\VERSION.txt -Encoding utf8 -Force
+          Write-Host "Version: $sha déployée le $date"

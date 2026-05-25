@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, timedelta, datetime
-from ..db import get_db
+from ..db import get_db, UPLOADS_ROOT
 from .. import models
 from ..utils import permissions as perm_utils, workflow, notifications, activation_cloture, business_logic, access_control
 from ..utils.audit import log_action
@@ -307,7 +307,7 @@ async def televerser_preuves(
         raise HTTPException(status_code=404, detail="Opération introuvable")
     
     # Créer le dossier uploads s'il n'existe pas
-    upload_dir = "uploads/preuves_permissions"
+    upload_dir = str(UPLOADS_ROOT / 'preuves_permissions')
     os.makedirs(upload_dir, exist_ok=True)
     
     # Sauvegarder le fichier

@@ -7,7 +7,7 @@ import {
   User, AlertCircle, Loader, RefreshCw, Plus, FileText, Download,
 } from 'lucide-react'
 
-const API = import.meta.env.VITE_API_URL || ''
+const API = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '')
 
 // ---------------------------------------------------------------------------
 // Grille fixe — 3 axes, 10 critères, total max 100 pts
