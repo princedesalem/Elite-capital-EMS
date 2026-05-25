@@ -71,6 +71,35 @@ jobs:
       # ── 3. Build frontend ────────────────────────────────────────────────────
       - name: 🏗️ Frontend – npm build (Vite)
         run: |
+          # Ajouter les emplacements courants de Node.js au PATH (runner NT/Système)
+          $nodePaths = @(
+            'C:\Program Files\nodejs',
+            'C:\Program Files (x86)\nodejs',
+            "$env:APPDATA\npm",
+            'C:\Users\Stagiaire_OP\scoop\apps\nodejs\current',
+            'C:\Users\Stagiaire_OP\AppData\Roaming\npm'
+          )
+          foreach ($p in $nodePaths) {
+            if (Test-Path $p) {
+              $env:PATH = "$p;$env:PATH"
+              Write-Host "Ajouté au PATH : $p"
+            }
+          }
+
+          # Vérifier que npm est disponible
+          $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+          if (-not $npmCmd) {
+            # Recherche exhaustive
+            $found = Get-ChildItem 'C:\' -Recurse -Filter 'npm.cmd' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) {
+              $env:PATH = "$($found.DirectoryName);$env:PATH"
+              Write-Host "npm trouvé : $($found.FullName)"
+            } else {
+              throw "npm introuvable. Installez Node.js sur le serveur de production."
+            }
+          }
+          Write-Host "npm version : $(npm --version)"
+
           $frontendDir = 'C:\EMS\frontend'
           Push-Location $frontendDir
 
