@@ -28,6 +28,11 @@ jobs:
         shell: powershell
 
     steps:
+      # ── 0. Safe directory (runner tourne en NT/Système, repo appartient à un autre user) ──
+      - name: 🔐 Git safe.directory
+        run: |
+          git config --global --add safe.directory C:/EMS
+
       # ── 1. Pull du code ──────────────────────────────────────────────────────
       - name: 📥 Git pull – récupérer la dernière version de main
         run: |
