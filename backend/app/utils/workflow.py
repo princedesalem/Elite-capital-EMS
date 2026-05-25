@@ -314,7 +314,23 @@ def obtenir_validateur_pour_role(
             emp_v = db.query(Employe).filter(Employe.id_role == role_obj.id).first()
             if emp_v:
                 return emp_v.matricule
-    
+
+        # Fallback DFC par fonction : aucun role_id DFC configuré
+        if role == 'DFC':
+            dfc_keyword = 'directeur financier'
+            if employe.id_entite:
+                emp_v = db.query(Employe).filter(
+                    Employe.id_entite == employe.id_entite,
+                    Employe.fonction.ilike(f'%{dfc_keyword}%')
+                ).first()
+                if emp_v:
+                    return emp_v.matricule
+            emp_v = db.query(Employe).filter(
+                Employe.fonction.ilike(f'%{dfc_keyword}%')
+            ).first()
+            if emp_v:
+                return emp_v.matricule
+
     return None
 
 
@@ -869,7 +885,12 @@ def obtenir_role_validateur(matricule: str, db: Session) -> str:
         role = db.query(Role).filter(Role.id == employe_obj.id_role).first()
         if role:
             return _normaliser_role(role.name)
-    
+
+    # Fallback: détecter DFC par fonction (aucun role_id assigné)
+    if employe_obj and employe_obj.fonction:
+        if 'directeur financier' in employe_obj.fonction.lower():
+            return 'DFC'
+
     return 'EMPLOYE'
 
 
