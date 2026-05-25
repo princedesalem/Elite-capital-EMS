@@ -3,7 +3,7 @@
 # Build:  docker build -f Dockerfile.windows -t ems-backend:windows .
 # Run:    via docker-compose.windows.yml
 
-FROM python:3.11-windowsservercore-ltsc2022
+FROM python:3.15.0b1-windowsservercore-ltsc2022
 
 WORKDIR C:/app
 
