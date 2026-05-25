@@ -1,96 +1,160 @@
-name: Deploy → Production
+name: 🚀 Deploy – Production (Windows Server)
 
+# Déclenché uniquement sur push vers main (après merge d'une PR ou commit direct)
 on:
   push:
     branches: [main]
 
-# Un seul déploiement à la fois — annule le précédent si déjà en cours
+# Empêche les déploiements parallèles : un seul à la fois, les suivants attendent
 concurrency:
-  group: deploy-prod
-  cancel-in-progress: true
+  group: production-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy to 192.168.3.227 (self-hosted runner)
-    runs-on: self-hosted          # runner installé sur le serveur de prod
-    environment: production
+    name: Deploy to EMS Production Server
+    # Le runner self-hosted installé sur C:\actions-runner du serveur de prod
+    runs-on: [self-hosted, Windows, X64, production]
+
+    # Timeout global : si le déploiement prend plus de 15 min, on abandonne
+    timeout-minutes: 15
+
+    environment:
+      name: production
+      url: http://192.168.3.227/rh
+
+    defaults:
+      run:
+        shell: pwsh
 
     steps:
-      # ── 1. Récupérer le code ──────────────────────────────────────────────
-      - name: Checkout main
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          clean: false            # garde les fichiers non-versionnés (.env, uploads/)
-
-      # ── 2. Backend — dépendances Python ───────────────────────────────────
-      - name: Install Python dependencies
-        working-directory: backend
-        shell: pwsh
+      # ── 1. Pull du code ──────────────────────────────────────────────────────
+      - name: 📥 Git pull – récupérer la dernière version de main
         run: |
-          if (-not (Test-Path ".venv")) {
-            python -m venv .venv
+          $repo = 'C:\EMS'
+          Write-Host "Répertoire : $repo"
+
+          # S'assurer qu'on est bien sur main et que le remote est correct
+          git -C $repo fetch --prune origin
+          git -C $repo checkout main
+          git -C $repo reset --hard origin/main
+
+          $commit = git -C $repo log -1 --format="%h %s (%an, %ar)"
+          Write-Host "Dernier commit : $commit"
+
+      # ── 2. Dépendances backend ───────────────────────────────────────────────
+      - name: 🐍 Backend – pip install (virtualenv)
+        run: |
+          $pip = 'C:\EMS\backend\venv\Scripts\pip.exe'
+          $req = 'C:\EMS\backend\requirements.txt'
+
+          if (-not (Test-Path $pip)) {
+            throw "pip introuvable dans le venv : $pip"
           }
-          .venv\Scripts\pip.exe install -q --upgrade pip
-          .venv\Scripts\pip.exe install -q -r requirements.txt
 
-      # ── 3. Backend — migrations auto + seed système ────────────────────────
-      - name: Run migrations & seed
-        working-directory: backend
-        shell: pwsh
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SECRET_KEY:   ${{ secrets.SECRET_KEY }}
-        run: |
-          .venv\Scripts\python.exe init_db.py
-          .venv\Scripts\python.exe seed_prod.py
+          Write-Host "Installation des dépendances Python..."
+          & $pip install --quiet --no-deps --upgrade -r $req
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Tentative sans --no-deps..."
+            & $pip install --quiet -r $req
+            if ($LASTEXITCODE -ne 0) { throw "pip install a échoué." }
+          }
+          Write-Host "Dépendances backend installées."
 
-      # ── 4. Backend — redémarrer le service NSSM ───────────────────────────
-      - name: Restart EMS-Backend service
-        shell: pwsh
+      # ── 3. Build frontend ────────────────────────────────────────────────────
+      - name: 🏗️ Frontend – npm build (Vite)
         run: |
-          C:\tools\nssm.exe restart EMS-Backend
-          # Attendre que le backend réponde (max 60s)
-          $ok = $false
-          for ($i = 0; $i -lt 30; $i++) {
+          $frontendDir = 'C:\EMS\frontend'
+          Push-Location $frontendDir
+
+          try {
+            Write-Host "Installation des dépendances npm..."
+            npm ci --prefer-offline --no-audit --no-fund
+            if ($LASTEXITCODE -ne 0) { throw "npm ci a échoué." }
+
+            Write-Host "Build de production..."
+            npm run build
+            if ($LASTEXITCODE -ne 0) { throw "npm run build a échoué." }
+
+            Write-Host "Build terminé. Contenu de dist/ :"
+            Get-ChildItem "$frontendDir\dist" | Select-Object Name, Length | Format-Table -AutoSize
+          } finally {
+            Pop-Location
+          }
+
+      # ── 4. Redémarrage des services ──────────────────────────────────────────
+      - name: 🔄 Redémarrer EMS-Backend
+        run: |
+          Write-Host "Arrêt de EMS-Backend..."
+          Stop-Service -Name 'EMS-Backend' -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 3
+
+          Write-Host "Démarrage de EMS-Backend..."
+          Start-Service -Name 'EMS-Backend'
+          Start-Sleep -Seconds 5
+
+          $svc = Get-Service -Name 'EMS-Backend'
+          if ($svc.Status -ne 'Running') {
+            throw "EMS-Backend n'a pas démarré (statut : $($svc.Status))"
+          }
+          Write-Host "EMS-Backend est Running."
+
+      - name: 🔄 Redémarrer EMS-Nginx
+        run: |
+          Write-Host "Arrêt de EMS-Nginx..."
+          Stop-Service -Name 'EMS-Nginx' -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+
+          Write-Host "Démarrage de EMS-Nginx..."
+          Start-Service -Name 'EMS-Nginx'
+          Start-Sleep -Seconds 3
+
+          $svc = Get-Service -Name 'EMS-Nginx'
+          if ($svc.Status -ne 'Running') {
+            throw "EMS-Nginx n'a pas démarré (statut : $($svc.Status))"
+          }
+          Write-Host "EMS-Nginx est Running."
+
+      # ── 5. Health check ──────────────────────────────────────────────────────
+      - name: ✅ Health check
+        run: |
+          $maxAttempts = 10
+          $delay       = 6   # secondes entre chaque tentative
+
+          Write-Host "Attente du backend (max $($maxAttempts * $delay)s)..."
+
+          for ($i = 1; $i -le $maxAttempts; $i++) {
             try {
-              $r = Invoke-WebRequest -Uri http://localhost:8000/health -UseBasicParsing -TimeoutSec 2
-              if ($r.StatusCode -eq 200) { $ok = $true; break }
-            } catch {}
-            Start-Sleep -Seconds 2
-          }
-          if (-not $ok) { Write-Error "Backend ne répond pas après redémarrage"; exit 1 }
-          Write-Host "Backend OK"
-
-      # ── 5. Frontend — build statique ──────────────────────────────────────
-      - name: Build frontend
-        working-directory: frontend
-        shell: pwsh
-        env:
-          VITE_API_URL: ""        # vide = même origine (Nginx proxy)
-        run: |
-          npm ci --silent --no-audit --no-fund
-          npm run build
-
-      # ── 6. Copier dist/ vers Nginx www ────────────────────────────────────
-      - name: Deploy frontend to Nginx
-        shell: pwsh
-        run: |
-          $dist  = "frontend\dist"
-          $nginx = "C:\nginx\html"
-          if (Test-Path $nginx) {
-            Remove-Item "$nginx\*" -Recurse -Force
-            Copy-Item "$dist\*" $nginx -Recurse -Force
-            Write-Host "Frontend déployé dans $nginx"
-          } else {
-            Write-Warning "Dossier Nginx $nginx introuvable — dist/ laissé en place"
+              $r = Invoke-WebRequest `
+                     -Uri 'http://localhost:8000/health' `
+                     -UseBasicParsing `
+                     -TimeoutSec 10 `
+                     -ErrorAction Stop
+              if ($r.StatusCode -eq 200) {
+                Write-Host "Backend opérationnel (tentative $i/$maxAttempts) ✓"
+                exit 0
+              }
+            } catch {
+              Write-Host "  Tentative $i/$maxAttempts échouée : $_"
+            }
+            Start-Sleep -Seconds $delay
           }
 
-      # ── 7. Bump version ───────────────────────────────────────────────────
-      - name: Write VERSION.txt
-        shell: pwsh
+          throw "Le backend ne répond pas après $($maxAttempts * $delay) secondes."
+
+      # ── 6. Résumé du déploiement ─────────────────────────────────────────────
+      - name: 📋 Résumé
+        if: always()
         run: |
-          $sha  = $env:GITHUB_SHA.Substring(0,8)
-          $date = (Get-Date -Format 'yyyy-MM-dd HH:mm')
-          "VERSION=$sha`nDATE=$date" | Out-File backend\VERSION.txt -Encoding utf8 -Force
-          Write-Host "Version: $sha déployée le $date"
+          $commit  = git -C 'C:\EMS' log -1 --format="%H"
+          $message = git -C 'C:\EMS' log -1 --format="%s"
+          $author  = git -C 'C:\EMS' log -1 --format="%an"
+          $date    = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+          Write-Host "─────────────────────────────────────────"
+          Write-Host "  Déploiement EMS Elite Capital"
+          Write-Host "  Date    : $date"
+          Write-Host "  Commit  : $commit"
+          Write-Host "  Message : $message"
+          Write-Host "  Auteur  : $author"
+          Write-Host "─────────────────────────────────────────"
