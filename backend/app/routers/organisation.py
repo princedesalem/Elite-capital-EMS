@@ -255,7 +255,7 @@ def get_departements_by_ville(id_localisation: int, db: Session = Depends(get_db
     ).all()
     dept_ids = set(li.dept_id for li in liaisons)
 
-    # Fallback : départements liés via les directions implantées dans cette ville
+    # Fallback 1 : via Direction.id_localisation (si colonne renseignée)
     if not dept_ids:
         dir_ids = [
             d.id_direction
@@ -268,6 +268,27 @@ def get_departements_by_ville(id_localisation: int, db: Session = Depends(get_db
                 models.Departement.id_direction.in_(dir_ids)
             ).all():
                 dept_ids.add(dep.dept_id)
+
+    # Fallback 2 : chaîne Implantation → Entité → Direction → Département (robuste)
+    if not dept_ids:
+        entite_ids = [
+            imp.id_entite
+            for imp in db.query(models.Implantation).filter(
+                models.Implantation.id_localisation == id_localisation
+            ).all()
+        ]
+        if entite_ids:
+            dir_ids2 = [
+                d.id_direction
+                for d in db.query(models.Direction).filter(
+                    models.Direction.id_entite.in_(entite_ids)
+                ).all()
+            ]
+            if dir_ids2:
+                for dep in db.query(models.Departement).filter(
+                    models.Departement.id_direction.in_(dir_ids2)
+                ).all():
+                    dept_ids.add(dep.dept_id)
 
     if not dept_ids:
         return []
