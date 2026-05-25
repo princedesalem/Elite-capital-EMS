@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, time, datetime, timedelta
 from pydantic import BaseModel
-from ..db import get_db
+from ..db import get_db, UPLOADS_ROOT
 from .. import models
 from ..utils import missions as mission_utils, workflow, notifications, activation_cloture, access_control
 from ..utils.audit import log_action
@@ -1436,7 +1436,7 @@ async def televerser_rapport(
         raise HTTPException(status_code=403, detail="Seuls les missionnaires assignés peuvent téléverser le rapport")
     
     # Créer le dossier uploads (chemin absolu pour correspondre au StaticFiles)
-    upload_dir = "/app/uploads/rapports_missions"
+    upload_dir = str(UPLOADS_ROOT / 'rapports_missions')
     os.makedirs(upload_dir, exist_ok=True)
 
     # Assainir le nom de fichier : remplacer les caractères non-alphanumériques
@@ -1837,7 +1837,7 @@ async def televerser_preuves_frais(
         raise HTTPException(status_code=403, detail="Seuls les missionnaires assignés peuvent téléverser les preuves")
     
     # Créer le dossier uploads
-    upload_dir = "uploads/preuves_frais"
+    upload_dir = str(UPLOADS_ROOT / 'preuves_frais')
     os.makedirs(upload_dir, exist_ok=True)
     
     # Sauvegarder le fichier
