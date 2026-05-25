@@ -116,6 +116,7 @@ def run_migrations(engine) -> None:
                                 '1050',   # MySQL: Table already exists
                                 '1061',   # MySQL: Duplicate key name (index)
                                 'duplicate key', 'unique constraint',
+                                'syntax error',  # SQLite: MySQL-specific syntax (INSERT IGNORE etc.)
                             ]):
                                 logger.info(f"[auto_migrate] {nom}: ignoré (déjà appliqué partiellement) — {e}")
                             else:
