@@ -320,7 +320,11 @@ def creer_mission(
     db.commit()
     log_action(db, matricule, 'CREATE_MISSION', 'operation', operation.id_operation,
                {'pays': pays, 'ville': ville, 'date_debut': str(date_debut), 'date_fin': str(date_fin), 'motif': motif})
-    
+
+    mission_obj = db.query(models.Mission).filter(
+        models.Mission.id_mission == operation.id_operation
+    ).first()
+
     # Notifier le premier validateur
     prochain_role, prochain_matricule = workflow.obtenir_prochain_validateur(operation.id_operation, db)
     if prochain_matricule:
@@ -333,14 +337,14 @@ def creer_mission(
             id_operation=operation.id_operation,
             db=db,
         )
-    
+
     return {
         "id_operation": operation.id_operation,
-        "id_mission": mission.id_mission,
+        "id_mission": mission_obj.id_mission if mission_obj else operation.id_operation,
         "pays": pays,
         "ville": ville,
         "moyens_transport": moyens_transport,
-        "date_limite_rapport": mission.date_limite_rapport,
+        "date_limite_rapport": mission_obj.date_limite_rapport if mission_obj else None,
         "message": "Mission créée. Vous devrez téléverser un rapport dans les 48h après votre retour."
     }
 
