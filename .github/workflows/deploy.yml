@@ -126,28 +126,22 @@ jobs:
       - name: ✅ Health check
         run: |
           $maxAttempts = 10
-          $delay       = 6   # secondes entre chaque tentative
-
-          Write-Host "Attente du backend (max $($maxAttempts * $delay)s)..."
-
+          $delay = 6
+          $url = 'http://localhost:8000/health'
+          Write-Host "Waiting for backend (max $($maxAttempts * $delay)s)..."
           for ($i = 1; $i -le $maxAttempts; $i++) {
             try {
-              $r = Invoke-WebRequest `
-                     -Uri 'http://localhost:8000/health' `
-                     -UseBasicParsing `
-                     -TimeoutSec 10 `
-                     -ErrorAction Stop
+              $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
               if ($r.StatusCode -eq 200) {
-                Write-Host "Backend opérationnel (tentative $i/$maxAttempts) ✓"
+                Write-Host "Backend OK (attempt $i/$maxAttempts)"
                 exit 0
               }
             } catch {
-              Write-Host "  Tentative $i/$maxAttempts échouée : $_"
+              Write-Host "  Attempt $i/$maxAttempts failed: $_"
             }
             Start-Sleep -Seconds $delay
           }
-
-          throw "Le backend ne répond pas après $($maxAttempts * $delay) secondes."
+          throw "Backend did not respond after $($maxAttempts * $delay) seconds."
 
       # ── 6. Résumé du déploiement ─────────────────────────────────────────────
       - name: 📋 Résumé
@@ -157,11 +151,10 @@ jobs:
           $message = git -C 'C:\EMS' log -1 --format="%s"
           $author  = git -C 'C:\EMS' log -1 --format="%an"
           $date    = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-
-          Write-Host "─────────────────────────────────────────"
-          Write-Host "  Déploiement EMS Elite Capital"
+          Write-Host "-----------------------------------------"
+          Write-Host "  EMS Elite Capital Deploy"
           Write-Host "  Date    : $date"
           Write-Host "  Commit  : $commit"
           Write-Host "  Message : $message"
-          Write-Host "  Auteur  : $author"
-          Write-Host "─────────────────────────────────────────"
+          Write-Host "  Author  : $author"
+          Write-Host "-----------------------------------------"
