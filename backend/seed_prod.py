@@ -131,6 +131,53 @@ for row in implantations:
 db.commit()
 print(f'  Implantation: {inserted} insérées ({len(implantations) - inserted} déjà présentes)')
 
+# ── DEPARTEMENT_IMPLANTATION ──────────────────────────────────────────────────
+# Lie chaque département à sa ville selon la logique métier :
+#  1. Départements avec direction → héritent de Direction.id_localisation
+#  2. ECG sans direction → Yaoundé uniquement
+#  3. ELCAM/EXCA sans direction et nom "commercial/développement" → villes hors Yaoundé
+#  4. ELCAM/EXCA sans direction (non commerciaux) → Yaoundé
+print('Seeding DEPARTEMENT_IMPLANTATION...')
+for stmt in [
+    # 1. via Direction.id_localisation
+    '''INSERT IGNORE INTO DEPARTEMENT_IMPLANTATION (dept_id, id_localisation)
+       SELECT d.dept_id, dir.id_localisation
+       FROM DEPARTEMENT d
+       JOIN DIRECTION dir ON d.id_direction = dir.id_direction
+       WHERE dir.id_localisation IS NOT NULL''',
+    # 2. ECG sans direction → Yaoundé
+    '''INSERT IGNORE INTO DEPARTEMENT_IMPLANTATION (dept_id, id_localisation)
+       SELECT d.dept_id, l.id_localisation
+       FROM DEPARTEMENT d
+       JOIN ENTITE e ON d.id_entite = e.id_entite
+       JOIN LOCALISATION l ON l.ville = 'Yaounde' OR l.ville = 'Yaound\u00e9'
+       WHERE d.id_direction IS NULL AND e.nom = 'ECG'
+       AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT_IMPLANTATION di WHERE di.dept_id = d.dept_id AND di.id_localisation = l.id_localisation)''',
+    # 3. ELCAM/EXCA commerciaux → villes hors Yaoundé où l'entité est implantée
+    '''INSERT IGNORE INTO DEPARTEMENT_IMPLANTATION (dept_id, id_localisation)
+       SELECT d.dept_id, imp.id_localisation
+       FROM DEPARTEMENT d
+       JOIN ENTITE e ON d.id_entite = e.id_entite
+       JOIN Implantation imp ON imp.id_entite = e.id_entite
+       JOIN LOCALISATION l ON l.id_localisation = imp.id_localisation
+       WHERE d.id_direction IS NULL AND e.nom IN ('ELCAM', 'EXCA')
+       AND (d.nom LIKE '%velop%' OR d.nom LIKE '%ommercial%')
+       AND l.ville NOT LIKE 'Yaounde' AND l.ville NOT LIKE 'Yaound\u00e9'
+       AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT_IMPLANTATION di WHERE di.dept_id = d.dept_id AND di.id_localisation = imp.id_localisation)''',
+    # 4. ELCAM/EXCA non commerciaux sans direction → Yaoundé
+    '''INSERT IGNORE INTO DEPARTEMENT_IMPLANTATION (dept_id, id_localisation)
+       SELECT d.dept_id, l.id_localisation
+       FROM DEPARTEMENT d
+       JOIN ENTITE e ON d.id_entite = e.id_entite
+       JOIN LOCALISATION l ON l.ville = 'Yaounde' OR l.ville = 'Yaound\u00e9'
+       WHERE d.id_direction IS NULL AND e.nom IN ('ELCAM', 'EXCA')
+       AND d.nom NOT LIKE '%velop%' AND d.nom NOT LIKE '%ommercial%'
+       AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT_IMPLANTATION di WHERE di.dept_id = d.dept_id AND di.id_localisation = l.id_localisation)''',
+]:
+    result = db.execute(sa.text(stmt))
+    db.commit()
+    print(f'  DEPARTEMENT_IMPLANTATION: {result.rowcount} ligne(s) insérée(s)')
+
 # ── FONCTION_REFERENCE ────────────────────────────────────────────────────────
 upsert('FONCTION_REFERENCE', 'id_fonction', [
     {'id_fonction':   1, 'libelle': 'Administrateur Général',                                                      'id_direction': None, 'dept_id': None},

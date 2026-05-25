@@ -429,6 +429,8 @@ export default function EmployeeForm(){
         salaire_brut: toFloat(form.salaire_brut),
         date_naissance: toDate(form.date_naissance),
         date_embauche: toDate(form.date_embauche),
+        date_debut_contrat: toDate(form.date_debut_contrat),
+        date_fin_contrat: toDate(form.date_fin_contrat),
       }
       if(id && id!=='new') await api.put(`/employees/${id}`, payload)
       else await api.post('/employees/', payload)
