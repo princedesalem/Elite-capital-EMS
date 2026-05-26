@@ -107,7 +107,7 @@ jobs:
       - name: Collect docker logs
         if: always()
         run: docker compose logs > docker-logs.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-artifacts
