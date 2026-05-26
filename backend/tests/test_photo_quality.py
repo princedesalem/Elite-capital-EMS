@@ -7,6 +7,7 @@ import base64
 import pytest
 
 from app import models
+from app.db import UPLOADS_ROOT
 from app.utils.security import create_access_token
 
 
@@ -137,7 +138,8 @@ class TestLosslessPhotoStorage:
             headers=headers,
         )
         assert resp.status_code == 200, resp.text
-        stored_path = '/app' + resp.json()['photo_url']
+        photo_url = resp.json()['photo_url']  # e.g. '/uploads/photos/9001_abc.jpg'
+        stored_path = UPLOADS_ROOT.parent / photo_url.lstrip('/')
 
         import os
         stored_bytes = open(stored_path, 'rb').read()
@@ -165,7 +167,8 @@ class TestLosslessPhotoStorage:
             headers=headers,
         )
         assert resp.status_code == 200, resp.text
-        stored_path = '/app' + resp.json()['photo_url']
+        photo_url = resp.json()['photo_url']
+        stored_path = UPLOADS_ROOT.parent / photo_url.lstrip('/')
 
         import os
         stored_bytes = open(stored_path, 'rb').read()
@@ -187,7 +190,8 @@ class TestLosslessPhotoStorage:
             headers=headers,
         )
         assert resp.status_code == 200, resp.text
-        stored_path = '/app' + resp.json()['photo_url']
+        photo_url = resp.json()['photo_url']
+        stored_path = UPLOADS_ROOT.parent / photo_url.lstrip('/')
 
         import os
         stored_bytes = open(stored_path, 'rb').read()
@@ -210,7 +214,8 @@ class TestLosslessPhotoStorage:
             headers=headers,
         )
         assert resp.status_code == 200, resp.text
-        stored_path = '/app' + resp.json()['photo_url']
+        photo_url = resp.json()['photo_url']
+        stored_path = UPLOADS_ROOT.parent / photo_url.lstrip('/')
 
         import os
         stored_bytes = open(stored_path, 'rb').read()
