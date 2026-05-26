@@ -255,41 +255,6 @@ def get_departements_by_ville(id_localisation: int, db: Session = Depends(get_db
     ).all()
     dept_ids = set(li.dept_id for li in liaisons)
 
-    # Fallback 1 : via Direction.id_localisation (si colonne renseignée)
-    if not dept_ids:
-        dir_ids = [
-            d.id_direction
-            for d in db.query(models.Direction).filter(
-                models.Direction.id_localisation == id_localisation
-            ).all()
-        ]
-        if dir_ids:
-            for dep in db.query(models.Departement).filter(
-                models.Departement.id_direction.in_(dir_ids)
-            ).all():
-                dept_ids.add(dep.dept_id)
-
-    # Fallback 2 : chaîne Implantation → Entité → Direction → Département (robuste)
-    if not dept_ids:
-        entite_ids = [
-            imp.id_entite
-            for imp in db.query(models.Implantation).filter(
-                models.Implantation.id_localisation == id_localisation
-            ).all()
-        ]
-        if entite_ids:
-            dir_ids2 = [
-                d.id_direction
-                for d in db.query(models.Direction).filter(
-                    models.Direction.id_entite.in_(entite_ids)
-                ).all()
-            ]
-            if dir_ids2:
-                for dep in db.query(models.Departement).filter(
-                    models.Departement.id_direction.in_(dir_ids2)
-                ).all():
-                    dept_ids.add(dep.dept_id)
-
     if not dept_ids:
         return []
 
@@ -562,18 +527,6 @@ def get_all_departements(id_localisation: int = None, id_pays: int = None, db: S
             models.DepartementImplantation.id_localisation == id_localisation
         ).all()
         dept_ids = set(li.dept_id for li in liaisons)
-        # Fallback: also include departments linked via their Direction.id_localisation
-        # (covers existing data where DEPARTEMENT_IMPLANTATION wasn't populated)
-        dir_ids_for_loc = [
-            d.id_direction for d in
-            db.query(models.Direction).filter(models.Direction.id_localisation == id_localisation).all()
-        ]
-        if dir_ids_for_loc:
-            extra_depts = db.query(models.Departement).filter(
-                models.Departement.id_direction.in_(dir_ids_for_loc)
-            ).all()
-            for ed in extra_depts:
-                dept_ids.add(ed.dept_id)
         if not dept_ids:
             return []
         departements = db.query(models.Departement).filter(
