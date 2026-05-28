@@ -105,7 +105,7 @@ const fmtDateTime = (value) => value ? new Date(value).toLocaleString('fr-FR') :
 function Tabs({ active, setActive, counts }) {
   return (
     <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-      {[['envoye', "Envoyé", counts.envoye], ['recu', "Recu", counts.recu]].map(([key, label, count]) => (
+      {[['envoye', "Envoyé", counts.envoye], ['recu', "Reçu", counts.recu]].map(([key, label, count]) => (
         <button key={key} onClick={() => setActive(key)} style={{ flex: 1, padding: '10px 8px', border: 'none', cursor: 'pointer', background: active === key ? '#fff' : '#f9fafb', fontWeight: active === key ? 700 : 500, fontSize: '0.82rem', borderBottom: active === key ? '2px solid #ce2b2b' : '2px solid transparent', color: active === key ? '#ce2b2b' : '#6b7280' }}>
           {label}
           {count > 0 && <span style={{ marginLeft: 5, padding: '1px 6px', borderRadius: 999, fontSize: '0.68rem', background: active === key ? '#ce2b2b' : '#e5e7eb', color: active === key ? '#fff' : '#374151' }}>{count}</span>}

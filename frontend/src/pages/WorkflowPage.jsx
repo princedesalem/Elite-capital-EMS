@@ -460,7 +460,7 @@ export default function WorkflowPage() {
                 <>
                   <div style={{ marginTop: '14px', marginBottom: '8px' }}>
                     <h3 style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <UserCheck size={14} /> Boite Reçu (validateur)
+                      <UserCheck size={14} /> Boîte Reçu (validateur)
                     </h3>
                   </div>
                   <div className="kanban-grid">

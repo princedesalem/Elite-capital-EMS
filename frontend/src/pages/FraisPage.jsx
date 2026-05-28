@@ -92,7 +92,7 @@ const computeMissionMetrics = (mission) => {
 function Tabs({ active, setActive, counts }) {
   return (
     <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
-      {[['envoye', "Envoyé", counts.envoye], ['recu', "Recu", counts.recu]].map(([key, label, count]) => (
+      {[['envoye', "Envoyé", counts.envoye], ['recu', "Reçu", counts.recu]].map(([key, label, count]) => (
         <button key={key} onClick={() => setActive(key)} style={{ flex: 1, padding: '10px 8px', border: 'none', cursor: 'pointer', background: active === key ? '#fff' : '#f9fafb', fontWeight: active === key ? 700 : 500, fontSize: '0.82rem', borderBottom: active === key ? '2px solid #ce2b2b' : '2px solid transparent', color: active === key ? '#ce2b2b' : '#6b7280' }}>
           {label}
           {count > 0 && <span style={{ marginLeft: 5, padding: '1px 6px', borderRadius: 999, fontSize: '0.68rem', background: active === key ? '#ce2b2b' : '#e5e7eb', color: active === key ? '#fff' : '#374151' }}>{count}</span>}
@@ -979,7 +979,7 @@ export default function FraisPage() {
               <th style={{ ...th, width: '8%' }}>Source</th>
               <th style={{ ...th, width: '8%' }}>{"Statut"}</th>
               <th style={{ ...th, width: '8%' }}>Date Création</th>
-              {activeTab !== 'envoye' && <th style={{ ...th, width: '9%' }}>Envoyé Par</th>}
+              {activeTab !== 'envoye' && <th style={{ ...th, width: '9%' }}>Envoyé par</th>}
               <th style={{ ...th, width: '7%' }}>Date Départ</th>
               <th style={{ ...th, width: '7%' }}>Date Retour</th>
               <th style={{ ...th, width: '5%' }}>Durée</th>

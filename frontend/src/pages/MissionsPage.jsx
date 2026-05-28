@@ -83,7 +83,7 @@ function Tabs({ active, setActive, counts }) {
     <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
       {[
         ['envoye', "Envoyé", counts.envoye],
-        ['recu', "Recu", counts.recu],
+        ['recu', "Reçu", counts.recu],
       ].map(([key, label, count]) => (
         <button
           key={key}
@@ -1219,7 +1219,7 @@ export default function MissionsPage() {
               <th style={{ ...th, width: '6%' }}>Source</th>
               <th style={{ ...th, width: '7%' }}>{"Statut"}</th>
               <th style={{ ...th, width: '7%' }}>Date Création</th>
-              {activeTab !== 'envoye' && <th style={{ ...th, width: '7%' }}>Envoyé Par</th>}
+              {activeTab !== 'envoye' && <th style={{ ...th, width: '7%' }}>Envoyé par</th>}
               <th style={{ ...th, width: '6%' }}>Date Départ</th>
               <th style={{ ...th, width: '6%' }}>Date Retour</th>
               <th style={{ ...th, width: '4%' }}>Durée</th>

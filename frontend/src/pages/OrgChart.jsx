@@ -769,7 +769,7 @@ export default function OrgChart() {
       pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 297, 210)
       pdf.save(`organigramme_${selectedEntity}.pdf`.replace(/\s+/g, '_'))
     } catch (e) {
-      toast.error?.("Echec de l'export PDF")
+      toast.error?.("Échec de l'export PDF")
     }
   }, [selectedEntity])
 
@@ -791,7 +791,7 @@ export default function OrgChart() {
       a.download = `organigramme_${selectedEntity}.png`.replace(/\s+/g, '_')
       a.click()
     } catch (e) {
-      toast.error?.("Echec de l'export PNG")
+      toast.error?.("Échec de l'export PNG")
     }
   }, [selectedEntity])
   // Excel : exporte la liste plate des employés visibles (filtre entité courant).
