@@ -272,12 +272,39 @@ def _role_names_set(db: Session):
 
 
 def _seed_default_fonctions(db: Session):
-    existing = {
-        str(f.libelle or '').strip().lower()
-        for f in db.query(models.FonctionReference).all()
-        if str(f.libelle or '').strip()
+    allowed_keys = {
+        str(lib or '').strip().lower()
+        for lib in DEFAULT_FONCTIONS
+        if str(lib or '').strip()
     }
     role_names = _role_names_set(db)
+    all_fonctions = db.query(models.FonctionReference).all()
+
+    # --- Nettoyage : supprimer les entrées inconnues non utilisées par des employés ---
+    used_fonctions = {
+        str(v or '').strip().lower()
+        for emp in db.query(models.Employe).all()
+        for v in (emp.fonction, emp.n1_fonction)
+        if str(v or '').strip()
+    }
+    to_delete = [
+        f for f in all_fonctions
+        if str(f.libelle or '').strip().lower() not in allowed_keys
+        and str(f.libelle or '').strip().lower() not in role_names
+        and str(f.libelle or '').strip().lower() not in used_fonctions
+    ]
+    for f in to_delete:
+        db.delete(f)
+    if to_delete:
+        db.commit()
+        all_fonctions = db.query(models.FonctionReference).all()
+
+    # --- Insertion : ajouter les entrées manquantes de DEFAULT_FONCTIONS ---
+    existing = {
+        str(f.libelle or '').strip().lower()
+        for f in all_fonctions
+        if str(f.libelle or '').strip()
+    }
     to_create = []
     for libelle in DEFAULT_FONCTIONS:
         key = str(libelle or '').strip().lower()
