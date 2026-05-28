@@ -362,11 +362,11 @@ export default function Administration() {
     setEditingFonctionId(f.id_fonction)
     setFonctionInput(f.libelle)
     setFonctionForm({ libelle: f.libelle, id_direction: f.id_direction || '', dept_id: f.dept_id || '' })
-    // Scroll vers le formulaire et animation de mise en évidence
+    // Scroll vers le haut de la page (banner Administration visible)
     setTimeout(() => {
-      if (fonctionFormRef.current) {
-        fonctionFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      document.documentElement.scrollTop = 0
+      document.body.scrollTop = 0
     }, 50)
     setFonctionFormHighlight(true)
     setTimeout(() => setFonctionFormHighlight(false), 1500)
