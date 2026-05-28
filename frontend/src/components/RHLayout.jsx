@@ -105,7 +105,14 @@ const MODULES = [
     ]
   },
   {id:'achats',    icon:'box',       label:'Achats',        subs:[{label:'Bientôt disponible', path:'/rh/module/achats'}]},
-  {id:'commercial',icon:'briefcase', label:'Commercial',    subs:[{label:'Bientôt disponible', path:'/rh/module/commercial'}]},
+  {id:'commercial',icon:'briefcase', label:'Commercial',    subs:[
+    {label:'Analytics & BI',       path:'/rh/commercial/analytics'},
+    {label:'CRM — Pipe',         path:'/rh/commercial/crm/pipe'},
+    {label:'CRM — Clients',      path:'/rh/commercial/crm/clients'},
+    {label:'CRM — Call Memos',   path:'/rh/commercial/crm/call-memos'},
+    {label:'CRM — Suivi actions', path:'/rh/commercial/crm/actions'},
+    {label:'Performance',        path:'/rh/commercial/performance'},
+  ]},
   {id:'marketing', icon:'megaphone', label:'Marketing',     subs:[{label:'Bientôt disponible', path:'/rh/module/marketing'}]},
   {id:'comms',     icon:'signal',    label:'Communication', subs:[{label:'Bientôt disponible', path:'/rh/module/communication'}]},
   {id:'si',        icon:'monitor',   label:"Système D'Information",  subs:[{label:'Bientôt disponible', path:'/rh/module/si'}]},
