@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import api from '../services/api'
 import { Settings, Building2, GitBranch, LayoutGrid, Briefcase, Plus, Pencil, Trash2, X, Users, Activity, ExternalLink, RefreshCw } from 'lucide-react'
 import OrgChart from './OrgChart'
@@ -20,6 +20,8 @@ export default function Administration() {
   const [fonctionForm, setFonctionForm] = useState({ libelle: '', id_direction: '', dept_id: '' })
   const [editingFonctionId, setEditingFonctionId] = useState(null)
   const [savingFonction, setSavingFonction] = useState(false)
+  const [fonctionFormHighlight, setFonctionFormHighlight] = useState(false)
+  const fonctionFormRef = useRef(null)
   const [sortDirectionBy, setSortDirectionBy] = useState('nom')
   const [sortDirectionValue, setSortDirectionValue] = useState('all')
   const [sortDepartementBy, setSortDepartementBy] = useState('nom')
@@ -360,6 +362,14 @@ export default function Administration() {
     setEditingFonctionId(f.id_fonction)
     setFonctionInput(f.libelle)
     setFonctionForm({ libelle: f.libelle, id_direction: f.id_direction || '', dept_id: f.dept_id || '' })
+    // Scroll vers le formulaire et animation de mise en évidence
+    setTimeout(() => {
+      if (fonctionFormRef.current) {
+        fonctionFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }, 50)
+    setFonctionFormHighlight(true)
+    setTimeout(() => setFonctionFormHighlight(false), 1500)
   }
 
   const deleteFonction = async (f) => {
@@ -833,7 +843,21 @@ export default function Administration() {
       {/* Fonctions Tab */}
       {activeTab === 'fonctions' && !loading && (
         <div>
-          <div className="card" style={{ marginBottom: 20 }}>
+          <style>{`
+            @keyframes fonctionFormPulse {
+              0%   { box-shadow: 0 0 0 0 rgba(206,43,43,0.55), 0 2px 8px rgba(0,0,0,0.08); border-color: #ce2b2b; }
+              40%  { box-shadow: 0 0 0 10px rgba(206,43,43,0.12), 0 2px 16px rgba(206,43,43,0.18); border-color: #ce2b2b; }
+              100% { box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-color: transparent; }
+            }
+            .fonction-form-highlight {
+              animation: fonctionFormPulse 1.5s ease-out forwards;
+              border: 2px solid #ce2b2b !important;
+            }
+          `}</style>
+          <div
+            ref={fonctionFormRef}
+            className={`card${fonctionFormHighlight ? ' fonction-form-highlight' : ''}`}
+            style={{ marginBottom: 20 }}>
             <h3 style={{ marginTop: 0, marginBottom: 12, color: '#021630', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <Briefcase size={16}/> Référentiel des fonctions
             </h3>
