@@ -667,16 +667,45 @@ def _read_import_dataframe(upload: UploadFile, table: Optional[str] = None):
     if not content:
         raise HTTPException(status_code=400, detail='Fichier vide')
 
+    def _detect_header_row(sample_df) -> Optional[int]:
+        """Cherche dans les 6 premières lignes celle qui ressemble à un en-tête de colonnes."""
+        max_rows = min(6, sample_df.shape[0])
+        for r in range(max_rows):
+            values = sample_df.iloc[r].tolist()
+            matched = sum(1 for v in values if canonical_import_header(v))
+            if matched >= 3:  # au moins 3 colonnes reconnues = c'est probablement un en-tête
+                return r
+        return None
+
     try:
         if filename.endswith('.csv'):
             return pd.read_csv(BytesIO(content), sep=None, engine='python', dtype=str, keep_default_na=False), None
         if filename.endswith('.xlsx'):
             workbook = pd.ExcelFile(BytesIO(content), engine='openpyxl')
-            sheet_name = 'Employés' if 'Employés' in workbook.sheet_names else workbook.sheet_names[0]
-            preview = pd.read_excel(BytesIO(content), engine='openpyxl', sheet_name=sheet_name, header=None, nrows=3, dtype=str, keep_default_na=False)
-            header_row = 2 if preview.shape[0] >= 3 and any(canonical_import_header(v) for v in preview.iloc[2].tolist()) else 0
-            df = pd.read_excel(BytesIO(content), engine='openpyxl', sheet_name=sheet_name, header=header_row, dtype=str, keep_default_na=False)
-            return df, None
+            frames = []
+            skipped_sheets = []
+            for sheet_name in workbook.sheet_names:
+                # Skip non-employee sheets (Instructions, Référence, etc.)
+                sheet_lower = str(sheet_name).strip().lower()
+                if any(skip in sheet_lower for skip in ('instruction', 'référence', 'reference', 'aide', 'help', 'doc')):
+                    skipped_sheets.append(sheet_name)
+                    continue
+                try:
+                    preview = pd.read_excel(BytesIO(content), engine='openpyxl', sheet_name=sheet_name, header=None, nrows=6, dtype=str, keep_default_na=False)
+                except Exception:
+                    skipped_sheets.append(sheet_name)
+                    continue
+                header_row = _detect_header_row(preview)
+                if header_row is None:
+                    skipped_sheets.append(sheet_name)
+                    continue
+                df_sheet = pd.read_excel(BytesIO(content), engine='openpyxl', sheet_name=sheet_name, header=header_row, dtype=str, keep_default_na=False)
+                if not df_sheet.empty:
+                    frames.append(df_sheet)
+            if not frames:
+                raise HTTPException(status_code=400, detail="Aucune feuille importable trouvée dans le classeur")
+            combined = pd.concat(frames, ignore_index=True, sort=False)
+            return combined, None
         if filename.endswith('.xls'):
             return pd.read_excel(BytesIO(content), engine='xlrd', dtype=str, keep_default_na=False), None
         if filename.endswith('.mdb') or filename.endswith('.accdb'):
@@ -836,10 +865,14 @@ def import_employees(
 
     total = len(df.index)
     imported = 0
+    skipped = 0
     errors = []
 
     for idx, row in enumerate(df.to_dict(orient='records'), start=2):
         normalized = _normalize_import_row(row)
+        # Skip empty rows (no matricule AND no nom)
+        if not normalized.get('matricule') and not normalized.get('nom'):
+            continue
         try:
             payload = schemas.EmployeBase.model_validate(normalized)
             data = _prepare_employee_payload(payload, db)
@@ -850,7 +883,9 @@ def import_employees(
             if not data.get('matricule'):
                 raise HTTPException(status_code=400, detail='Matricule requis')
             if crud.get_employe(db, data.get('matricule')):
-                raise HTTPException(status_code=400, detail='Matricule existe')
+                # Idempotence: l'employé existe déjà → on saute sans erreur
+                skipped += 1
+                continue
 
             created_import = crud.create_employe(db, data)
             _auto_fill_org_head(db, created_import)
@@ -865,7 +900,12 @@ def import_employees(
             if isinstance(exc, HTTPException):
                 detail = exc.detail
             elif isinstance(exc, IntegrityError):
-                detail = 'Contrainte BD violée (email/matricule déjà existant)'
+                # Doublon email/matricule lié à une condition de course : considérer comme skip
+                msg = str(getattr(exc, 'orig', exc)).lower()
+                if 'email' in msg or 'matricule' in msg or 'duplicate' in msg:
+                    skipped += 1
+                    continue
+                detail = 'Contrainte BD violée'
             else:
                 detail = str(exc)
             errors.append({'line': idx, 'error': detail})
@@ -884,6 +924,7 @@ def import_employees(
             summary_msg = (
                 f"Import du fichier « {file.filename} » terminé : "
                 f"{imported} employé(s) ajouté(s)"
+                + (f", {skipped} existant(s) ignoré(s)" if skipped else "")
                 + (f", {failed_count} échec(s)." if failed_count else ".")
             )
             for admin in admin_users:
@@ -898,7 +939,7 @@ def import_employees(
 
     log_action(
         db, actor_matricule, 'EMPLOYEES_IMPORTED', 'employe', None,
-        {'count': imported, 'failed': len(errors), 'file': file.filename},
+        {'count': imported, 'skipped': skipped, 'failed': len(errors), 'file': file.filename},
         ip_address=request.client.host if request.client else None,
     )
 
@@ -907,6 +948,7 @@ def import_employees(
         'table': resolved_table,
         'total_rows': total,
         'imported_rows': imported,
+        'skipped_rows': skipped,
         'failed_rows': len(errors),
         'errors': errors,
     }
@@ -1634,7 +1676,10 @@ def list_fonctions_reference(request: Request, db: Session = Depends(get_db)):
 
 @router.put('/admin/fonctions-reference/{id_fonction}')
 def update_fonction_reference(id_fonction: int, payload: schemas.FonctionReferenceCreate, request: Request, db: Session = Depends(get_db)):
-    """Met à jour une fonction de référence (Admin seulement)."""
+    """Met à jour une fonction de référence (Admin seulement).
+
+    Propage le changement de libellé aux employés concernés (EMPLOYE.fonction).
+    """
     _check_admin_role(request)
 
     current = db.query(models.FonctionReference).filter(models.FonctionReference.id_fonction == id_fonction).first()
@@ -1657,19 +1702,35 @@ def update_fonction_reference(id_fonction: int, payload: schemas.FonctionReferen
     if existing:
         raise HTTPException(status_code=400, detail='Cette fonction existe déjà dans cette direction/département')
 
+    old_libelle = current.libelle
+    propagated = 0
+    if old_libelle and old_libelle.strip().lower() != libelle.lower():
+        propagated = db.query(models.Employe).filter(
+            models.Employe.fonction.isnot(None),
+            func.lower(func.trim(models.Employe.fonction)) == old_libelle.strip().lower()
+        ).update({models.Employe.fonction: libelle}, synchronize_session=False)
+
     current.libelle = libelle
     current.id_direction = payload.id_direction
     current.dept_id = payload.dept_id
     db.commit()
     db.refresh(current)
-    return {"id_fonction": current.id_fonction, "libelle": current.libelle, "id_direction": current.id_direction, "dept_id": current.dept_id, "updated": True}
+    return {
+        "id_fonction": current.id_fonction,
+        "libelle": current.libelle,
+        "id_direction": current.id_direction,
+        "dept_id": current.dept_id,
+        "updated": True,
+        "employees_updated": propagated,
+    }
 
 
 @router.delete('/admin/fonctions-reference/{id_fonction}')
 def delete_fonction_reference(id_fonction: int, request: Request, db: Session = Depends(get_db)):
     """Supprime une fonction de référence (Admin seulement).
 
-    La suppression est bloquée si des employés utilisent encore ce libellé.
+    Les employés référençant ce libellé voient leur champ `fonction` mis à NULL
+    (cascade logique). Le compteur d'employés impactés est retourné.
     """
     _check_admin_role(request)
 
@@ -1677,20 +1738,17 @@ def delete_fonction_reference(id_fonction: int, request: Request, db: Session = 
     if not current:
         raise HTTPException(status_code=404, detail='Fonction introuvable')
 
-    usage_count = db.query(models.Employe).filter(
-        models.Employe.fonction.isnot(None),
-        func.lower(func.trim(models.Employe.fonction)) == current.libelle.lower()
-    ).count()
-
-    if usage_count > 0:
-        raise HTTPException(
-            status_code=400,
-            detail=f'Suppression impossible : {usage_count} employé(s) utilisent encore cette fonction'
-        )
+    libelle_old = (current.libelle or '').strip()
+    cleared = 0
+    if libelle_old:
+        cleared = db.query(models.Employe).filter(
+            models.Employe.fonction.isnot(None),
+            func.lower(func.trim(models.Employe.fonction)) == libelle_old.lower()
+        ).update({models.Employe.fonction: None}, synchronize_session=False)
 
     db.delete(current)
     db.commit()
-    return {"deleted": True, "id_fonction": id_fonction}
+    return {"deleted": True, "id_fonction": id_fonction, "employees_cleared": cleared}
 
 
 @router.get('/autocomplete/diplomes')

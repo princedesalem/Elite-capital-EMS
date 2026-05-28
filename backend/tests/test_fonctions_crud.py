@@ -216,7 +216,7 @@ class TestFonctionsReferenceCRUD:
         assert r.status_code == 404
 
     def test_delete_fonction_used_by_employee_blocked(self, client, seed_reference_data, db_session):
-        """Supprimer une fonction utilisée par un employé doit être bloqué (400)."""
+        """Supprimer une fonction utilisée par un employé doit cascader (NULL) et succès 200."""
         headers = _auth(seed_reference_data, 'admin')
 
         # Créer la fonction
@@ -235,8 +235,41 @@ class TestFonctionsReferenceCRUD:
         db_session.commit()
 
         r = client.delete(f'/employees/admin/fonctions-reference/{id_f}', headers=headers)
-        assert r.status_code == 400
-        assert 'employé' in r.json()['detail'].lower()
+        assert r.status_code == 200
+        body = r.json()
+        assert body['deleted'] is True
+        assert body['employees_cleared'] >= 1
+        # L'employé doit avoir fonction = NULL maintenant
+        db_session.refresh(employe)
+        assert employe.fonction is None
+
+    def test_update_fonction_propagates_libelle_to_employees(self, client, seed_reference_data, db_session):
+        """Modifier le libellé d'une fonction doit le propager aux employés concernés."""
+        headers = _auth(seed_reference_data, 'admin')
+        r_create = client.post(
+            '/employees/admin/fonctions-reference',
+            json={'libelle': 'Ancien Libelle'},
+            headers=headers,
+        )
+        assert r_create.status_code == 200
+        id_f = r_create.json()['id_fonction']
+
+        employe = seed_reference_data['employe']
+        employe.fonction = 'Ancien Libelle'
+        db_session.add(employe)
+        db_session.commit()
+
+        r = client.put(
+            f'/employees/admin/fonctions-reference/{id_f}',
+            json={'libelle': 'Nouveau Libelle'},
+            headers=headers,
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body['libelle'] == 'Nouveau Libelle'
+        assert body['employees_updated'] >= 1
+        db_session.refresh(employe)
+        assert employe.fonction == 'Nouveau Libelle'
 
     def test_delete_fonction_forbidden_for_employe(self, client, seed_reference_data, db_session):
         """Un EMPLOYE ne peut pas supprimer une fonction."""
