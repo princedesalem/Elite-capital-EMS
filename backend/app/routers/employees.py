@@ -530,6 +530,11 @@ def _prepare_employee_payload(payload: schemas.EmployeBase, db: Session):
         ).first()
         if holder and holder.fonction:
             cleaned['n1_fonction'] = holder.fonction
+    # Normalise email : chaîne vide → NULL pour éviter la contrainte UNIQUE sur ''
+    if 'email' in cleaned:
+        email_val = str(cleaned.get('email') or '').strip()
+        cleaned['email'] = email_val if email_val else None
+
     if cleaned.get('sexe') is not None:
         sexe_raw = str(cleaned.get('sexe') or '').strip().lower()
         if sexe_raw in {'m', 'masculin', 'homme'}:
@@ -866,6 +871,7 @@ def import_employees(
     imported = 0
     skipped = 0
     errors = []
+    imported_matricules: list[str] = []
 
     for idx, row in enumerate(df.to_dict(orient='records'), start=2):
         normalized = _normalize_import_row(row)
@@ -888,6 +894,7 @@ def import_employees(
 
             created_import = crud.create_employe(db, data)
             _auto_fill_org_head(db, created_import)
+            imported_matricules.append(str(created_import.matricule))
             # Notifier les admins pour chaque employé créé via import
             _notify_admin_employee_creation(
                 db, created_import, actor_role, actor_matricule,
@@ -950,7 +957,43 @@ def import_employees(
         'skipped_rows': skipped,
         'failed_rows': len(errors),
         'errors': errors,
+        'imported_matricules': imported_matricules,
     }
+
+
+class _RollbackImportBody(BaseModel):
+    matricules: list[str]
+
+
+@router.delete('/import/rollback')
+def rollback_import(
+    request: Request,
+    body: _RollbackImportBody,
+    db: Session = Depends(get_db),
+):
+    """Annule un import récent en supprimant les employés créés.
+
+    Seul un admin peut appeler cet endpoint.  La liste des matricules est celle
+    renvoyée par POST /import dans le champ ``imported_matricules``.
+    """
+    _check_admin_role(request)
+    actor_matricule, _ = _get_token_context(request)
+
+    deleted_list: list[str] = []
+    for mat in body.matricules:
+        emp = crud.get_employe(db, mat)
+        if emp:
+            db.delete(emp)
+            deleted_list.append(str(mat))
+
+    db.commit()
+
+    log_action(
+        db, actor_matricule, 'EMPLOYEES_IMPORT_ROLLBACK', 'employe', None,
+        {'count': len(deleted_list), 'matricules': deleted_list},
+    )
+
+    return {'deleted': len(deleted_list), 'matricules': deleted_list}
 
 
 @router.get('/export')
@@ -1582,13 +1625,27 @@ def get_n1_fonctions(db: Session = Depends(get_db)):
 def get_fonctions(dept_id: int = None, db: Session = Depends(get_db)):
     """Liste des fonctions pour auto-complétion.
 
-    Source prioritaire: table de référence FONCTION_REFERENCE.
-    Fallback: fonctions distinctes déjà présentes dans EMPLOYE.
+    Priorité :
+    1. FONCTION_REFERENCE filtrée par dept_id (si fourni)
+    2. Fonctions des employés dans ce département (fallback)
+    3. Toutes les FONCTION_REFERENCE (si pas de dept_id ou aucun résultat)
+    4. Fonctions distinctes de la table EMPLOYE (fallback ultime)
     """
     _seed_default_fonctions(db)
     role_names = _role_names_set(db)
 
     if dept_id:
+        # 1. Fonctions de référence configurées pour ce département
+        fonctions_ref_dept = db.query(models.FonctionReference.libelle).filter(
+            models.FonctionReference.dept_id == dept_id
+        ).order_by(models.FonctionReference.libelle.asc()).all()
+        if fonctions_ref_dept:
+            return [
+                {"value": f[0], "label": f[0]}
+                for f in fonctions_ref_dept
+                if f and f[0] and str(f[0]).strip().lower() not in role_names
+            ]
+        # 2. Fonctions déjà utilisées par des employés dans ce département
         fonctions_dept = db.query(models.Employe.fonction).filter(
             models.Employe.dept_id == dept_id,
             models.Employe.fonction.isnot(None),
@@ -1601,8 +1658,8 @@ def get_fonctions(dept_id: int = None, db: Session = Depends(get_db)):
                 if f and f[0] and str(f[0]).strip().lower() not in role_names
             ]
 
+    # 3. Toutes les fonctions de référence (pas de filtre dept)
     fonctions_ref = db.query(models.FonctionReference.libelle).order_by(models.FonctionReference.libelle.asc()).all()
-
     if fonctions_ref:
         return [
             {"value": f[0], "label": f[0]}
@@ -1610,6 +1667,7 @@ def get_fonctions(dept_id: int = None, db: Session = Depends(get_db)):
             if f and f[0] and str(f[0]).strip().lower() not in role_names
         ]
 
+    # 4. Fallback ultime : fonctions saisies dans EMPLOYE
     fonctions = db.query(models.Employe.fonction).distinct().filter(
         models.Employe.fonction.isnot(None),
         func.length(func.trim(models.Employe.fonction)) > 0

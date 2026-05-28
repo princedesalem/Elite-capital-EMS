@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from io import BytesIO
 
@@ -192,6 +193,50 @@ def test_import_employees_multi_sheet_xlsx(client, seed_reference_data, auth_hea
     assert p2['imported_rows'] == 0, f"Réimport ne doit rien créer : {p2}"
     assert p2['skipped_rows'] == 3, f"Tous doivent être skipped : {p2}"
     assert p2['failed_rows'] == 0
+
+
+def test_import_rollback_deletes_imported_rows(client, seed_reference_data, auth_headers):
+    """Test D — rollback : les employés créés par l'import sont supprimés.
+    Scénario : importer 2 employés → vérifier qu'ils existent →
+    appeler DELETE /import/rollback → vérifier qu'ils n'existent plus.
+    """
+    csv_content = (
+        "matricule,nom,prenom,email,sexe,date_embauche,entite,direction,departement,role,fonction\n"
+        "9201,Rollback,Alpha,9201@example.com,M,2026-03-01,ELCAM,Direction Generale,Operations,EMPLOYE,Analyste\n"
+        "9202,Rollback,Beta,9202@example.com,F,2026-03-01,ELCAM,Direction Generale,Operations,EMPLOYE,Analyste\n"
+    )
+    files = {'file': ('rb.csv', csv_content.encode('utf-8'), 'text/csv')}
+    r = client.post('/employees/import', files=files, headers=auth_headers(9001, 'ADMIN'))
+    assert r.status_code == 200
+    payload = r.json()
+    assert payload['imported_rows'] == 2
+    matricules = payload['imported_matricules']
+    assert set(matricules) == {'9201', '9202'}
+
+    # Les deux existent
+    for m in ('9201', '9202'):
+        assert client.get(f'/employees/{m}', headers=auth_headers(9001, 'ADMIN')).status_code == 200
+
+    # Rollback
+    rb = client.request('DELETE', '/employees/import/rollback',
+                        json={'matricules': matricules},
+                        headers=auth_headers(9001, 'ADMIN'))
+    assert rb.status_code == 200
+    assert rb.json()['deleted'] == 2
+
+    # Les deux ont disparu
+    for m in ('9201', '9202'):
+        assert client.get(f'/employees/{m}', headers=auth_headers(9001, 'ADMIN')).status_code == 404
+
+
+def test_import_rollback_empty_list_noop(client, seed_reference_data, auth_headers):
+    """Test E — rollback avec liste vide : 0 supprimé, aucune erreur."""
+    hdrs = auth_headers(9001, 'ADMIN')
+    rb = client.request('DELETE', '/employees/import/rollback',
+                        json={'matricules': []},
+                        headers=hdrs)
+    assert rb.status_code == 200
+    assert rb.json()['deleted'] == 0
 
 
 def test_export_employees_csv(client, seed_reference_data, auth_headers):

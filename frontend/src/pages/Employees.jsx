@@ -44,6 +44,9 @@ export default function Employees(){
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [importReport, setImportReport] = useState(null)
   const [importing, setImporting] = useState(false)
+  const [importPending, setImportPending] = useState(null)       // { file } — fichier sélectionné, pas encore envoyé
+  const [importedMatricules, setImportedMatricules] = useState([]) // matricules du dernier import
+  const [rollingBack, setRollingBack] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [actionMenuOpen, setActionMenuOpen] = useState(false)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
@@ -304,6 +307,7 @@ export default function Employees(){
   const submitImport = async (file, table = null) => {
     setImporting(true)
     setImportReport(null)
+    setImportedMatricules([])
     try {
       const formData = new FormData()
       formData.append('file', file)
@@ -312,7 +316,9 @@ export default function Employees(){
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       setImportReport(res.data)
+      setImportedMatricules(res.data.imported_matricules || [])
       setAccessSelection(null)
+      setImportPending(null)
       await refreshEmployees()
     } catch (err) {
       const detail = err?.response?.data?.detail
@@ -325,8 +331,24 @@ export default function Employees(){
         return
       }
       setImportReport({ error: formatImportError(detail) })
+      setImportPending(null)
     } finally {
       setImporting(false)
+    }
+  }
+
+  const handleRollbackImport = async () => {
+    if (!importedMatricules.length) { setImportReport(null); setImportedMatricules([]); return }
+    setRollingBack(true)
+    try {
+      await api.delete('/employees/import/rollback', { data: { matricules: importedMatricules } })
+      setList(prev => prev.filter(e => !importedMatricules.includes(String(e.matricule))))
+    } catch (_err) {
+      // rollback best-effort, on ferme quand même
+    } finally {
+      setRollingBack(false)
+      setImportReport(null)
+      setImportedMatricules([])
     }
   }
 
@@ -340,8 +362,9 @@ export default function Employees(){
       e.target.value = ''
       return
     }
-
-    await submitImport(file)
+    // Stocker le fichier sans importer : l'utilisateur doit confirmer
+    setImportPending({ file })
+    setImportReport(null)
     e.target.value = ''
   }
 
@@ -455,24 +478,84 @@ export default function Employees(){
         </div>
       </div>
 
+      {/* Confirmation du fichier sélectionné (avant import) */}
+      {importPending && !importing && (
+        <div className="card" style={{ marginBottom: 12, padding: '12px 16px', border: '1px solid #93c5fd', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '0.9rem', color: '#1e40af' }}>
+            <strong>Fichier sélectionné :</strong> {importPending.file.name}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="button"
+              style={{ background: '#e5e7eb', color: '#1f2937', fontWeight: 500 }}
+              onClick={() => setImportPending(null)}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              className="button"
+              style={{ background: 'var(--bleu)' }}
+              onClick={() => submitImport(importPending.file)}
+            >
+              Importer
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* En cours d'import */}
+      {importing && (
+        <div className="card" style={{ marginBottom: 12, padding: '12px 16px', border: '1px solid #e2e8f0', color: '#475569', fontSize: '0.9rem' }}>
+          Import en cours…
+        </div>
+      )}
+
       {/* Barre de recherche */}
       <div className="card" style={{marginBottom: 20}}>
         {importReport?.error && (
-          <p style={{ margin: '0 0 10px 0', color: '#991b1b', fontSize: '0.9rem' }}>{importReport.error}</p>
+          <div style={{ marginBottom: 10, padding: 10, borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+            <p style={{ margin: 0, color: '#991b1b', fontSize: '0.9rem' }}>{importReport.error}</p>
+            <button type="button" className="button" style={{ flexShrink: 0, background: '#e5e7eb', color: '#1f2937', fontWeight: 500, padding: '4px 12px', fontSize: '0.85rem' }} onClick={() => setImportReport(null)}>Fermer</button>
+          </div>
         )}
         {importReport && !importReport.error && (
           <div style={{ marginBottom: 10, padding: 10, borderRadius: 8, border: '1px solid #cbd5e1', background: 'var(--bg)' }}>
-            <strong>Import terminé:</strong> {importReport.imported_rows}/{importReport.total_rows} importé(s){typeof importReport.skipped_rows === 'number' && importReport.skipped_rows > 0 ? `, ${importReport.skipped_rows} existant(s) ignoré(s)` : ''}, {importReport.failed_rows} échec(s)
-            {importReport.table && (
-              <div style={{ marginTop: 6, color: '#334155', fontSize: '0.84rem' }}>Table Access: {importReport.table}</div>
-            )}
-            {Array.isArray(importReport.errors) && importReport.errors.length > 0 && (
-              <div style={{ marginTop: 8, maxHeight: 110, overflowY: 'auto', fontSize: '0.84rem', color: '#7f1d1d' }}>
-                {importReport.errors.map((er, i) => (
-                  <div key={`${er.line}-${i}`}>Ligne {er.line}: {String(er.error)}</div>
-                ))}
-              </div>
-            )}
+            <div style={{ marginBottom: 8 }}>
+              <strong>Import terminé :</strong> {importReport.imported_rows}/{importReport.total_rows} importé(s){typeof importReport.skipped_rows === 'number' && importReport.skipped_rows > 0 ? `, ${importReport.skipped_rows} existant(s) ignoré(s)` : ''}, {importReport.failed_rows} échec(s)
+              {importReport.table && (
+                <div style={{ marginTop: 6, color: '#334155', fontSize: '0.84rem' }}>Table Access: {importReport.table}</div>
+              )}
+              {Array.isArray(importReport.errors) && importReport.errors.length > 0 && (
+                <div style={{ marginTop: 8, maxHeight: 110, overflowY: 'auto', fontSize: '0.84rem', color: '#7f1d1d' }}>
+                  {importReport.errors.map((er, i) => (
+                    <div key={`${er.line}-${i}`}>Ligne {er.line}: {String(er.error)}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              {importedMatricules.length > 0 && (
+                <button
+                  type="button"
+                  className="button"
+                  style={{ background: '#e5e7eb', color: '#1f2937', fontWeight: 500 }}
+                  disabled={rollingBack}
+                  onClick={handleRollbackImport}
+                >
+                  {rollingBack ? 'Annulation…' : `Annuler l'import (${importedMatricules.length})`}
+                </button>
+              )}
+              <button
+                type="button"
+                className="button"
+                style={{ background: 'var(--bleu)' }}
+                onClick={() => { setImportReport(null); setImportedMatricules([]) }}
+              >
+                Fermer
+              </button>
+            </div>
           </div>
         )}
         <div style={{display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center'}}>
