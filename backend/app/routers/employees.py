@@ -67,7 +67,6 @@ DEFAULT_FONCTIONS = [
     'Responsable Gestion et Analyste de portefeuille',
     'chargé de Gestions de portefeuille',
     'chargé Analyste de portefeuille',
-    'Responsable Middle & Back office',
     'chargé Back Office & operations',
     'Stagiaire professionnel',
     'Stagiaire académique'
