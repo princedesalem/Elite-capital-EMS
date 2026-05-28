@@ -6,6 +6,19 @@ import {Pencil, ClipboardList, Briefcase, Building2, Clock, Upload, Download, Mo
 import AvatarCircle from '../components/AvatarCircle'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 
+/** Correspondance valeur DB → libellé affiché (avec accents, selon le sexe) */
+function formatStatutMatrimonial(statut, sexe) {
+  const isFemme = String(sexe).toUpperCase() === 'F'
+  const labels = {
+    'Marie':       isFemme ? 'Mariée'      : 'Marié',
+    'Celibataire': 'Célibataire',
+    'Divorce':     isFemme ? 'Divorcée'    : 'Divorcé',
+    'Veuf':        isFemme ? 'Veuve'       : 'Veuf',
+    'Separe':      isFemme ? 'Séparée'     : 'Séparé',
+  }
+  return labels[statut] || statut || '-'
+}
+
 export default function Employees(){
   const {user} = useAuth()
   const role = String(user?.role || '').toUpperCase()
@@ -295,7 +308,9 @@ export default function Employees(){
       const formData = new FormData()
       formData.append('file', file)
       const query = table ? `?table=${encodeURIComponent(table)}` : ''
-      const res = await api.post(`/employees/import${query}`, formData)
+      const res = await api.post(`/employees/import${query}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
       setImportReport(res.data)
       setAccessSelection(null)
       await refreshEmployees()
@@ -736,7 +751,7 @@ export default function Employees(){
                   <div><span style={{color: '#64748b'}}>Ville:</span> <strong>{selectedEmployee.ville || '-'}</strong></div>
                   <div><span style={{color: '#64748b'}}>Pays:</span> <strong>{selectedEmployee.pays || '-'}</strong></div>
                   <div style={{gridColumn: '1 / -1'}}><span style={{color: '#64748b'}}>Contact d'urgence:</span> <strong>{selectedEmployee.contact_urgence || '-'}</strong></div>
-                  <div><span style={{color: '#64748b'}}>Statut matrimonial:</span> <strong>{selectedEmployee.statut_matrimonial || '-'}</strong></div>
+                  <div><span style={{color: '#64748b'}}>Statut matrimonial:</span> <strong>{formatStatutMatrimonial(selectedEmployee.statut_matrimonial, selectedEmployee.sexe)}</strong></div>
                   <div><span style={{color: '#64748b'}}>Nombre d'enfants:</span> <strong>{selectedEmployee.nombre_enfants ?? '-'}</strong></div>
                 </div>
               </div>
