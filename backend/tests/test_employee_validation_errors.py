@@ -140,7 +140,7 @@ def test_creer_compte_role_inconnu_nouvel_employe(client, auth_headers, data, db
 
 
 def test_suppression_fonction_employees_lies_message_accents(client, auth_headers, data, db_session):
-    """Supprimer une fonction utilisée par un employé doit retourner 400 avec 'employé(s)' accentué."""
+    """Supprimer une fonction utilisée par un employé doit cascader (NULL) et retourner le compteur."""
     from app import models
 
     headers = _admin_headers(auth_headers, data)
@@ -163,8 +163,9 @@ def test_suppression_fonction_employees_lies_message_accents(client, auth_header
         fn_id = existing.id_fonction
 
     resp = client.delete(f'/employees/admin/fonctions-reference/{fn_id}', headers=headers)
-    assert resp.status_code == 400, f"Statut attendu 400, obtenu {resp.status_code}: {resp.json()}"
-    detail = resp.json()['detail']
-    assert 'employé(s)' in detail, (
-        f"Message doit contenir 'employé(s)' (accentué), obtenu : '{detail}'"
+    assert resp.status_code == 200, f"Statut attendu 200, obtenu {resp.status_code}: {resp.json()}"
+    body = resp.json()
+    assert body['deleted'] is True
+    assert body['employees_cleared'] >= 1, (
+        f"Au moins 1 employé doit avoir été décroché, body: {body}"
     )

@@ -447,7 +447,7 @@ export default function Employees(){
         )}
         {importReport && !importReport.error && (
           <div style={{ marginBottom: 10, padding: 10, borderRadius: 8, border: '1px solid #cbd5e1', background: 'var(--bg)' }}>
-            <strong>Import terminé:</strong> {importReport.imported_rows}/{importReport.total_rows} importé(s), {importReport.failed_rows} échec(s)
+            <strong>Import terminé:</strong> {importReport.imported_rows}/{importReport.total_rows} importé(s){typeof importReport.skipped_rows === 'number' && importReport.skipped_rows > 0 ? `, ${importReport.skipped_rows} existant(s) ignoré(s)` : ''}, {importReport.failed_rows} échec(s)
             {importReport.table && (
               <div style={{ marginTop: 6, color: '#334155', fontSize: '0.84rem' }}>Table Access: {importReport.table}</div>
             )}
