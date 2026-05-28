@@ -105,14 +105,20 @@ const MODULES = [
     ]
   },
   {id:'achats',    icon:'box',       label:'Achats',        subs:[{label:'Bientôt disponible', path:'/rh/module/achats'}]},
-  {id:'commercial',icon:'briefcase', label:'Commercial',    subs:[{label:'Bientôt disponible', path:'/rh/module/commercial'}]},
+  {id:'commercial',icon:'briefcase', label:'Commercial',    subs:[
+    {label:'Analytics & BI',       path:'/rh/commercial/analytics'},
+    {label:'CRM — Pipe',         path:'/rh/commercial/crm/pipe'},
+    {label:'CRM — Clients',      path:'/rh/commercial/crm/clients'},
+    {label:'CRM — Call Memos',   path:'/rh/commercial/crm/call-memos'},
+    {label:'CRM — Suivi actions', path:'/rh/commercial/crm/actions'},
+    {label:'Performance',        path:'/rh/commercial/performance'},
+  ]},
   {id:'marketing', icon:'megaphone', label:'Marketing',     subs:[{label:'Bientôt disponible', path:'/rh/module/marketing'}]},
   {id:'comms',     icon:'signal',    label:'Communication', subs:[{label:'Bientôt disponible', path:'/rh/module/communication'}]},
   {id:'si',        icon:'monitor',   label:"Système D'Information",  subs:[{label:'Bientôt disponible', path:'/rh/module/si'}]},
   {id:'flotte',    icon:'car',       label:'Flotte',        subs:[{label:'Bientôt disponible', path:'/rh/module/flotte'}]},
   {id:'audit',     icon:'audit',     label:'Audit',         subs:[{label:'Bientôt disponible', path:'/rh/module/audit'}]},
   {id:'projets',   icon:'folder',    label:'Projets',       subs:[{label:'Bientôt disponible', path:'/rh/module/projets'}]},
-  {id:'crm',       icon:'handshake', label:'CRM',           subs:[{label:'Bientôt disponible', path:'/rh/module/crm'}]},
 ]
 
 const HIDDEN_BY_ROLE_KEYS = {
@@ -378,6 +384,23 @@ export default function RHLayout() {
           <NavLink to="/rh/password"    style={({isActive})=>quickLink(isActive)}><Icon name="key" /> {"Mot de passe"}</NavLink>
           <NavLink to="/rh/mfa"         style={({isActive})=>quickLink(isActive)}><Icon name="lock" /> {"Authentification MFA"}</NavLink>
         </nav>
+
+        {/* ── Version badge ── */}
+        <div style={{
+          padding:'8px 16px 12px',
+          borderTop:`1px solid var(--sidebar-border)`,
+          textAlign:'center',
+        }}>
+          <span style={{
+            fontSize:'0.68rem',
+            color:'var(--sidebar-muted)',
+            opacity:0.6,
+            letterSpacing:'0.04em',
+            userSelect:'none',
+          }}>
+            EMS {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : ''}
+          </span>
+        </div>
       </aside>
 
       {/* ── Content area ── */}
