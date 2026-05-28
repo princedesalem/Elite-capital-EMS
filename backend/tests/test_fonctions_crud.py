@@ -215,6 +215,45 @@ class TestFonctionsReferenceCRUD:
         r = client.delete('/employees/admin/fonctions-reference/999999', headers=headers)
         assert r.status_code == 404
 
+    def test_delete_fonction_removes_row_from_db_and_no_reseed(self, client, seed_reference_data, db_session):
+        """Test A : la suppression retire vraiment la ligne en base, et un GET ultérieur ne la recrée pas."""
+        headers = _auth(seed_reference_data, 'admin')
+        r_create = client.post(
+            '/employees/admin/fonctions-reference',
+            json={'libelle': 'A Supprimer Definitivement'},
+            headers=headers,
+        )
+        assert r_create.status_code == 200
+        id_f = r_create.json()['id_fonction']
+
+        # Confirmer présence en base avant
+        present = db_session.query(models.FonctionReference).filter_by(id_fonction=id_f).first()
+        assert present is not None
+
+        # Suppression
+        r = client.delete(f'/employees/admin/fonctions-reference/{id_f}', headers=headers)
+        assert r.status_code == 200
+        assert r.json()['deleted'] is True
+
+        # Confirmer absence en base après (SELECT direct)
+        db_session.expire_all()
+        gone = db_session.query(models.FonctionReference).filter_by(id_fonction=id_f).first()
+        assert gone is None, "La ligne FONCTION_REFERENCE doit être réellement supprimée"
+
+        # Aucune fonction avec ce libellé ne doit subsister, même avec un autre id
+        by_libelle = db_session.query(models.FonctionReference).filter(
+            models.FonctionReference.libelle == 'A Supprimer Definitivement'
+        ).first()
+        assert by_libelle is None, "Aucune fonction de ce libellé ne doit subsister"
+
+        # Un GET ultérieur ne doit pas re-créer le libellé (sauf si dans DEFAULT_FONCTIONS, ce qui n'est pas le cas)
+        client.get('/employees/admin/fonctions-reference', headers=headers)
+        db_session.expire_all()
+        still_gone = db_session.query(models.FonctionReference).filter(
+            models.FonctionReference.libelle == 'A Supprimer Definitivement'
+        ).first()
+        assert still_gone is None, "Le GET ne doit pas recréer la fonction supprimée"
+
     def test_delete_fonction_used_by_employee_blocked(self, client, seed_reference_data, db_session):
         """Supprimer une fonction utilisée par un employé doit cascader (NULL) et succès 200."""
         headers = _auth(seed_reference_data, 'admin')

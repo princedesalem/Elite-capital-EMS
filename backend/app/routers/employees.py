@@ -272,22 +272,21 @@ def _role_names_set(db: Session):
 
 
 def _seed_default_fonctions(db: Session):
-    """Insère les fonctions manquantes de DEFAULT_FONCTIONS.
-    Ne supprime rien — le nettoyage ponctuel est effectué par la migration 073.
+    """Insère les fonctions par défaut UNIQUEMENT si la table est vide (premier démarrage).
+
+    Sinon (table déjà initialisée), n'insère rien : sinon les fonctions
+    supprimées par l'admin réapparaîtraient à chaque GET avec un nouvel id.
     """
+    if db.query(models.FonctionReference.id_fonction).first() is not None:
+        return
     role_names = _role_names_set(db)
-    all_fonctions = db.query(models.FonctionReference).all()
-    existing = {
-        str(f.libelle or '').strip().lower()
-        for f in all_fonctions
-        if str(f.libelle or '').strip()
-    }
     to_create = []
+    seen = set()
     for libelle in DEFAULT_FONCTIONS:
         key = str(libelle or '').strip().lower()
-        if not key or key in existing or key in role_names:
+        if not key or key in seen or key in role_names:
             continue
-        existing.add(key)
+        seen.add(key)
         to_create.append(models.FonctionReference(libelle=libelle))
     if to_create:
         db.add_all(to_create)
