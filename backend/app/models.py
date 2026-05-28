@@ -33,7 +33,6 @@ class TypeNotificationEnum(str, enum.Enum):
     CLOTURE_REQUISE = 'CLOTURE_REQUISE'
     RELANCE_VALIDATION = 'RELANCE_VALIDATION'
     RETARD_POINTAGE = 'RETARD_POINTAGE'
-    ALERTE_CONTRAT = 'ALERTE_CONTRAT'
     AUTRE = 'AUTRE'
 
 class TypeActionEnum(str, enum.Enum):
@@ -165,8 +164,11 @@ class Role(Base):
 
 class FonctionReference(Base):
     __tablename__ = 'FONCTION_REFERENCE'
+    __table_args__ = (
+        UniqueConstraint('libelle', 'id_direction', 'dept_id', name='ux_fonction_libelle_dir_dept'),
+    )
     id_fonction = Column(Integer, primary_key=True, autoincrement=True)
-    libelle = Column(String(200), unique=True, nullable=False)
+    libelle = Column(String(200), nullable=False)
     id_direction = Column(Integer, ForeignKey('DIRECTION.id_direction'), nullable=True)
     dept_id = Column(Integer, ForeignKey('DEPARTEMENT.dept_id'), nullable=True)
 
