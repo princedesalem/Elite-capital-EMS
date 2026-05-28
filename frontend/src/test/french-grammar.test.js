@@ -283,4 +283,32 @@ describe('Qualité linguistique française — UI text', () => {
       }
     })
   })
+
+  describe('Grammaire — statut matrimonial affiché avec accents', () => {
+    it('Employees.jsx contient une table de correspondance STATUT_MATRIMONIAL_LABELS', () => {
+      const f = join(SRC_DIR, 'pages', 'Employees.jsx')
+      const content = readFileSync(f, 'utf-8')
+      expect(content, 'La constante STATUT_MATRIMONIAL_LABELS doit exister').toMatch(/STATUT_MATRIMONIAL_LABELS/)
+    })
+
+    it('"Marie" est traduit en "Marié(e)" dans STATUT_MATRIMONIAL_LABELS', () => {
+      const f = join(SRC_DIR, 'pages', 'Employees.jsx')
+      const content = readFileSync(f, 'utf-8')
+      expect(content, '"Marie" doit mapper vers "Marié(e)"').toMatch(/'Marie'\s*:\s*'Marié\(e\)'/)
+    })
+
+    it('"Celibataire" est traduit en "Célibataire" dans STATUT_MATRIMONIAL_LABELS', () => {
+      const f = join(SRC_DIR, 'pages', 'Employees.jsx')
+      const content = readFileSync(f, 'utf-8')
+      expect(content, '"Celibataire" doit mapper vers "Célibataire"').toMatch(/'Celibataire'\s*:\s*'Célibataire'/)
+    })
+
+    it("L'affichage du statut matrimonial utilise STATUT_MATRIMONIAL_LABELS (pas la valeur brute)", () => {
+      const f = join(SRC_DIR, 'pages', 'Employees.jsx')
+      const content = readFileSync(f, 'utf-8')
+      // La ligne d'affichage doit passer par le mapping, pas afficher selectedEmployee.statut_matrimonial directement
+      expect(content, "L'affichage doit utiliser STATUT_MATRIMONIAL_LABELS[...]").toMatch(/STATUT_MATRIMONIAL_LABELS\[selectedEmployee\.statut_matrimonial\]/)
+    })
+  })
 })
+
