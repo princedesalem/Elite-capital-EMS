@@ -3,7 +3,7 @@ import api from '../services/api'
 import { Settings, Building2, GitBranch, LayoutGrid, Briefcase, Plus, Pencil, Trash2, X, Users, Activity, ExternalLink, RefreshCw } from 'lucide-react'
 import OrgChart from './OrgChart'
 import { useAuth } from '../contexts/AuthContext'
-import { confirmDialog } from '../components/ui/bridge'
+import { confirmDialog, toast } from '../components/ui/bridge'
 import { BRAND_GRADIENT } from '../theme'
 export default function Administration() {
   const { user } = useAuth()
@@ -333,7 +333,7 @@ export default function Administration() {
   const submitFonction = async () => {
     const libelle = fonctionForm.libelle.trim()
     if (!libelle) {
-      setError("Le libellé de la fonction est obligatoire")
+      toast.error("Le libellé de la fonction est obligatoire")
       return
     }
     setSavingFonction(true)
@@ -346,13 +346,21 @@ export default function Administration() {
     try {
       if (editingFonctionId) {
         await api.put(`/employees/admin/fonctions-reference/${editingFonctionId}`, payload)
+        toast.success(`Fonction «\u00a0${libelle}\u00a0» mise à jour`)
       } else {
-        await api.post('/employees/admin/fonctions-reference', payload)
+        const res = await api.post('/employees/admin/fonctions-reference', payload)
+        if (res.data?.created === false) {
+          toast.success(`Fonction «\u00a0${libelle}\u00a0» existe déjà — liste actualisée`)
+        } else {
+          toast.success(`Fonction «\u00a0${libelle}\u00a0» ajoutée avec succès`)
+        }
       }
       resetFonctionForm()
       await loadFonctions()
     } catch (e) {
-      setError(e?.response?.data?.detail || "Erreur lors de la sauvegarde de la fonction")
+      const msg = e?.response?.data?.detail || "Erreur lors de la sauvegarde de la fonction"
+      setError(msg)
+      toast.error(msg)
     } finally {
       setSavingFonction(false)
     }
@@ -380,8 +388,11 @@ export default function Administration() {
       await api.delete(`/employees/admin/fonctions-reference/${f.id_fonction}`)
       if (editingFonctionId === f.id_fonction) resetFonctionForm()
       await loadFonctions()
+      toast.success(`Fonction «\u00a0${f.libelle}\u00a0» supprimée`)
     } catch (e) {
-      setError(e?.response?.data?.detail || "Erreur lors de la suppression de la fonction")
+      const msg = e?.response?.data?.detail || "Erreur lors de la suppression de la fonction"
+      setError(msg)
+      toast.error(msg)
     }
   }
 
