@@ -2599,7 +2599,7 @@ export default function Operations() {
                                     style={{fontSize: '0.85rem', padding: '6px 12px', display:'inline-flex', alignItems:'center', gap:4}}
                                     title="Valider que les frais sont corrects"
                                   >
-                                    <CheckCircle size={12}/> Valider frais
+                                    <CheckCircle size={12}/> Valider les frais
                                   </button>
                                 )}
                                 
@@ -3032,25 +3032,25 @@ export default function Operations() {
                 <div className="form-card" style={{ marginBottom: '12px', padding: '10px 12px' }}>
                   <div style={{ display: 'grid', gap: '6px', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
                     <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px' }}>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>Envoye</div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>Envoyé</div>
                       <div style={{ fontWeight: 700, color: 'var(--text)' }}>{mesDemandes.length}</div>
                     </div>
                     <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '8px' }}>
-                      <div style={{ fontSize: '0.72rem', color: '#9a3412', textTransform: 'uppercase' }}>Recu a valider</div>
+                      <div style={{ fontSize: '0.72rem', color: '#9a3412', textTransform: 'uppercase' }}>Reçu à valider</div>
                       <div style={{ fontWeight: 700, color: '#7c2d12' }}>{aValider.length}</div>
                     </div>
                     <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '8px' }}>
-                      <div style={{ fontSize: '0.72rem', color: '#166534', textTransform: 'uppercase' }}>Valide par moi</div>
+                      <div style={{ fontSize: '0.72rem', color: '#166534', textTransform: 'uppercase' }}>Validé par moi</div>
                       <div style={{ fontWeight: 700, color: '#14532d' }}>{mesValidations.length}</div>
                     </div>
                     <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '8px' }}>
-                      <div style={{ fontSize: '0.72rem', color: '#991b1b', textTransform: 'uppercase' }}>Refuse par moi</div>
+                      <div style={{ fontSize: '0.72rem', color: '#991b1b', textTransform: 'uppercase' }}>Refusé par moi</div>
                       <div style={{ fontWeight: 700, color: '#7f1d1d' }}>{mesRefus.length}</div>
                     </div>
                   </div>
                 </div>
                 <div style={{ marginBottom: '10px' }}>
-                  <h3 style={{ marginBottom: '10px' }}>Boite Envoye</h3>
+                  <h3 style={{ marginBottom: '10px' }}>Boîte Envoyée</h3>
                 </div>
                 <div className="kanban-grid">
                   <div className="kanban-col orange-light">
@@ -3134,7 +3134,7 @@ export default function Operations() {
                 {estValidateur && (
                   <>
                     <div style={{ marginTop: '14px', marginBottom: '8px' }}>
-                      <h3 style={{ marginBottom: '8px', display:'flex', alignItems:'center', gap:6 }}><UserCheck size={14}/> Boite Recu (validateur)</h3>
+                      <h3 style={{ marginBottom: '8px', display:'flex', alignItems:'center', gap:6 }}><UserCheck size={14}/> Boîte Reçu (validateur)</h3>
                     </div>
                     <div className="kanban-grid">
                       <div className="kanban-col orange">
@@ -3242,7 +3242,7 @@ export default function Operations() {
                     </option>
                   ))}
                 </select>
-                <button className="btn btn-primary" onClick={rechercherPropositions} disabled={!operationRecherche}>Afficher propositions</button>
+                <button className="btn btn-primary" onClick={rechercherPropositions} disabled={!operationRecherche}>Afficher les propositions</button>
               </div>
             </div>
 

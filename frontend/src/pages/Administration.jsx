@@ -843,7 +843,7 @@ export default function Administration() {
                   <input
                     value={fonctionForm.libelle}
                     onChange={(e) => setFonctionForm(f => ({ ...f, libelle: e.target.value }))}
-                    placeholder="Saisir le libelle de la fonction"
+                    placeholder="Saisir le libellé de la fonction"
                     style={{ flex: 1, minWidth: 260, padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8 }}
                   />
                   <select

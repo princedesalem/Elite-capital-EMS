@@ -244,7 +244,7 @@ export default function AcademyCourse() {
       URL.revokeObjectURL(url)
       toast.success('Certificat téléchargé')
     } catch (e) {
-      toast.error("Echec du téléchargement (terminez d'abord la formation)")
+      toast.error("Échec du téléchargement (terminez d'abord la formation)")
     }
   }
 
