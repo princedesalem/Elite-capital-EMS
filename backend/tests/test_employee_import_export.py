@@ -122,6 +122,78 @@ def test_import_employees_styled_xlsx_with_new_fields(client, seed_reference_dat
     assert payload['nouvelle_recrue'] is True
 
 
+def test_import_employees_multi_sheet_xlsx(client, seed_reference_data, auth_headers):
+    """Test B : un xlsx avec plusieurs feuilles (Instructions/Référence + plusieurs feuilles d'employés)
+    doit importer toutes les feuilles d'employés et ignorer les feuilles Instructions/Référence.
+    Les employés déjà existants doivent être comptés dans skipped_rows, pas erreur.
+    """
+    rows_sheet1 = [
+        {
+            'matricule': 9101, 'nom': 'Multi', 'prenom': 'Un',
+            'email': '9101@example.com', 'sexe': 'M',
+            'date_embauche': date(2026, 2, 1),
+            'entite': 'ELCAM', 'direction': 'Direction Generale',
+            'departement': 'Operations', 'role': 'EMPLOYE', 'fonction': 'Analyste',
+        },
+        {
+            'matricule': 9102, 'nom': 'Multi', 'prenom': 'Deux',
+            'email': '9102@example.com', 'sexe': 'F',
+            'date_embauche': date(2026, 2, 2),
+            'entite': 'ELCAM', 'direction': 'Direction Generale',
+            'departement': 'Operations', 'role': 'EMPLOYE', 'fonction': 'Analyste',
+        },
+    ]
+    rows_sheet2 = [
+        {
+            'matricule': 9103, 'nom': 'Multi', 'prenom': 'Trois',
+            'email': '9103@example.com', 'sexe': 'M',
+            'date_embauche': date(2026, 2, 3),
+            'entite': 'ELCAM', 'direction': 'Direction Generale',
+            'departement': 'Operations', 'role': 'EMPLOYE', 'fonction': 'Analyste',
+        },
+    ]
+    instructions = pd.DataFrame([{'col': 'Comment remplir le template'}, {'col': 'Ligne 2'}])
+    reference = pd.DataFrame([{'code': 'M', 'libelle': 'Masculin'}])
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        pd.DataFrame(rows_sheet1).to_excel(writer, index=False, sheet_name='Employes-Site1')
+        pd.DataFrame(rows_sheet2).to_excel(writer, index=False, sheet_name='Employes-Site2')
+        instructions.to_excel(writer, index=False, sheet_name='Instructions')
+        reference.to_excel(writer, index=False, sheet_name='Référence')
+    output.seek(0)
+
+    files = {
+        'file': ('multi.xlsx', output.getvalue(),
+                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    }
+    r = client.post('/employees/import', files=files, headers=auth_headers(9001, 'ADMIN'))
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    # 3 employés répartis sur 2 feuilles, Instructions/Référence ignorées
+    assert payload['total_rows'] == 3, f"Attendu 3 lignes, obtenu {payload}"
+    assert payload['imported_rows'] == 3
+    assert payload['failed_rows'] == 0
+
+    # Vérifier que les 3 ont bien été créés
+    for m in (9101, 9102, 9103):
+        chk = client.get(f'/employees/{m}', headers=auth_headers(9001, 'ADMIN'))
+        assert chk.status_code == 200, f'Employé {m} introuvable'
+
+    # Réimporter le même fichier → doit être idempotent (tous en skipped, aucun en failed)
+    output.seek(0)
+    files2 = {
+        'file': ('multi.xlsx', output.getvalue(),
+                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    }
+    r2 = client.post('/employees/import', files=files2, headers=auth_headers(9001, 'ADMIN'))
+    assert r2.status_code == 200, r2.text
+    p2 = r2.json()
+    assert p2['imported_rows'] == 0, f"Réimport ne doit rien créer : {p2}"
+    assert p2['skipped_rows'] == 3, f"Tous doivent être skipped : {p2}"
+    assert p2['failed_rows'] == 0
+
+
 def test_export_employees_csv(client, seed_reference_data, auth_headers):
     response = client.get('/employees/export?format=csv', headers=auth_headers(9001, 'ADMIN'))
     assert response.status_code == 200
