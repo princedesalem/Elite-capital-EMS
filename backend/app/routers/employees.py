@@ -1592,7 +1592,9 @@ def create_fonction_reference(payload: schemas.FonctionReferenceCreate, request:
         raise HTTPException(status_code=400, detail='Ce libellé correspond à un rôle, pas à une fonction')
 
     existing = db.query(models.FonctionReference).filter(
-        func.lower(models.FonctionReference.libelle) == libelle.lower()
+        func.lower(models.FonctionReference.libelle) == libelle.lower(),
+        models.FonctionReference.id_direction == payload.id_direction,
+        models.FonctionReference.dept_id == payload.dept_id,
     ).first()
     if existing:
         return {"id_fonction": existing.id_fonction, "libelle": existing.libelle, "created": False}
@@ -1648,10 +1650,12 @@ def update_fonction_reference(id_fonction: int, payload: schemas.FonctionReferen
 
     existing = db.query(models.FonctionReference).filter(
         func.lower(models.FonctionReference.libelle) == libelle.lower(),
+        models.FonctionReference.id_direction == payload.id_direction,
+        models.FonctionReference.dept_id == payload.dept_id,
         models.FonctionReference.id_fonction != id_fonction
     ).first()
     if existing:
-        raise HTTPException(status_code=400, detail='Cette fonction existe déjà')
+        raise HTTPException(status_code=400, detail='Cette fonction existe déjà dans cette direction/département')
 
     current.libelle = libelle
     current.id_direction = payload.id_direction
