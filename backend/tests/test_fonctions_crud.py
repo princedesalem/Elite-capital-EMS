@@ -251,3 +251,125 @@ class TestFonctionsReferenceCRUD:
         emp_headers = _auth(seed_reference_data, 'employe')
         r = client.delete(f'/employees/admin/fonctions-reference/{id_f}', headers=emp_headers)
         assert r.status_code in (401, 403)
+
+    # ── Unicité composite (libelle + direction + département) ───────────────
+
+    def test_same_name_different_dept_allowed(self, client, seed_reference_data):
+        """Le même libellé dans deux départements différents est autorisé."""
+        headers = _auth(seed_reference_data, 'admin')
+        dept_id = seed_reference_data['departement'].dept_id
+
+        r1 = client.post(
+            '/employees/admin/fonctions-reference',
+            json={'libelle': 'Chargé de Projets', 'dept_id': None},
+            headers=headers,
+        )
+        r2 = client.post(
+            '/employees/admin/fonctions-reference',
+            json={'libelle': 'Chargé de Projets', 'dept_id': dept_id},
+            headers=headers,
+        )
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+        assert r1.json()['created'] is True
+        assert r2.json()['created'] is True
+        # Deux entrées distinctes
+        assert r1.json()['id_fonction'] != r2.json()['id_fonction']
+
+    def test_same_name_different_direction_allowed(self, client, seed_reference_data):
+        """Le même libellé dans deux directions différentes est autorisé."""
+        headers = _auth(seed_reference_data, 'admin')
+        id_dir = seed_reference_data['direction'].id_direction
+
+        r1 = client.post(
+            '/employees/admin/fonctions-reference',
+            json={'libelle': 'Responsable Projets', 'id_direction': None},
+            headers=headers,
+        )
+        r2 = client.post(
+            '/employees/admin/fonctions-reference',
+            json={'libelle': 'Responsable Projets', 'id_direction': id_dir},
+            headers=headers,
+        )
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+        assert r1.json()['created'] is True
+        assert r2.json()['created'] is True
+        assert r1.json()['id_fonction'] != r2.json()['id_fonction']
+
+    def test_same_name_same_dept_idempotent(self, client, seed_reference_data):
+        """Le même libellé + même département retourne l'existant (created=False)."""
+        headers = _auth(seed_reference_data, 'admin')
+        dept_id = seed_reference_data['departement'].dept_id
+
+        payload = {'libelle': 'Analyste Opérations', 'dept_id': dept_id}
+        r1 = client.post('/employees/admin/fonctions-reference', json=payload, headers=headers)
+        r2 = client.post('/employees/admin/fonctions-reference', json=payload, headers=headers)
+
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+        assert r1.json()['created'] is True
+        assert r2.json()['created'] is False
+        assert r1.json()['id_fonction'] == r2.json()['id_fonction']
+
+    def test_same_name_no_scope_idempotent(self, client, seed_reference_data):
+        """Même libellé sans direction ni département → toujours idempotent."""
+        headers = _auth(seed_reference_data, 'admin')
+        payload = {'libelle': 'Superviseur Général'}
+        r1 = client.post('/employees/admin/fonctions-reference', json=payload, headers=headers)
+        r2 = client.post('/employees/admin/fonctions-reference', json=payload, headers=headers)
+
+        assert r1.json()['created'] is True
+        assert r2.json()['created'] is False
+        assert r1.json()['id_fonction'] == r2.json()['id_fonction']
+
+    def test_update_same_name_different_direction_allowed(self, client, seed_reference_data):
+        """PUT vers un libellé déjà utilisé mais dans une direction différente est autorisé."""
+        headers = _auth(seed_reference_data, 'admin')
+        id_dir = seed_reference_data['direction'].id_direction
+
+        # Créer F1 avec la direction, F2 sans direction
+        r1 = client.post(
+            '/employees/admin/fonctions-reference',
+            json={'libelle': 'Gérant de Compte', 'id_direction': id_dir},
+            headers=headers,
+        )
+        r2 = client.post(
+            '/employees/admin/fonctions-reference',
+            json={'libelle': 'Gérant de Compte Bis', 'id_direction': None},
+            headers=headers,
+        )
+        id_f2 = r2.json()['id_fonction']
+
+        # Renommer F2 vers 'Gérant de Compte' sans direction → ne devrait pas conflicuer
+        r = client.put(
+            f'/employees/admin/fonctions-reference/{id_f2}',
+            json={'libelle': 'Gérant de Compte', 'id_direction': None},
+            headers=headers,
+        )
+        assert r.status_code == 200
+        assert r.json()['libelle'] == 'Gérant de Compte'
+
+    def test_update_same_name_same_direction_rejected(self, client, seed_reference_data):
+        """PUT vers un libellé + direction identiques à une autre entrée doit retourner 400."""
+        headers = _auth(seed_reference_data, 'admin')
+        id_dir = seed_reference_data['direction'].id_direction
+
+        r1 = client.post(
+            '/employees/admin/fonctions-reference',
+            json={'libelle': 'Coordinateur', 'id_direction': id_dir},
+            headers=headers,
+        )
+        r2 = client.post(
+            '/employees/admin/fonctions-reference',
+            json={'libelle': 'Coordinateur Bis', 'id_direction': id_dir},
+            headers=headers,
+        )
+        id_f2 = r2.json()['id_fonction']
+
+        r = client.put(
+            f'/employees/admin/fonctions-reference/{id_f2}',
+            json={'libelle': 'Coordinateur', 'id_direction': id_dir},
+            headers=headers,
+        )
+        assert r.status_code == 400

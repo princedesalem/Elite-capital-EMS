@@ -212,4 +212,71 @@ describe('Administration — onglet Fonctions', () => {
 
     expect(api.post).not.toHaveBeenCalled()
   })
+
+  // ── 8. Toast "ajoutée avec succès" après création ──────────────
+  it('affiche un toast succès après ajout', async () => {
+    const { toast } = await import('../components/ui/bridge')
+    api.post.mockResolvedValueOnce({
+      data: { id_fonction: 50, libelle: 'Chargé Conformité', created: true },
+    })
+
+    renderAdministration()
+    await goToFonctionsTab()
+    await waitFor(() => expect(screen.getByText('Directeur Général')).toBeInTheDocument())
+
+    const input = screen.getByPlaceholderText(/libellé de la fonction/i)
+    await act(async () => fireEvent.change(input, { target: { value: 'Chargé Conformité' } }))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /Ajouter/i })))
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Chargé Conformité')))
+  })
+
+  // ── 9. Toast "existe déjà" quand created=false ─────────────────
+  it('affiche un toast "existe déjà" si la fonction existe déjà', async () => {
+    const { toast } = await import('../components/ui/bridge')
+    api.post.mockResolvedValueOnce({
+      data: { id_fonction: 1, libelle: 'Directeur Général', created: false },
+    })
+
+    renderAdministration()
+    await goToFonctionsTab()
+    await waitFor(() => expect(screen.getByText('Directeur Général')).toBeInTheDocument())
+
+    const input = screen.getByPlaceholderText(/libellé de la fonction/i)
+    await act(async () => fireEvent.change(input, { target: { value: 'Directeur Général' } }))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /Ajouter/i })))
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('existe déjà')))
+  })
+
+  // ── 10. POST inclut id_direction quand sélectionnée ────────────
+  it("api.post reçoit id_direction dans le payload quand une direction est choisie", async () => {
+    // FONCTIONS[1] a id_direction:10 → cliquer Modifier le remplit dans le formulaire
+    api.put.mockResolvedValueOnce({
+      data: { id_fonction: 2, libelle: 'Chargé de Clientèle', updated: true },
+    })
+
+    renderAdministration()
+    await goToFonctionsTab()
+    await waitFor(() => expect(screen.getByText('Chargé de Clientèle')).toBeInTheDocument())
+
+    // Modifier la 2ème fonction (id_direction: 10)
+    const modifierBtns = screen.getAllByRole('button', { name: /Modifier/i })
+    await act(async () => fireEvent.click(modifierBtns[1]))
+
+    // Vérifier que le champ libellé est rempli avec la bonne valeur
+    const input = screen.getByPlaceholderText(/libellé de la fonction/i)
+    expect(input.value).toBe('Chargé de Clientèle')
+
+    // Soumettre → PUT doit inclure id_direction
+    const submitBtn = screen.getByRole('button', { name: /Mettre à jour/i })
+    await act(async () => fireEvent.click(submitBtn))
+
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith(
+        '/employees/admin/fonctions-reference/2',
+        expect.objectContaining({ libelle: 'Chargé de Clientèle', id_direction: 10 })
+      )
+    )
+  })
 })
