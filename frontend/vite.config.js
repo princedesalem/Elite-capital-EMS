@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
       {
         name: 'html-inject-title',
         transformIndexHtml(html) {
-          return html.replace('%VITE_APP_TITLE%', appTitle)
+          return html.replace(/<title>[^<]*<\/title>/, `<title>${appTitle}</title>`)
         },
       },
     ],
