@@ -16,7 +16,6 @@ const appVersion = (() => {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const apiTarget = env.VITE_API_URL || 'http://localhost:8000'
-  const appTitle = mode === 'production' ? 'ELITE CAPITAL EMS' : 'ELITE CAPITAL EMS — DEV'
 
   // All backend route prefixes — Vite proxies these server-side so the browser
   // never makes a cross-origin request and CORS is not an issue in development.
@@ -37,16 +36,7 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    plugins: [
-      react(),
-      // Injection du titre selon le mode (dev / production) dans index.html
-      {
-        name: 'html-inject-title',
-        transformIndexHtml(html) {
-          return html.replace(/<title>[^<]*<\/title>/, `<title>${appTitle}</title>`)
-        },
-      },
-    ],
+    plugins: [react()],
     define: {
       __APP_VERSION__: JSON.stringify(appVersion),
     },
