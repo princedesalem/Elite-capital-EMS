@@ -1,9 +1,15 @@
 name: 🚀 Deploy – Production (Windows Server)
 
-# Déclenché uniquement sur push vers main (après merge d'une PR ou commit direct)
+# Déclenché sur push vers main ET manuellement depuis l'interface GitHub
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Raison du déploiement manuel'
+        required: false
+        default: 'déploiement manuel'
 
 # Empêche les déploiements parallèles : un seul à la fois, les suivants attendent
 concurrency:
@@ -172,7 +178,23 @@ jobs:
           }
           throw "Backend did not respond after $($maxAttempts * $delay) seconds."
 
-      # ── 6. Résumé du déploiement ─────────────────────────────────────────────
+      # ── 6. Backfill SESSION_UTILISATION ─────────────────────────────────────
+      - name: 🗄️ Backfill sessions depuis audit_logs
+        run: |
+          $python = 'C:\EMS\backend\venv\Scripts\python.exe'
+          $script = 'C:\EMS\backend\backfill_sessions_from_audit.py'
+          if (-not (Test-Path $script)) {
+            Write-Host "Script backfill absent, skip."
+            exit 0
+          }
+          $env:PYTHONPATH = 'C:\EMS\backend'
+          Push-Location 'C:\EMS\backend'
+          try {
+            & $python $script
+            if ($LASTEXITCODE -ne 0) { Write-Host "Backfill a retourne $LASTEXITCODE (non bloquant)." }
+          } finally { Pop-Location }
+
+      # ── 7. Résumé du déploiement ─────────────────────────────────────────────
       - name: 📋 Résumé
         if: always()
         run: |
