@@ -2463,8 +2463,8 @@ def _resolve_minutes(session, today=None) -> int:
         # Temps actif = de la connexion jusqu'au dernier heartbeat + tolérance inactivité
         effective_end = session.derniere_activite + timedelta(minutes=_INACTIVITY_TIMEOUT_MINUTES)
         return max(0, int((effective_end - session.date_connexion).total_seconds() / 60))
-    # Pas de heartbeat du tout → estimation conservative 30 min
-    return 30
+    # Pas de heartbeat du tout → on ne sait pas, on n'invente pas
+    return 0
 
 
 @router.get('/stats/usage/{matricule}/today')
