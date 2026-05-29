@@ -115,6 +115,24 @@ def test_login_token_contains_prenom_nom(client, db_session):
     assert str(payload.get('matricule')) == '1001'
 
 
+def test_login_creates_session_utilisation_row(client, db_session):
+    """Anti-regression: chaque login reussi DOIT creer une ligne
+    SESSION_UTILISATION cote backend, sans dependre d'un appel frontend
+    (sinon les stats d'usage ne tracent que l'admin en prod)."""
+    from datetime import date
+    emp = models.Employe(matricule=1001, prenom='Alice', nom='Martin', date_embauche=date(2020, 1, 1))
+    db_session.add(emp)
+    db_session.flush()
+    _create_user(db_session)
+
+    before = db_session.query(models.SessionUtilisation).filter_by(matricule='1001').count()
+    resp = client.post('/auth/login', data={'matricule': '1001', 'password': 'TestPassword1!'})
+    assert resp.status_code == 200
+    db_session.expire_all()
+    after = db_session.query(models.SessionUtilisation).filter_by(matricule='1001').count()
+    assert after == before + 1, f"Aucune SessionUtilisation creee (avant={before}, apres={after})"
+
+
 # ── Register ──────────────────────────────────────────────────────────────────
 
 def test_register_new_user(client, db_session):

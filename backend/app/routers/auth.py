@@ -38,7 +38,7 @@ def send_login_email_request(background_tasks: BackgroundTasks, db: Session = De
     return {"ok": True}
 
 @router.get('/login/email/validate')
-def login_email_validate(token: str, db: Session = Depends(get_db)):
+def login_email_validate(token: str, request: Request, db: Session = Depends(get_db)):
     payload = verify_token(token)
     if not payload or not payload.get('email_login'):
         raise HTTPException(status_code=400, detail='Token invalide')
@@ -52,6 +52,19 @@ def login_email_validate(token: str, db: Session = Depends(get_db)):
         "prenom": (user.employe.prenom if user.employe else None),
         "nom": (user.employe.nom if user.employe else None),
     }, expires_minutes=525600)
+    # Enregistrer la session d'utilisation (cf. /auth/login pour la justification)
+    try:
+        ip_addr = request.client.host if request.client else None
+        ua = request.headers.get('user-agent', '')[:500] if request.headers else ''
+        db.add(models.SessionUtilisation(
+            matricule=str(user.matricule),
+            date_connexion=datetime.utcnow(),
+            ip_adresse=ip_addr,
+            user_agent=ua,
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
     return {"access_token": access_token}
 
 @router.post('/register')
@@ -130,6 +143,25 @@ def login(request: Request, matricule: str = Form(...), password: str = Form(...
     
     db.commit()
     
+    # Enregistrer la session d'utilisation (alimente les stats d'usage)
+    # Cle: c'est fait COTE BACKEND a l'instant de l'auth reussie, donc aucune
+    # dependance a un appel frontend qui pourrait echouer silencieusement
+    # (CORS, reseau, .catch swallowed). C'est la source de verite.
+    try:
+        ip_addr = request.client.host if request.client else None
+        ua = request.headers.get('user-agent', '')[:500] if request.headers else ''
+        sess = models.SessionUtilisation(
+            matricule=str(user.matricule),
+            date_connexion=datetime.utcnow(),
+            ip_adresse=ip_addr,
+            user_agent=ua,
+        )
+        db.add(sess)
+        db.commit()
+    except Exception:
+        # Ne JAMAIS faire echouer l'auth a cause des stats
+        db.rollback()
+
     # Générer le token
     token = create_access_token({
         "matricule": user.matricule,
