@@ -281,3 +281,157 @@ def test_resolve_minutes_audit_fallback_absent_matricule():
     )
     audit_map = {'1001': [now - timedelta(hours=1)]}
     assert _resolve_minutes(s, audit_map=audit_map) == 0
+
+
+# ── Tests fusion d'intervalles (anti-double-comptage) ─────────────────────────
+
+def test_merge_intervals_basic():
+    """Verifie la fusion d'intervalles qui se chevauchent."""
+    from app.routers.employees import _merge_intervals
+    now = datetime.utcnow()
+
+    # Pas de chevauchement
+    iv1 = (now, now + timedelta(minutes=10))
+    iv2 = (now + timedelta(minutes=20), now + timedelta(minutes=30))
+    assert len(_merge_intervals([iv1, iv2])) == 2
+
+    # Chevauchement -> fusion
+    iv1 = (now, now + timedelta(minutes=20))
+    iv2 = (now + timedelta(minutes=10), now + timedelta(minutes=30))
+    merged = _merge_intervals([iv1, iv2])
+    assert len(merged) == 1
+    assert merged[0][0] == now
+    assert merged[0][1] == now + timedelta(minutes=30)
+
+    # Contact exact -> fusion
+    iv1 = (now, now + timedelta(minutes=10))
+    iv2 = (now + timedelta(minutes=10), now + timedelta(minutes=20))
+    merged = _merge_intervals([iv1, iv2])
+    assert len(merged) == 1
+
+
+def test_user_minutes_capped_by_window():
+    """REGRESSION: un user ne peut JAMAIS depasser la duree physique
+    de la fenetre meme avec plusieurs sessions paralleles.
+
+    Reproduit le bug "46h en une journee" : 5 sessions de 10h chacune
+    qui se chevauchent largement -> total reel = duree de la fenetre, pas la somme.
+    """
+    from app.routers.employees import _user_minutes_in_window
+    from app import models
+
+    now = datetime.utcnow()
+    day_start = datetime.combine(now.date(), datetime.min.time())
+    day_end = day_start + timedelta(days=1)
+
+    # 5 sessions paralleles qui couvrent presque toute la journee
+    sessions = []
+    for i in range(5):
+        sessions.append(models.SessionUtilisation(
+            matricule='1001',
+            date_connexion=day_start + timedelta(hours=i),  # 0h, 1h, 2h, 3h, 4h
+            duree_minutes=600,  # 10h chacune
+        ))
+
+    mins = _user_minutes_in_window(sessions, day_start, day_end)
+    # 4h + 10h = 14h max (de 0h a 14h). Pas 5 * 10h = 50h.
+    assert mins <= 24 * 60, f"max 24h attendu, recu {mins} min ({mins/60}h)"
+    assert mins == 14 * 60, f"intervals fusionnes attendus 14h, recu {mins/60}h"
+
+
+def test_summary_does_not_double_count_parallel_sessions(client, db_session, seed_reference_data, auth_headers):
+    """REGRESSION end-to-end: un user avec 3 sessions paralleles dans la meme
+    journee ne doit pas voir son 'today.minutes' multiplie par 3.
+    """
+    from app import models
+    today_dt = datetime.utcnow()
+    day_start = datetime.combine(today_dt.date(), datetime.min.time())
+
+    # 3 sessions paralleles de 1h chacune, toutes commencant a 10h
+    base = day_start + timedelta(hours=10)
+    for i in range(3):
+        db_session.add(models.SessionUtilisation(
+            matricule='1001',
+            date_connexion=base + timedelta(minutes=i),  # decalees de 1min
+            date_deconnexion=base + timedelta(minutes=60),
+            duree_minutes=60,
+        ))
+    db_session.commit()
+
+    headers = auth_headers('9001', 'ADMIN')
+    resp = client.get('/employees/stats/usage/all/summary', headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+
+    # Attendu: ~60 min (les 3 sessions se chevauchent presque entierement)
+    # PAS 180 min (somme bete des duree_minutes)
+    today_mins = body['today']['minutes']
+    assert today_mins <= 65, (
+        f"Double-comptage detecte: {today_mins} min pour 3 sessions paralleles de 1h "
+        f"(devrait etre ~60min). Le merge d'intervalles ne fonctionne pas."
+    )
+    assert today_mins >= 55, f"Sous-comptage: {today_mins} min attendu ~60"
+
+
+def test_summary_today_never_exceeds_24h_per_user(client, db_session, seed_reference_data, auth_headers):
+    """REGRESSION CRITIQUE: aucun utilisateur ne doit afficher > 24h aujourd'hui.
+
+    Le bug "46h en une journee" venait de l'addition des minutes sans fusion.
+    """
+    from app import models
+    today_dt = datetime.utcnow()
+    day_start = datetime.combine(today_dt.date(), datetime.min.time())
+
+    # 10 sessions de 6h chacune, decalees d'une heure -> total brut = 60h
+    for i in range(10):
+        db_session.add(models.SessionUtilisation(
+            matricule='1001',
+            date_connexion=day_start + timedelta(hours=i),
+            date_deconnexion=day_start + timedelta(hours=i + 6),
+            duree_minutes=360,
+        ))
+    db_session.commit()
+
+    headers = auth_headers('9001', 'ADMIN')
+    resp = client.get('/employees/stats/usage/all/summary', headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+
+    # Verifier que AUCUN user dans le ranking ne depasse 24h
+    for emp in body['today']['ranking']['emp']:
+        assert emp['minutes'] <= 24 * 60, (
+            f"User {emp['label']} affiche {emp['minutes']} min "
+            f"({emp['minutes']/60:.1f}h) > 24h IMPOSSIBLE dans une journee !"
+        )
+    # Le total today ne doit pas non plus depasser 24h par user actif
+    assert body['today']['minutes'] <= 24 * 60 * body['today']['users'], (
+        f"Total today.minutes = {body['today']['minutes']} pour "
+        f"{body['today']['users']} users actifs (max possible = {24*60*body['today']['users']})"
+    )
+
+
+def test_summary_session_count_preserved_even_with_merge(client, db_session, seed_reference_data, auth_headers):
+    """Le nombre de sessions brut est conserve (compte par jour),
+    seules les MINUTES sont fusionnees."""
+    from app import models
+    today_dt = datetime.utcnow()
+    day_start = datetime.combine(today_dt.date(), datetime.min.time())
+
+    # 3 sessions paralleles
+    base = day_start + timedelta(hours=10)
+    for i in range(3):
+        db_session.add(models.SessionUtilisation(
+            matricule='1001',
+            date_connexion=base + timedelta(minutes=i),
+            date_deconnexion=base + timedelta(minutes=60),
+            duree_minutes=60,
+        ))
+    db_session.commit()
+
+    headers = auth_headers('9001', 'ADMIN')
+    resp = client.get('/employees/stats/usage/all/summary', headers=headers)
+    body = resp.json()
+
+    # 3 sessions brutes mais 1 seul user
+    assert body['today']['sessions'] == 3
+    assert body['today']['users'] == 1
