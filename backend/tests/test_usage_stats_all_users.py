@@ -148,12 +148,12 @@ def test_resolve_minutes_uses_derniere_activite():
     # on n'utilise PAS utcnow() (qui continuerait a croitre indefiniment)
     assert result == expected  # formule deterministe, pas dependante de utcnow()
 
-    # Cas 4: pas de heartbeat, pas de logout -> 30 min conservatif
+    # Cas 4: pas de heartbeat, pas de logout -> 0 min (on ne sait pas, on n'invente pas)
     s4 = models.SessionUtilisation(
         matricule='1001',
         date_connexion=now - timedelta(hours=5),
     )
-    assert _resolve_minutes(s4) == 30, "sans heartbeat ni logout: 30 min conservatif"
+    assert _resolve_minutes(s4) == 0, "sans heartbeat ni logout: 0 min (pas d'estimation)"
 
 
 def test_heartbeat_updates_derniere_activite(client, db_session, seed_reference_data, auth_headers):
@@ -204,3 +204,80 @@ def test_heartbeat_does_not_update_closed_session(client, db_session, seed_refer
     db_session.expire_all()
     still_closed = db_session.query(models.SessionUtilisation).filter_by(id_session=id_closed).first()
     assert still_closed.derniere_activite is None, "session fermee ne doit pas etre modifiee par heartbeat"
+
+
+def test_resolve_minutes_uses_audit_log_fallback():
+    """Quand il n'y a ni duree_minutes, ni date_deconnexion, ni derniere_activite,
+    _resolve_minutes doit utiliser l'audit_map pour estimer la duree.
+
+    Scenario: user connecte, aucun heartbeat enregistre (ancienne session),
+    mais des entrees audit_log existent. La derniere action 20min apres login
+    doit donner 20 + INACTIVITY_TIMEOUT = 35 min.
+    """
+    from app.routers.employees import _resolve_minutes, _INACTIVITY_TIMEOUT_MINUTES
+    from app import models
+
+    now = datetime.utcnow()
+    connexion = now - timedelta(hours=1)
+
+    # Session sans heartbeat ni logout
+    s = models.SessionUtilisation(
+        matricule='1001',
+        date_connexion=connexion,
+        date_deconnexion=None,
+        duree_minutes=None,
+        derniere_activite=None,
+    )
+
+    # audit_map: 3 actions, la derniere 20min apres login
+    audit_map = {
+        '1001': [
+            connexion + timedelta(minutes=5),
+            connexion + timedelta(minutes=12),
+            connexion + timedelta(minutes=20),  # ← derniere action dans la fenetre
+        ]
+    }
+    expected = 20 + _INACTIVITY_TIMEOUT_MINUTES  # = 35 min
+    result = _resolve_minutes(s, audit_map=audit_map)
+    assert result == expected, f"fallback audit_log attendu {expected}min, recu {result}min"
+
+
+def test_resolve_minutes_audit_fallback_ignores_out_of_window():
+    """Les actions audit_log au-dela de 12h apres la connexion ne doivent pas
+    etre utilisees (elles appartiennent probablement a une session suivante).
+    """
+    from app.routers.employees import _resolve_minutes, _SESSION_MAX_WINDOW_HOURS
+    from app import models
+
+    now = datetime.utcnow()
+    connexion = now - timedelta(hours=20)
+
+    s = models.SessionUtilisation(
+        matricule='1001',
+        date_connexion=connexion,
+        date_deconnexion=None,
+        duree_minutes=None,
+        derniere_activite=None,
+    )
+
+    # Une seule action, mais 14h apres la connexion (hors fenetre de 12h)
+    audit_map = {
+        '1001': [connexion + timedelta(hours=14)]
+    }
+    # Doit ignorer l'action hors fenetre et retourner 0
+    result = _resolve_minutes(s, audit_map=audit_map)
+    assert result == 0, f"action hors fenetre ne doit pas etre utilisee, recu {result}min"
+
+
+def test_resolve_minutes_audit_fallback_absent_matricule():
+    """Si le matricule n'est pas dans audit_map, retourner 0."""
+    from app.routers.employees import _resolve_minutes
+    from app import models
+
+    now = datetime.utcnow()
+    s = models.SessionUtilisation(
+        matricule='9999',
+        date_connexion=now - timedelta(hours=2),
+    )
+    audit_map = {'1001': [now - timedelta(hours=1)]}
+    assert _resolve_minutes(s, audit_map=audit_map) == 0
