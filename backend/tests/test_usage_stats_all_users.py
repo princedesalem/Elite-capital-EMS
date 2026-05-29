@@ -148,12 +148,12 @@ def test_resolve_minutes_uses_derniere_activite():
     # on n'utilise PAS utcnow() (qui continuerait a croitre indefiniment)
     assert result == expected  # formule deterministe, pas dependante de utcnow()
 
-    # Cas 4: pas de heartbeat, pas de logout -> 0 min (on ne sait pas, on n'invente pas)
+    # Cas 4: pas de heartbeat, pas de logout -> 30 min conservatif
     s4 = models.SessionUtilisation(
         matricule='1001',
         date_connexion=now - timedelta(hours=5),
     )
-    assert _resolve_minutes(s4) == 0, "sans heartbeat ni logout: 0 min (pas d'estimation)"
+    assert _resolve_minutes(s4) == 30, "sans heartbeat ni logout: 30 min conservatif"
 
 
 def test_heartbeat_updates_derniere_activite(client, db_session, seed_reference_data, auth_headers):
