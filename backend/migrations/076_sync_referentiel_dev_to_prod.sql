@@ -57,39 +57,40 @@ INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Gestion des Proje
 -- FONCTIONS
 -- ---------------------------------------------------------------
 -- UNIQUE KEY sur (libelle, id_direction, dept_id) -> INSERT IGNORE ok
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Administrateur Directeur Général', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Administrateur Général', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Assistante Administrative et Commerciale', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Assistante AG', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Chargé Analyste de portefeuille', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Chargé Back Office & operations', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('chargé community management accueil et courrier', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Chargé de Gestions de portefeuille', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Chargé des Moyens généraux', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Chargé Marketing digital et Opérationnel', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Chargé Trésorerie et financement', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('DFC', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Audit Interne et Inspection Générale', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Conformité et Contrôle interne', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Conseil et Financement structurés', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Développement et investissement', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Distribution', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Financier et Comptable(DFC)', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Général Adjoint', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Organisations et Projets', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Employé', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('PCA', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Représentants Résidents et responsables de la création et relations d''affaires', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Responsable conformité et contrôle interne', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Responsable Distribution Grandes Entreprises Institutions et Fortunes', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Responsable Distribution Particuliers et PME', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Responsable du Développement', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Responsable Financement et structuration', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Responsable Gestion et Analyste de portefeuille', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('RH', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Stagiaire académique', NULL);
-INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Stagiaire professionnel', NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Administrateur Directeur Général', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Administrateur Directeur Général' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Administrateur Général', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Administrateur Général' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Assistante Administrative et Commerciale', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Assistante Administrative et Commerciale' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Assistante AG', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Assistante AG' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé Analyste de portefeuille', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Chargé Analyste de portefeuille' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé Back Office & operations', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Chargé Back Office & operations' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'chargé community management accueil et courrier', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'chargé community management accueil et courrier' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé de Gestions de portefeuille', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Chargé de Gestions de portefeuille' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé des Moyens généraux', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Chargé des Moyens généraux' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé Marketing digital et Opérationnel', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Chargé Marketing digital et Opérationnel' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé Trésorerie et financement', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Chargé Trésorerie et financement' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'DFC', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'DFC' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Directeur', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Directeur' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Directeur Audit Interne et Inspection Générale', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Directeur Audit Interne et Inspection Générale' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Directeur Conformité et Contrôle interne', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Directeur Conformité et Contrôle interne' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Directeur Conseil et Financement structurés', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Directeur Conseil et Financement structurés' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Directeur Développement et investissement', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Directeur Développement et investissement' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Directeur Distribution', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Directeur Distribution' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Directeur Exécutif, Head of Deal Origination', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Directeur Exécutif, Head of Deal Origination' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Directeur Financier et Comptable(DFC)', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Directeur Financier et Comptable(DFC)' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Directeur Général Adjoint', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Directeur Général Adjoint' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Directeur Organisations et Projets', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Directeur Organisations et Projets' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Employé', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Employé' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'PCA', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'PCA' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Représentants Résidents et responsables de la création et relations d''affaires', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Représentants Résidents et responsables de la création et relations d''affaires' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable conformité et contrôle interne', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Responsable conformité et contrôle interne' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Distribution Grandes Entreprises Institutions et Fortunes', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Responsable Distribution Grandes Entreprises Institutions et Fortunes' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Distribution Particuliers et PME', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Responsable Distribution Particuliers et PME' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable du Développement', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Responsable du Développement' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Financement et structuration', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Responsable Financement et structuration' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Gestion et Analyste de portefeuille', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Responsable Gestion et Analyste de portefeuille' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'RH', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'RH' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Stagiaire académique', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Stagiaire académique' AND dept_id IS NULL);
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Stagiaire professionnel', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Stagiaire professionnel' AND dept_id IS NULL);
 INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé de la fiscalité', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Affaires Juridiques & Fiscalité' AND e.nom = 'ECG';
 INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Affaires Juridiques & fiscalité', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Affaires Juridiques & Fiscalité' AND e.nom = 'ECG';
 INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Auditeur Interne', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Audit interne' AND e.nom = 'ECG';
@@ -122,3 +123,8 @@ INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé des Res
 INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Ressources Humaines', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Ressources Humaines' AND e.nom = 'ECG';
 INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé de négociation', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Trésorerie(ALM)' AND e.nom = 'EXCA';
 INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Trésorerie(ALM)', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Trésorerie(ALM)' AND e.nom = 'EXCA';
+
+-- ---------------------------------------------------------------
+-- FONCTIONS AJOUTÉES MANUELLEMENT
+-- ---------------------------------------------------------------
+INSERT INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Directeur Exécutif, Head of Deal Origination', NULL FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM FONCTION_REFERENCE WHERE libelle = 'Directeur Exécutif, Head of Deal Origination' AND dept_id IS NULL);
