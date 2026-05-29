@@ -1080,6 +1080,19 @@ def heartbeat(
         # Synchronise aussi Utilisateur.dernier_login
         if emp.utilisateur:
             emp.utilisateur.dernier_login = now
+        # Met à jour derniere_activite sur la session ouverte la plus récente
+        # (sans date_deconnexion) → permet de calculer la vraie durée d'utilisation
+        open_session = (
+            db.query(models.SessionUtilisation)
+            .filter(
+                models.SessionUtilisation.matricule == str(matricule),
+                models.SessionUtilisation.date_deconnexion == None,  # noqa: E711
+            )
+            .order_by(models.SessionUtilisation.date_connexion.desc())
+            .first()
+        )
+        if open_session:
+            open_session.derniere_activite = now
         db.commit()
 
 
@@ -2427,25 +2440,31 @@ def record_session_logout(id_session: int, db: Session = Depends(get_db)):
     return {'status': 'logged_out', 'duree_minutes': session.duree_minutes}
 
 
-def _resolve_minutes(session, today) -> int:
-    """Compute effective session duration in minutes, including abandoned sessions.
+_INACTIVITY_TIMEOUT_MINUTES = 15  # session considérée fermée après 15min sans heartbeat
 
-    Priority:
-    1. duree_minutes already set (clean logout) → use it.
-    2. date_deconnexion set but duree_minutes missing → compute from timestamps.
-    3. Session abandoned today (no deconnexion) → elapsed time capped at 8h (may still be active).
-    4. Old abandoned session (no deconnexion, not today) → conservative 30-min estimate.
+
+def _resolve_minutes(session, today=None) -> int:
+    """Calcule la durée effective d'utilisation en minutes.
+
+    Priorité:
+    1. duree_minutes déjà défini (logout propre) → utiliser tel quel.
+    2. date_deconnexion défini (logout API) → calculer depuis les timestamps.
+    3. derniere_activite connue (heartbeat) → derniere_activite + INACTIVITY_TIMEOUT.
+       Représente le dernier moment où l'utilisateur était actif + tolérance.
+    4. Session d'aujourd'hui sans heartbeat → 30 min (une seule visite courte estimée).
+    5. Vieille session abandonnée → 30 min (estimation conservative).
     """
     if session.duree_minutes is not None:
         return session.duree_minutes
     if session.date_deconnexion:
         return max(0, int((session.date_deconnexion - session.date_connexion).total_seconds() / 60))
-    # Abandoned session
-    conn_date = session.date_connexion.date() if hasattr(session.date_connexion, 'date') else session.date_connexion
-    if conn_date >= today:
-        elapsed = max(0, int((datetime.utcnow() - session.date_connexion).total_seconds() / 60))
-        return min(elapsed, 480)  # cap at 8h — user may still be connected
-    return 30  # old abandoned session: conservative 30-min estimate
+    # Session sans logout — utiliser derniere_activite si disponible
+    if session.derniere_activite:
+        # Temps actif = de la connexion jusqu'au dernier heartbeat + tolérance inactivité
+        effective_end = session.derniere_activite + timedelta(minutes=_INACTIVITY_TIMEOUT_MINUTES)
+        return max(0, int((effective_end - session.date_connexion).total_seconds() / 60))
+    # Pas de heartbeat du tout → estimation conservative 30 min
+    return 30
 
 
 @router.get('/stats/usage/{matricule}/today')

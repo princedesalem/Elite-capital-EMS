@@ -699,6 +699,7 @@ class SessionUtilisation(Base):
     duree_minutes = Column(Integer, nullable=True)  # Duration in minutes
     ip_adresse = Column(String(45), nullable=True)
     user_agent = Column(String(500), nullable=True)
+    derniere_activite = Column(DateTime, nullable=True)  # Updated by heartbeat every 30s
 
 
 class Sortie(Base):
