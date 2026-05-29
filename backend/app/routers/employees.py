@@ -2441,18 +2441,41 @@ def record_session_logout(id_session: int, db: Session = Depends(get_db)):
 
 
 _INACTIVITY_TIMEOUT_MINUTES = 15  # session considérée fermée après 15min sans heartbeat
+_SESSION_MAX_WINDOW_HOURS = 12    # durée max d'une session (évite de capturer la session suivante)
 
 
-def _resolve_minutes(session, today=None) -> int:
+def _build_audit_map(db, start_dt: datetime) -> dict:
+    """Construit un index {matricule: [timestamps triés asc]} des actions
+    dans audit_logs depuis start_dt.
+    Exclut LOGIN_SUCCESS (= début de session, déjà dans date_connexion).
+    """
+    rows = (
+        db.query(models.AuditLog.actor, models.AuditLog.timestamp)
+        .filter(
+            models.AuditLog.timestamp >= start_dt,
+            models.AuditLog.actor != None,  # noqa: E711
+            models.AuditLog.action != 'LOGIN_SUCCESS',
+        )
+        .order_by(models.AuditLog.actor, models.AuditLog.timestamp.asc())
+        .all()
+    )
+    result: dict = {}
+    for actor, ts in rows:
+        if actor and ts:
+            result.setdefault(str(actor), []).append(ts)
+    return result
+
+
+def _resolve_minutes(session, today=None, audit_map: dict | None = None) -> int:
     """Calcule la durée effective d'utilisation en minutes.
 
     Priorité:
     1. duree_minutes déjà défini (logout propre) → utiliser tel quel.
     2. date_deconnexion défini (logout API) → calculer depuis les timestamps.
     3. derniere_activite connue (heartbeat) → derniere_activite + INACTIVITY_TIMEOUT.
-       Représente le dernier moment où l'utilisateur était actif + tolérance.
-    4. Session d'aujourd'hui sans heartbeat → 30 min (une seule visite courte estimée).
-    5. Vieille session abandonnée → 30 min (estimation conservative).
+    4. Fallback audit_log: dernière action de l'user dans la fenêtre de session
+       → last_audit + INACTIVITY_TIMEOUT.
+    5. Aucune donnée → 0 min (on ne sait pas, on n'invente pas).
     """
     if session.duree_minutes is not None:
         return session.duree_minutes
@@ -2460,11 +2483,25 @@ def _resolve_minutes(session, today=None) -> int:
         return max(0, int((session.date_deconnexion - session.date_connexion).total_seconds() / 60))
     # Session sans logout — utiliser derniere_activite si disponible
     if session.derniere_activite:
-        # Temps actif = de la connexion jusqu'au dernier heartbeat + tolérance inactivité
         effective_end = session.derniere_activite + timedelta(minutes=_INACTIVITY_TIMEOUT_MINUTES)
         return max(0, int((effective_end - session.date_connexion).total_seconds() / 60))
-    # Pas de heartbeat du tout → estimation conservative 30 min
-    return 30
+    # Fallback: chercher la dernière action dans l'audit log
+    if audit_map:
+        timestamps = audit_map.get(str(session.matricule), [])
+        if timestamps:
+            session_start = session.date_connexion
+            max_end = session_start + timedelta(hours=_SESSION_MAX_WINDOW_HOURS)
+            # Parcourir en ordre décroissant pour trouver le dernier dans la fenêtre
+            last_audit = None
+            for ts in reversed(timestamps):
+                if session_start < ts <= max_end:
+                    last_audit = ts
+                    break
+            if last_audit:
+                effective_end = last_audit + timedelta(minutes=_INACTIVITY_TIMEOUT_MINUTES)
+                return max(0, int((effective_end - session_start).total_seconds() / 60))
+    # Aucune donnée disponible → 0 min
+    return 0
 
 
 @router.get('/stats/usage/{matricule}/today')
@@ -2478,7 +2515,8 @@ def get_usage_today(matricule: str, request: Request, db: Session = Depends(get_
         func.date(models.SessionUtilisation.date_connexion) == today,
     ).all()
 
-    total_minutes = sum(_resolve_minutes(s, today) for s in sessions)
+    audit_map = _build_audit_map(db, datetime.combine(today, datetime.min.time()))
+    total_minutes = sum(_resolve_minutes(s, today, audit_map) for s in sessions)
     return {
         'date': today.isoformat(),
         'total_minutes': total_minutes,
@@ -2501,11 +2539,12 @@ def get_usage_week(matricule: str, request: Request, db: Session = Depends(get_d
         func.date(models.SessionUtilisation.date_connexion) <= today,
     ).all()
 
+    audit_map = _build_audit_map(db, datetime.combine(week_start, datetime.min.time()))
     daily_data = {}
     for s in sessions:
         day = s.date_connexion.date()
         daily_data.setdefault(day, 0)
-        daily_data[day] += _resolve_minutes(s, today)
+        daily_data[day] += _resolve_minutes(s, today, audit_map)
 
     total_minutes = sum(daily_data.values())
     return {
@@ -2542,11 +2581,12 @@ def get_usage_month(matricule: str, month: int = None, year: int = None, request
         func.date(models.SessionUtilisation.date_connexion) <= last_day,
     ).all()
 
+    audit_map = _build_audit_map(db, datetime.combine(first_day, datetime.min.time()))
     daily_data = {}
     for s in sessions:
         day = s.date_connexion.date()
         daily_data.setdefault(day, 0)
-        daily_data[day] += _resolve_minutes(s, today)
+        daily_data[day] += _resolve_minutes(s, today, audit_map)
 
     total_minutes = sum(daily_data.values())
     return {
@@ -2581,10 +2621,11 @@ def get_usage_year(matricule: str, year: int = None, request: Request = None, db
     ).all()
 
     monthly_data = {}
+    audit_map = _build_audit_map(db, datetime.combine(first_day, datetime.min.time()))
     for s in sessions:
         m = s.date_connexion.month
         monthly_data.setdefault(m, 0)
-        monthly_data[m] += _resolve_minutes(s, today)
+        monthly_data[m] += _resolve_minutes(s, today, audit_map)
 
     total_minutes = sum(monthly_data.values())
     return {
@@ -2635,6 +2676,10 @@ def get_usage_summary(request: Request, db: Session = Depends(get_db), tz: str |
     all_sessions = db.query(models.SessionUtilisation).filter(
         func.date(models.SessionUtilisation.date_connexion) >= sql_year_start,
     ).all()
+
+    # Construire l'audit_map une seule fois pour tout le summary
+    # (évite N requêtes pour N sessions sans heartbeat)
+    audit_map = _build_audit_map(db, datetime.combine(sql_year_start, datetime.min.time()))
 
     # Build employee info map: matricule → {nom, prenom, departement, direction, entite, dept_id, id_direction, id_entite}
     employees = db.query(models.Employe).all()
@@ -2711,7 +2756,7 @@ def get_usage_summary(request: Request, db: Session = Depends(get_db), tz: str |
             orgs['entite'][ek]['sessions'] += 1
 
     for s in all_sessions:
-        mins = _resolve_minutes(s, today)
+        mins = _resolve_minutes(s, today, audit_map)
         # Convertir UTC -> local pour aligner la date sur le calendrier de l'admin
         raw = s.date_connexion
         if local_tz is not None and hasattr(raw, 'replace'):
