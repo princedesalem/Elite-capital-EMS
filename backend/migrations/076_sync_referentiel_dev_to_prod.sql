@@ -1,0 +1,124 @@
+-- Migration 076 : Synchronisation référentiel DEV -> PROD
+-- Entités, Directions, Départements, Fonctions
+-- Idempotent : safe to run multiple times
+
+SET NAMES utf8mb4;
+
+-- ---------------------------------------------------------------
+-- ENTITES
+-- ---------------------------------------------------------------
+INSERT INTO ENTITE (nom) SELECT 'ELCAM' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM ENTITE WHERE nom = 'ELCAM');
+INSERT INTO ENTITE (nom) SELECT 'EXCA' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM ENTITE WHERE nom = 'EXCA');
+INSERT INTO ENTITE (nom) SELECT 'ECG' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM ENTITE WHERE nom = 'ECG');
+
+-- ---------------------------------------------------------------
+-- DIRECTIONS
+-- ---------------------------------------------------------------
+INSERT INTO DIRECTION (nom, id_entite) SELECT 'Direction de la Distribution', id_entite FROM ENTITE WHERE nom = 'ELCAM' AND NOT EXISTS (SELECT 1 FROM DIRECTION d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Direction de la Distribution' AND e2.nom = 'ELCAM');
+INSERT INTO DIRECTION (nom, id_entite) SELECT 'Conformité et Controle Interne', id_entite FROM ENTITE WHERE nom = 'ELCAM' AND NOT EXISTS (SELECT 1 FROM DIRECTION d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Conformité et Controle Interne' AND e2.nom = 'ELCAM');
+INSERT INTO DIRECTION (nom, id_entite) SELECT 'Conformité et Controle Interne', id_entite FROM ENTITE WHERE nom = 'EXCA' AND NOT EXISTS (SELECT 1 FROM DIRECTION d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Conformité et Controle Interne' AND e2.nom = 'EXCA');
+INSERT INTO DIRECTION (nom, id_entite) SELECT 'Developpement et Investissement', id_entite FROM ENTITE WHERE nom = 'EXCA' AND NOT EXISTS (SELECT 1 FROM DIRECTION d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Developpement et Investissement' AND e2.nom = 'EXCA');
+INSERT INTO DIRECTION (nom, id_entite) SELECT 'Conseils et Financements Structurés', id_entite FROM ENTITE WHERE nom = 'EXCA' AND NOT EXISTS (SELECT 1 FROM DIRECTION d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Conseils et Financements Structurés' AND e2.nom = 'EXCA');
+INSERT INTO DIRECTION (nom, id_entite) SELECT 'Audit Interne et Inspection Générale', id_entite FROM ENTITE WHERE nom = 'ECG' AND NOT EXISTS (SELECT 1 FROM DIRECTION d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Audit Interne et Inspection Générale' AND e2.nom = 'ECG');
+INSERT INTO DIRECTION (nom, id_entite) SELECT 'Direction Financière et Comptable', id_entite FROM ENTITE WHERE nom = 'ECG' AND NOT EXISTS (SELECT 1 FROM DIRECTION d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Direction Financière et Comptable' AND e2.nom = 'ECG');
+INSERT INTO DIRECTION (nom, id_entite) SELECT 'Organisation et Projets', id_entite FROM ENTITE WHERE nom = 'ECG' AND NOT EXISTS (SELECT 1 FROM DIRECTION d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Organisation et Projets' AND e2.nom = 'ECG');
+
+-- ---------------------------------------------------------------
+-- DEPARTEMENTS
+-- ---------------------------------------------------------------
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Gestion et Analyse de portefeuille', id_entite, NULL FROM ENTITE WHERE nom = 'ELCAM' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Gestion et Analyse de portefeuille' AND e2.nom = 'ELCAM' AND d2.id_direction IS NULL);
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Middle et Back Office', id_entite, NULL FROM ENTITE WHERE nom = 'ELCAM' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Middle et Back Office' AND e2.nom = 'ELCAM' AND d2.id_direction IS NULL);
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Développement Commercial', id_entite, NULL FROM ENTITE WHERE nom = 'ELCAM' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Développement Commercial' AND e2.nom = 'ELCAM' AND d2.id_direction IS NULL);
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Dévelopement commercial ELCAM', id_entite, NULL FROM ENTITE WHERE nom = 'ELCAM' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Dévelopement commercial ELCAM' AND e2.nom = 'ELCAM' AND d2.id_direction IS NULL);
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Distribution Grandes Entreprises, Institutions et Fortunes', e.id_entite, d.id_direction FROM ENTITE e JOIN DIRECTION d ON d.id_entite = e.id_entite WHERE e.nom = 'ELCAM' AND d.nom = 'Direction de la Distribution' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT dep2 JOIN DIRECTION dir2 ON dep2.id_direction = dir2.id_direction WHERE dep2.nom = 'Distribution Grandes Entreprises, Institutions et Fortunes' AND dir2.nom = 'Direction de la Distribution');
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Distribution particuliers et PME', e.id_entite, d.id_direction FROM ENTITE e JOIN DIRECTION d ON d.id_entite = e.id_entite WHERE e.nom = 'ELCAM' AND d.nom = 'Direction de la Distribution' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT dep2 JOIN DIRECTION dir2 ON dep2.id_direction = dir2.id_direction WHERE dep2.nom = 'Distribution particuliers et PME' AND dir2.nom = 'Direction de la Distribution');
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Contrôle Interne', e.id_entite, d.id_direction FROM ENTITE e JOIN DIRECTION d ON d.id_entite = e.id_entite WHERE e.nom = 'ELCAM' AND d.nom = 'Conformité et Controle Interne' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT dep2 JOIN DIRECTION dir2 ON dep2.id_direction = dir2.id_direction WHERE dep2.nom = 'Contrôle Interne' AND dir2.nom = 'Conformité et Controle Interne');
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Middle & Back Office', id_entite, NULL FROM ENTITE WHERE nom = 'EXCA' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Middle & Back Office' AND e2.nom = 'EXCA' AND d2.id_direction IS NULL);
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Trésorerie(ALM)', id_entite, NULL FROM ENTITE WHERE nom = 'EXCA' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Trésorerie(ALM)' AND e2.nom = 'EXCA' AND d2.id_direction IS NULL);
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Développement Commercial', id_entite, NULL FROM ENTITE WHERE nom = 'EXCA' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Développement Commercial' AND e2.nom = 'EXCA' AND d2.id_direction IS NULL);
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Dévelopement commercial EXCA', id_entite, NULL FROM ENTITE WHERE nom = 'EXCA' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Dévelopement commercial EXCA' AND e2.nom = 'EXCA' AND d2.id_direction IS NULL);
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Contrôle Interne', e.id_entite, d.id_direction FROM ENTITE e JOIN DIRECTION d ON d.id_entite = e.id_entite WHERE e.nom = 'EXCA' AND d.nom = 'Conformité et Controle Interne' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT dep2 JOIN DIRECTION dir2 ON dep2.id_direction = dir2.id_direction WHERE dep2.nom = 'Contrôle Interne' AND dir2.nom = 'Conformité et Controle Interne');
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Pool Grandes Entreprises & Fortunes', e.id_entite, d.id_direction FROM ENTITE e JOIN DIRECTION d ON d.id_entite = e.id_entite WHERE e.nom = 'EXCA' AND d.nom = 'Developpement et Investissement' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT dep2 JOIN DIRECTION dir2 ON dep2.id_direction = dir2.id_direction WHERE dep2.nom = 'Pool Grandes Entreprises & Fortunes' AND dir2.nom = 'Developpement et Investissement');
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Pool Particuliers & PME', e.id_entite, d.id_direction FROM ENTITE e JOIN DIRECTION d ON d.id_entite = e.id_entite WHERE e.nom = 'EXCA' AND d.nom = 'Developpement et Investissement' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT dep2 JOIN DIRECTION dir2 ON dep2.id_direction = dir2.id_direction WHERE dep2.nom = 'Pool Particuliers & PME' AND dir2.nom = 'Developpement et Investissement');
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Financement & Structuration', e.id_entite, d.id_direction FROM ENTITE e JOIN DIRECTION d ON d.id_entite = e.id_entite WHERE e.nom = 'EXCA' AND d.nom = 'Conseils et Financements Structurés' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT dep2 JOIN DIRECTION dir2 ON dep2.id_direction = dir2.id_direction WHERE dep2.nom = 'Financement & Structuration' AND dir2.nom = 'Conseils et Financements Structurés');
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Ressources Humaines', id_entite, NULL FROM ENTITE WHERE nom = 'ECG' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Ressources Humaines' AND e2.nom = 'ECG' AND d2.id_direction IS NULL);
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Affaires Juridiques & Fiscalité', id_entite, NULL FROM ENTITE WHERE nom = 'ECG' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Affaires Juridiques & Fiscalité' AND e2.nom = 'ECG' AND d2.id_direction IS NULL);
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Communication Marketing et Relations Publiques', id_entite, NULL FROM ENTITE WHERE nom = 'ECG' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Communication Marketing et Relations Publiques' AND e2.nom = 'ECG' AND d2.id_direction IS NULL);
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Marketing Digital et Opérationnel', id_entite, NULL FROM ENTITE WHERE nom = 'ECG' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Marketing Digital et Opérationnel' AND e2.nom = 'ECG' AND d2.id_direction IS NULL);
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Moyens Généraux', id_entite, NULL FROM ENTITE WHERE nom = 'ECG' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT d2 JOIN ENTITE e2 ON d2.id_entite = e2.id_entite WHERE d2.nom = 'Moyens Généraux' AND e2.nom = 'ECG' AND d2.id_direction IS NULL);
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Inspection Generale', e.id_entite, d.id_direction FROM ENTITE e JOIN DIRECTION d ON d.id_entite = e.id_entite WHERE e.nom = 'ECG' AND d.nom = 'Audit Interne et Inspection Générale' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT dep2 JOIN DIRECTION dir2 ON dep2.id_direction = dir2.id_direction WHERE dep2.nom = 'Inspection Generale' AND dir2.nom = 'Audit Interne et Inspection Générale');
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Audit interne', e.id_entite, d.id_direction FROM ENTITE e JOIN DIRECTION d ON d.id_entite = e.id_entite WHERE e.nom = 'ECG' AND d.nom = 'Audit Interne et Inspection Générale' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT dep2 JOIN DIRECTION dir2 ON dep2.id_direction = dir2.id_direction WHERE dep2.nom = 'Audit interne' AND dir2.nom = 'Audit Interne et Inspection Générale');
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Comptabilité', e.id_entite, d.id_direction FROM ENTITE e JOIN DIRECTION d ON d.id_entite = e.id_entite WHERE e.nom = 'ECG' AND d.nom = 'Direction Financière et Comptable' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT dep2 JOIN DIRECTION dir2 ON dep2.id_direction = dir2.id_direction WHERE dep2.nom = 'Comptabilité' AND dir2.nom = 'Direction Financière et Comptable');
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Trésorerie et Financement', e.id_entite, d.id_direction FROM ENTITE e JOIN DIRECTION d ON d.id_entite = e.id_entite WHERE e.nom = 'ECG' AND d.nom = 'Direction Financière et Comptable' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT dep2 JOIN DIRECTION dir2 ON dep2.id_direction = dir2.id_direction WHERE dep2.nom = 'Trésorerie et Financement' AND dir2.nom = 'Direction Financière et Comptable');
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Controle de gestion', e.id_entite, d.id_direction FROM ENTITE e JOIN DIRECTION d ON d.id_entite = e.id_entite WHERE e.nom = 'ECG' AND d.nom = 'Direction Financière et Comptable' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT dep2 JOIN DIRECTION dir2 ON dep2.id_direction = dir2.id_direction WHERE dep2.nom = 'Controle de gestion' AND dir2.nom = 'Direction Financière et Comptable');
+INSERT INTO DEPARTEMENT (nom, id_entite, id_direction) SELECT 'Gestion des Projets et Systèmes d''Informations', e.id_entite, d.id_direction FROM ENTITE e JOIN DIRECTION d ON d.id_entite = e.id_entite WHERE e.nom = 'ECG' AND d.nom = 'Organisation et Projets' AND NOT EXISTS (SELECT 1 FROM DEPARTEMENT dep2 JOIN DIRECTION dir2 ON dep2.id_direction = dir2.id_direction WHERE dep2.nom = 'Gestion des Projets et Systèmes d''Informations' AND dir2.nom = 'Organisation et Projets');
+
+-- ---------------------------------------------------------------
+-- FONCTIONS
+-- ---------------------------------------------------------------
+-- UNIQUE KEY sur (libelle, id_direction, dept_id) -> INSERT IGNORE ok
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Administrateur Directeur Général', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Administrateur Général', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Assistante Administrative et Commerciale', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Assistante AG', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Chargé Analyste de portefeuille', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Chargé Back Office & operations', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('chargé community management accueil et courrier', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Chargé de Gestions de portefeuille', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Chargé des Moyens généraux', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Chargé Marketing digital et Opérationnel', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Chargé Trésorerie et financement', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('DFC', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Audit Interne et Inspection Générale', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Conformité et Contrôle interne', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Conseil et Financement structurés', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Développement et investissement', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Distribution', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Financier et Comptable(DFC)', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Général Adjoint', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Directeur Organisations et Projets', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Employé', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('PCA', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Représentants Résidents et responsables de la création et relations d''affaires', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Responsable conformité et contrôle interne', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Responsable Distribution Grandes Entreprises Institutions et Fortunes', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Responsable Distribution Particuliers et PME', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Responsable du Développement', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Responsable Financement et structuration', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Responsable Gestion et Analyste de portefeuille', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('RH', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Stagiaire académique', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) VALUES ('Stagiaire professionnel', NULL);
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé de la fiscalité', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Affaires Juridiques & Fiscalité' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Affaires Juridiques & fiscalité', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Affaires Juridiques & Fiscalité' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Auditeur Interne', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Audit interne' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Infographiste & Déploiement', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Communication Marketing et Relations Publiques' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Communication et Relations Publiques', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Communication Marketing et Relations Publiques' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Comptable', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Comptabilité' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Comptable, Contrôle et Consolidation', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Comptabilité' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Contrôleur de gestion', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Controle de gestion' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Contrôleur Interne', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Contrôle Interne' AND e.nom = 'EXCA';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé distribution Grandes entreprises et Fortunes', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Distribution Grandes Entreprises, Institutions et Fortunes' AND e.nom = 'ELCAM';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé distribution particulier et PME', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Distribution particuliers et PME' AND e.nom = 'ELCAM';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Analyste Financement et structuration', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Financement & Structuration' AND e.nom = 'EXCA';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé Cloud et sécurité', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Gestion des Projets et Systèmes d''Informations' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé Organisations et projets', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Gestion des Projets et Systèmes d''Informations' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé Transformation Digitale, Innovation & Solutions Applicatives', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Gestion des Projets et Systèmes d''Informations' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Systèmes d''Information', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Gestion des Projets et Systèmes d''Informations' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Inspecteur Général(IG)', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Inspection Generale' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Comptable', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Middle & Back Office' AND e.nom = 'EXCA';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Middle & Back Office', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Middle et Back Office' AND e.nom = 'ELCAM';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé de la flotte automobile', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Moyens Généraux' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chauffeur', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Moyens Généraux' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chauffeur AG', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Moyens Généraux' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chauffeur DG', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Moyens Généraux' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chauffeur Pool', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Moyens Généraux' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé développement Pool Grande Entreprise & Fortunes', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Pool Grandes Entreprises & Fortunes' AND e.nom = 'EXCA';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable développement Pool Grande Entreprise & Fortunes', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Pool Grandes Entreprises & Fortunes' AND e.nom = 'EXCA';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé développement Pool Particuliers & PMEs', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Pool Particuliers & PME' AND e.nom = 'EXCA';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable développement Pool Particuliers & PME', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Pool Particuliers & PME' AND e.nom = 'EXCA';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé des Ressources Humaines', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Ressources Humaines' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Ressources Humaines', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Ressources Humaines' AND e.nom = 'ECG';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Chargé de négociation', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Trésorerie(ALM)' AND e.nom = 'EXCA';
+INSERT IGNORE INTO FONCTION_REFERENCE (libelle, dept_id) SELECT 'Responsable Trésorerie(ALM)', dep.dept_id FROM DEPARTEMENT dep JOIN ENTITE e ON dep.id_entite = e.id_entite WHERE dep.nom = 'Trésorerie(ALM)' AND e.nom = 'EXCA';
