@@ -96,6 +96,25 @@ def test_login_resets_attempts_on_success(client, db_session):
     assert user.tentatives_echec == 0
 
 
+def test_login_token_contains_prenom_nom(client, db_session):
+    """Le JWT doit inclure prenom et nom pour l'affichage du salut côté front."""
+    from jose import jwt as _jwt
+    from datetime import date
+    from app.utils.security import SECRET_KEY, ALGORITHM
+    # Créer l'employé puis le user lié
+    emp = models.Employe(matricule=1001, prenom='Jean', nom='Dupont', date_embauche=date(2020, 1, 1))
+    db_session.add(emp)
+    db_session.flush()
+    _create_user(db_session)
+    resp = client.post('/auth/login', data={'matricule': '1001', 'password': 'TestPassword1!'})
+    assert resp.status_code == 200
+    token = resp.json()['access_token']
+    payload = _jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    assert payload.get('prenom') == 'Jean'
+    assert payload.get('nom') == 'Dupont'
+    assert str(payload.get('matricule')) == '1001'
+
+
 # ── Register ──────────────────────────────────────────────────────────────────
 
 def test_register_new_user(client, db_session):

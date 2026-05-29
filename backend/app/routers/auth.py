@@ -46,7 +46,12 @@ def login_email_validate(token: str, db: Session = Depends(get_db)):
     user = db.query(models.Utilisateur).filter(models.Utilisateur.matricule == matricule).first()
     if not user:
         raise HTTPException(status_code=404, detail='Utilisateur non trouvé')
-    access_token = create_access_token({"matricule": user.matricule, "role": _role_effectif(user, db)}, expires_minutes=525600)
+    access_token = create_access_token({
+        "matricule": user.matricule,
+        "role": _role_effectif(user, db),
+        "prenom": (user.employe.prenom if user.employe else None),
+        "nom": (user.employe.nom if user.employe else None),
+    }, expires_minutes=525600)
     return {"access_token": access_token}
 
 @router.post('/register')
@@ -128,7 +133,9 @@ def login(request: Request, matricule: str = Form(...), password: str = Form(...
     # Générer le token
     token = create_access_token({
         "matricule": user.matricule,
-        "role": _role_effectif(user, db)
+        "role": _role_effectif(user, db),
+        "prenom": (user.employe.prenom if user.employe else None),
+        "nom": (user.employe.nom if user.employe else None),
     }, expires_minutes=525600)
     
     # Vérifier si mot de passe temporaire
