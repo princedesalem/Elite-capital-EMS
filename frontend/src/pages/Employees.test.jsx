@@ -110,8 +110,16 @@ describe('Employees page', () => {
     Object.defineProperty(fileInput, 'files', { value: [file] })
     fireEvent.change(fileInput)
 
+    // Confirmer l'import dans le panneau de confirmation
+    const confirmBtn = await screen.findByRole('button', { name: /^Importer$/i })
+    fireEvent.click(confirmBtn)
+
     await waitFor(() => {
-      expect(api.post).toHaveBeenCalledWith('/employees/import', expect.any(FormData))
+      expect(api.post).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/employees\/import/),
+        expect.any(FormData),
+        expect.any(Object),
+      )
       expect(screen.getByText(/import terminé/i)).toBeInTheDocument()
     })
   })

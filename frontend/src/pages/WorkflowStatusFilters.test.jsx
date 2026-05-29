@@ -254,7 +254,7 @@ describe('Sorties Activer action visibility', () => {
 
     setupRecu()
     render(<MemoryRouter><SortiesPage /></MemoryRouter>)
-    fireEvent.click(await screen.findByRole('button', { name: /Recu/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Re(?:c|ç)u/i }))
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Activer' })).not.toBeInTheDocument()
     })
@@ -275,7 +275,7 @@ describe('Sorties Activer action visibility', () => {
       return Promise.resolve({ data: [] })
     })
     render(<MemoryRouter><SortiesPage /></MemoryRouter>)
-    fireEvent.click(await screen.findByRole('button', { name: /Recu/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Re(?:c|ç)u/i }))
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Activer' })).toBeInTheDocument()
     })
