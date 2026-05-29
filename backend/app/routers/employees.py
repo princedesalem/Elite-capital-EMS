@@ -2580,24 +2580,41 @@ def get_usage_year(matricule: str, year: int = None, request: Request = None, db
 
 
 @router.get('/stats/usage/all/summary')
-def get_usage_summary(request: Request, db: Session = Depends(get_db)):
+def get_usage_summary(request: Request, db: Session = Depends(get_db), tz: str | None = None):
     """Statistiques globales pour tous les utilisateurs (Admin seulement).
 
     Inclut toutes les sessions — y compris abandonnées (sans logout) —
     en estimant la durée via _resolve_minutes.
     Retourne les 4 périodes + breakdowns journaliers/mensuels + ranking
     par employé, département, direction, entité.
+
+    Le parametre `tz` (ex: Africa/Douala) permet d'aligner les bornes
+    aujourd'hui/semaine/mois sur le calendrier local de l'utilisateur
+    plutot que sur UTC — sinon les connexions en debut/fin de journee
+    locale tombent dans le mauvais jour.
     """
     _check_admin_role(request)
 
-    today = datetime.utcnow().date()
+    # Resolution du "today" local
+    try:
+        from zoneinfo import ZoneInfo  # type: ignore
+        local_tz = ZoneInfo(tz) if tz else None
+    except Exception:
+        local_tz = None
+
+    if local_tz is not None:
+        today = datetime.now(local_tz).date()
+    else:
+        today = datetime.utcnow().date()
     week_start = today - timedelta(days=today.weekday())
     month_start = datetime(today.year, today.month, 1).date()
     year_start = datetime(today.year, 1, 1).date()
 
     # Fetch ALL sessions from the start of this year (covers today/week/month/year)
+    # On elargit la borne d'un jour pour couvrir le decalage TZ (max 14h).
+    sql_year_start = year_start - timedelta(days=1)
     all_sessions = db.query(models.SessionUtilisation).filter(
-        func.date(models.SessionUtilisation.date_connexion) >= year_start,
+        func.date(models.SessionUtilisation.date_connexion) >= sql_year_start,
     ).all()
 
     # Build employee info map: matricule → {nom, prenom, departement, direction, entite, dept_id, id_direction, id_entite}
@@ -2676,7 +2693,17 @@ def get_usage_summary(request: Request, db: Session = Depends(get_db)):
 
     for s in all_sessions:
         mins = _resolve_minutes(s, today)
-        conn_date = s.date_connexion.date() if hasattr(s.date_connexion, 'date') else s.date_connexion
+        # Convertir UTC -> local pour aligner la date sur le calendrier de l'admin
+        raw = s.date_connexion
+        if local_tz is not None and hasattr(raw, 'replace'):
+            try:
+                from datetime import timezone as _tz
+                aware = raw if getattr(raw, 'tzinfo', None) is not None else raw.replace(tzinfo=_tz.utc)
+                conn_date = aware.astimezone(local_tz).date()
+            except Exception:
+                conn_date = raw.date() if hasattr(raw, 'date') else raw
+        else:
+            conn_date = raw.date() if hasattr(raw, 'date') else raw
         mat = s.matricule
 
         year_mins += mins; year_sessions.append(s); year_users.add(mat)
