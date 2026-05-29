@@ -54,11 +54,15 @@ def login_email_validate(token: str, request: Request, db: Session = Depends(get
     }, expires_minutes=525600)
     # Enregistrer la session d'utilisation (cf. /auth/login pour la justification)
     try:
+        now = datetime.utcnow()
+        user.dernier_login = now
+        if user.employe:
+            user.employe.derniere_connexion = now
         ip_addr = request.client.host if request.client else None
         ua = request.headers.get('user-agent', '')[:500] if request.headers else ''
         db.add(models.SessionUtilisation(
             matricule=str(user.matricule),
-            date_connexion=datetime.utcnow(),
+            date_connexion=now,
             ip_adresse=ip_addr,
             user_agent=ua,
         ))
@@ -130,6 +134,11 @@ def login(request: Request, matricule: str = Form(...), password: str = Form(...
     # Authentification réussie - réinitialiser les tentatives
     user.tentatives_echec = 0
     user.dernier_login = datetime.utcnow()
+    # Mettre à jour Employe.derniere_connexion immédiatement au login
+    # (sinon l'utilisateur apparaît "Hors ligne" dans Présences jusqu'au
+    # premier heartbeat, qui ne s'envoie que depuis la page Home)
+    if user.employe:
+        user.employe.derniere_connexion = datetime.utcnow()
     log_action(db, matricule, 'LOGIN_SUCCESS', 'auth', matricule, {'matricule': matricule}, ip_address=request.client.host if request.client else None)
     
     # Vérifier MFA si activée
