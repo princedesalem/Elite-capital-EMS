@@ -2504,6 +2504,91 @@ def _resolve_minutes(session, today=None, audit_map: dict | None = None) -> int:
     return 0
 
 
+def _session_interval(session, audit_map: dict | None = None) -> tuple | None:
+    """Retourne l'intervalle effectif (start_dt, end_dt) d'une session, ou None
+    si on ne peut pas determiner la fin.
+
+    Meme logique de priorite que _resolve_minutes:
+    1. duree_minutes -> start + duree
+    2. date_deconnexion -> (start, deconnexion)
+    3. derniere_activite -> (start, derniere_activite + INACTIVITY)
+    4. audit_map -> (start, last_audit + INACTIVITY) si trouve dans la fenetre
+    5. sinon None (on ignore la session — pas de comptage)
+    """
+    start = session.date_connexion
+    if start is None:
+        return None
+    if session.duree_minutes is not None:
+        return (start, start + timedelta(minutes=max(0, session.duree_minutes)))
+    if session.date_deconnexion is not None:
+        end = session.date_deconnexion
+        return (start, end) if end > start else None
+    if session.derniere_activite is not None:
+        end = session.derniere_activite + timedelta(minutes=_INACTIVITY_TIMEOUT_MINUTES)
+        return (start, end) if end > start else None
+    if audit_map:
+        timestamps = audit_map.get(str(session.matricule), [])
+        if timestamps:
+            max_end = start + timedelta(hours=_SESSION_MAX_WINDOW_HOURS)
+            last_audit = None
+            for ts in reversed(timestamps):
+                if start < ts <= max_end:
+                    last_audit = ts
+                    break
+            if last_audit:
+                end = last_audit + timedelta(minutes=_INACTIVITY_TIMEOUT_MINUTES)
+                return (start, end)
+    return None
+
+
+def _merge_intervals(intervals: list) -> list:
+    """Fusionne une liste de tuples (start, end) qui se chevauchent.
+    Retourne la liste fusionnee triee par start."""
+    if not intervals:
+        return []
+    sorted_iv = sorted(intervals, key=lambda x: x[0])
+    merged = [list(sorted_iv[0])]
+    for start, end in sorted_iv[1:]:
+        if start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return [(s, e) for s, e in merged]
+
+
+def _clip_intervals_to_window(intervals: list, win_start, win_end) -> list:
+    """Restreint chaque intervalle a la fenetre [win_start, win_end].
+    Elimine ceux qui sont entierement hors fenetre."""
+    result = []
+    for start, end in intervals:
+        s = max(start, win_start)
+        e = min(end, win_end)
+        if s < e:
+            result.append((s, e))
+    return result
+
+
+def _minutes_in_intervals(intervals: list) -> int:
+    """Somme les durees (en minutes) d'une liste d'intervalles fusionnes."""
+    return sum(int((e - s).total_seconds() / 60) for s, e in intervals)
+
+
+def _user_minutes_in_window(sessions, win_start, win_end, audit_map=None) -> int:
+    """Calcule les minutes UNIQUES d'un utilisateur dans la fenetre,
+    en fusionnant les sessions qui se chevauchent.
+
+    Garantit qu'on ne depasse JAMAIS la duree physique de la fenetre.
+    """
+    raw_intervals = []
+    for s in sessions:
+        iv = _session_interval(s, audit_map)
+        if iv is not None:
+            raw_intervals.append(iv)
+    merged = _merge_intervals(raw_intervals)
+    clipped = _clip_intervals_to_window(merged, win_start, win_end)
+    return _minutes_in_intervals(clipped)
+
+
 @router.get('/stats/usage/{matricule}/today')
 def get_usage_today(matricule: str, request: Request, db: Session = Depends(get_db)):
     """Statistiques d'utilisation du jour"""
@@ -2516,7 +2601,9 @@ def get_usage_today(matricule: str, request: Request, db: Session = Depends(get_
     ).all()
 
     audit_map = _build_audit_map(db, datetime.combine(today, datetime.min.time()))
-    total_minutes = sum(_resolve_minutes(s, today, audit_map) for s in sessions)
+    win = (datetime.combine(today, datetime.min.time()),
+           datetime.combine(today, datetime.min.time()) + timedelta(days=1))
+    total_minutes = _user_minutes_in_window(sessions, win[0], win[1], audit_map)
     return {
         'date': today.isoformat(),
         'total_minutes': total_minutes,
@@ -2541,10 +2628,14 @@ def get_usage_week(matricule: str, request: Request, db: Session = Depends(get_d
 
     audit_map = _build_audit_map(db, datetime.combine(week_start, datetime.min.time()))
     daily_data = {}
-    for s in sessions:
-        day = s.date_connexion.date()
-        daily_data.setdefault(day, 0)
-        daily_data[day] += _resolve_minutes(s, today, audit_map)
+    d = week_start
+    while d <= today:
+        win = (datetime.combine(d, datetime.min.time()),
+               datetime.combine(d, datetime.min.time()) + timedelta(days=1))
+        mins_d = _user_minutes_in_window(sessions, win[0], win[1], audit_map)
+        if mins_d > 0:
+            daily_data[d] = mins_d
+        d += timedelta(days=1)
 
     total_minutes = sum(daily_data.values())
     return {
@@ -2583,10 +2674,14 @@ def get_usage_month(matricule: str, month: int = None, year: int = None, request
 
     audit_map = _build_audit_map(db, datetime.combine(first_day, datetime.min.time()))
     daily_data = {}
-    for s in sessions:
-        day = s.date_connexion.date()
-        daily_data.setdefault(day, 0)
-        daily_data[day] += _resolve_minutes(s, today, audit_map)
+    d = first_day
+    while d <= last_day:
+        win = (datetime.combine(d, datetime.min.time()),
+               datetime.combine(d, datetime.min.time()) + timedelta(days=1))
+        mins_d = _user_minutes_in_window(sessions, win[0], win[1], audit_map)
+        if mins_d > 0:
+            daily_data[d] = mins_d
+        d += timedelta(days=1)
 
     total_minutes = sum(daily_data.values())
     return {
@@ -2622,10 +2717,19 @@ def get_usage_year(matricule: str, year: int = None, request: Request = None, db
 
     monthly_data = {}
     audit_map = _build_audit_map(db, datetime.combine(first_day, datetime.min.time()))
-    for s in sessions:
-        m = s.date_connexion.month
-        monthly_data.setdefault(m, 0)
-        monthly_data[m] += _resolve_minutes(s, today, audit_map)
+    for m in range(1, 13):
+        m_start = datetime(year, m, 1).date()
+        if m == 12:
+            m_end = datetime(year + 1, 1, 1).date()
+        else:
+            m_end = datetime(year, m + 1, 1).date()
+        if m_start > last_day:
+            break
+        win = (datetime.combine(m_start, datetime.min.time()),
+               datetime.combine(m_end, datetime.min.time()))
+        mins_m = _user_minutes_in_window(sessions, win[0], win[1], audit_map)
+        if mins_m > 0:
+            monthly_data[m] = mins_m
 
     total_minutes = sum(monthly_data.values())
     return {
@@ -2718,7 +2822,7 @@ def get_usage_summary(request: Request, db: Session = Depends(get_db), tz: str |
     month_orgs = _new_period_orgs()
     year_orgs = _new_period_orgs()
 
-    def _acc_orgs(orgs: dict, mat: int, mins: int):
+    def _acc_orgs(orgs: dict, mat: int, mins: int, n_sessions: int = 1):
         info = emp_info.get(mat, {})
         # Employee
         k = str(mat)
@@ -2726,7 +2830,7 @@ def get_usage_summary(request: Request, db: Session = Depends(get_db), tz: str |
         if k not in orgs['emp']:
             orgs['emp'][k] = {'id': k, 'label': label, 'minutes': 0, 'sessions': 0}
         orgs['emp'][k]['minutes'] += mins
-        orgs['emp'][k]['sessions'] += 1
+        orgs['emp'][k]['sessions'] += n_sessions
         # Département
         dept_id = info.get('dept_id')
         if dept_id:
@@ -2735,7 +2839,7 @@ def get_usage_summary(request: Request, db: Session = Depends(get_db), tz: str |
             if dk not in orgs['dept']:
                 orgs['dept'][dk] = {'id': dk, 'label': dlabel, 'minutes': 0, 'sessions': 0}
             orgs['dept'][dk]['minutes'] += mins
-            orgs['dept'][dk]['sessions'] += 1
+            orgs['dept'][dk]['sessions'] += n_sessions
         # Direction
         dir_id = info.get('id_direction')
         if dir_id:
@@ -2744,7 +2848,7 @@ def get_usage_summary(request: Request, db: Session = Depends(get_db), tz: str |
             if dirk not in orgs['direction']:
                 orgs['direction'][dirk] = {'id': dirk, 'label': dirlabel, 'minutes': 0, 'sessions': 0}
             orgs['direction'][dirk]['minutes'] += mins
-            orgs['direction'][dirk]['sessions'] += 1
+            orgs['direction'][dirk]['sessions'] += n_sessions
         # Entité
         ent_id = info.get('id_entite')
         if ent_id:
@@ -2753,61 +2857,160 @@ def get_usage_summary(request: Request, db: Session = Depends(get_db), tz: str |
             if ek not in orgs['entite']:
                 orgs['entite'][ek] = {'id': ek, 'label': elabel, 'minutes': 0, 'sessions': 0}
             orgs['entite'][ek]['minutes'] += mins
-            orgs['entite'][ek]['sessions'] += 1
+            orgs['entite'][ek]['sessions'] += n_sessions
 
+    # ── NOUVELLE LOGIQUE : fusion d'intervalles par utilisateur ───────────────
+    # Pour eviter le double-comptage (ex: 2 navigateurs ouverts en parallele,
+    # ou sessions dupliquees par backfill), on regroupe les sessions par user,
+    # on construit les intervalles (start, end) puis on les FUSIONNE.
+    # Ainsi un user ne peut JAMAIS depasser la duree physique de la fenetre.
+
+    from datetime import timezone as _tz
+
+    def _to_utc_naive(dt):
+        """Convertit un datetime aware en naive UTC (pour comparaison uniforme)."""
+        if dt is None:
+            return None
+        if getattr(dt, 'tzinfo', None) is not None:
+            return dt.astimezone(_tz.utc).replace(tzinfo=None)
+        return dt
+
+    def _day_window_utc(d):
+        """Retourne (start_utc, end_utc) pour le jour calendaire d, en tenant
+        compte du fuseau horaire local de l'admin si fourni."""
+        if local_tz is not None:
+            start_local = datetime.combine(d, datetime.min.time()).replace(tzinfo=local_tz)
+            end_local = start_local + timedelta(days=1)
+            return (start_local.astimezone(_tz.utc).replace(tzinfo=None),
+                    end_local.astimezone(_tz.utc).replace(tzinfo=None))
+        return (datetime.combine(d, datetime.min.time()),
+                datetime.combine(d, datetime.min.time()) + timedelta(days=1))
+
+    # Fenetres globales par periode (en UTC naive pour comparaison avec date_connexion)
+    today_win = _day_window_utc(today)
+    week_win = (_day_window_utc(week_start)[0], today_win[1])
+    month_win = (_day_window_utc(month_start)[0], today_win[1])
+    year_win = (_day_window_utc(year_start)[0], today_win[1])
+
+    # Grouper les sessions par utilisateur
+    sessions_by_mat: dict = {}
     for s in all_sessions:
-        mins = _resolve_minutes(s, today, audit_map)
-        # Convertir UTC -> local pour aligner la date sur le calendrier de l'admin
-        raw = s.date_connexion
-        if local_tz is not None and hasattr(raw, 'replace'):
+        sessions_by_mat.setdefault(s.matricule, []).append(s)
+
+    # Pour chaque user, calculer les intervals fusionnes UNE FOIS
+    merged_by_mat: dict = {}
+    for mat, sess_list in sessions_by_mat.items():
+        raw = []
+        for s in sess_list:
+            iv = _session_interval(s, audit_map)
+            if iv is not None:
+                raw.append((_to_utc_naive(iv[0]), _to_utc_naive(iv[1])))
+        merged_by_mat[mat] = _merge_intervals(raw)
+
+    # Compteurs de sessions BRUTES par user et par periode (pour info, pas pour les minutes)
+    def _count_sessions_in_window(sess_list, win):
+        n = 0
+        for s in sess_list:
+            d = _to_utc_naive(s.date_connexion)
+            if d is not None and win[0] <= d < win[1]:
+                n += 1
+        return n
+
+    for mat, merged in merged_by_mat.items():
+        if not merged:
+            continue
+        sess_list = sessions_by_mat.get(mat, [])
+
+        # Minutes UNIQUES par periode (intervals fusionnes + clippes a la fenetre)
+        year_user_mins = _minutes_in_intervals(_clip_intervals_to_window(merged, *year_win))
+        month_user_mins = _minutes_in_intervals(_clip_intervals_to_window(merged, *month_win))
+        week_user_mins = _minutes_in_intervals(_clip_intervals_to_window(merged, *week_win))
+        today_user_mins = _minutes_in_intervals(_clip_intervals_to_window(merged, *today_win))
+
+        if year_user_mins > 0:
+            year_mins += year_user_mins
+            year_users.add(mat)
+            _acc_orgs(year_orgs, mat, year_user_mins, _count_sessions_in_window(sess_list, year_win))
+        if month_user_mins > 0:
+            month_mins += month_user_mins
+            month_users.add(mat)
+            _acc_orgs(month_orgs, mat, month_user_mins, _count_sessions_in_window(sess_list, month_win))
+        if week_user_mins > 0:
+            week_mins += week_user_mins
+            week_users.add(mat)
+            _acc_orgs(week_orgs, mat, week_user_mins, _count_sessions_in_window(sess_list, week_win))
+        if today_user_mins > 0:
+            today_mins += today_user_mins
+            today_users.add(mat)
+            _acc_orgs(today_orgs, mat, today_user_mins, _count_sessions_in_window(sess_list, today_win))
+
+        # Breakdowns: pour chaque jour de la semaine et du mois,
+        # clipper les intervalles a la fenetre du jour et sommer les minutes
+        # (garantit que daily[jour] <= 24h * users, etc.)
+
+        # Daily breakdown semaine
+        d = week_start
+        while d <= today:
+            win_d = _day_window_utc(d)
+            mins_d = _minutes_in_intervals(_clip_intervals_to_window(merged, *win_d))
+            if mins_d > 0:
+                key = str(d)
+                if key not in week_daily:
+                    week_daily[key] = {'total_minutes': 0, 'sessions_count': 0, 'users': set()}
+                week_daily[key]['total_minutes'] += mins_d
+                week_daily[key]['users'].add(mat)
+                week_daily[key]['sessions_count'] += _count_sessions_in_window(sess_list, win_d)
+            d += timedelta(days=1)
+
+        # Daily breakdown mois
+        d = month_start
+        while d <= today:
+            win_d = _day_window_utc(d)
+            mins_d = _minutes_in_intervals(_clip_intervals_to_window(merged, *win_d))
+            if mins_d > 0:
+                key = str(d)
+                if key not in month_daily:
+                    month_daily[key] = {'total_minutes': 0, 'sessions_count': 0, 'users': set()}
+                month_daily[key]['total_minutes'] += mins_d
+                month_daily[key]['users'].add(mat)
+                month_daily[key]['sessions_count'] += _count_sessions_in_window(sess_list, win_d)
+            d += timedelta(days=1)
+
+        # Monthly breakdown annee
+        for m in range(1, 13):
             try:
-                from datetime import timezone as _tz
-                aware = raw if getattr(raw, 'tzinfo', None) is not None else raw.replace(tzinfo=_tz.utc)
-                conn_date = aware.astimezone(local_tz).date()
-            except Exception:
-                conn_date = raw.date() if hasattr(raw, 'date') else raw
-        else:
-            conn_date = raw.date() if hasattr(raw, 'date') else raw
-        mat = s.matricule
+                m_start = datetime(today.year, m, 1).date()
+            except ValueError:
+                continue
+            if m == 12:
+                m_end = datetime(today.year + 1, 1, 1).date()
+            else:
+                m_end = datetime(today.year, m + 1, 1).date()
+            if m_start > today:
+                break
+            win_m = (_day_window_utc(m_start)[0], _day_window_utc(m_end)[0])
+            mins_m = _minutes_in_intervals(_clip_intervals_to_window(merged, *win_m))
+            if mins_m > 0:
+                key = str(m)
+                if key not in year_monthly:
+                    year_monthly[key] = {'total_minutes': 0, 'sessions_count': 0, 'users': set()}
+                year_monthly[key]['total_minutes'] += mins_m
+                year_monthly[key]['users'].add(mat)
+                year_monthly[key]['sessions_count'] += _count_sessions_in_window(sess_list, win_m)
 
-        year_mins += mins; year_sessions.append(s); year_users.add(mat)
-        _acc_orgs(year_orgs, mat, mins)
-
-        if conn_date >= month_start:
-            month_mins += mins; month_sessions.append(s); month_users.add(mat)
-            _acc_orgs(month_orgs, mat, mins)
-
-        if conn_date >= week_start:
-            week_mins += mins; week_sessions.append(s); week_users.add(mat)
-            _acc_orgs(week_orgs, mat, mins)
-
-        if conn_date == today:
-            today_mins += mins; today_sessions.append(s); today_users.add(mat)
-            _acc_orgs(today_orgs, mat, mins)
-
-        # Time breakdowns
-        key_m = str(conn_date.month)
-        if key_m not in year_monthly:
-            year_monthly[key_m] = {'total_minutes': 0, 'sessions_count': 0, 'users': set()}
-        year_monthly[key_m]['total_minutes'] += mins
-        year_monthly[key_m]['sessions_count'] += 1
-        year_monthly[key_m]['users'].add(mat)
-
-        if conn_date >= month_start:
-            key_d = str(conn_date)
-            if key_d not in month_daily:
-                month_daily[key_d] = {'total_minutes': 0, 'sessions_count': 0, 'users': set()}
-            month_daily[key_d]['total_minutes'] += mins
-            month_daily[key_d]['sessions_count'] += 1
-            month_daily[key_d]['users'].add(mat)
-
-        if conn_date >= week_start:
-            key_d = str(conn_date)
-            if key_d not in week_daily:
-                week_daily[key_d] = {'total_minutes': 0, 'sessions_count': 0, 'users': set()}
-            week_daily[key_d]['total_minutes'] += mins
-            week_daily[key_d]['sessions_count'] += 1
-            week_daily[key_d]['users'].add(mat)
+    # Compteurs de sessions globaux (pour today_sessions etc.)
+    for s in all_sessions:
+        d = _to_utc_naive(s.date_connexion)
+        if d is None:
+            continue
+        if year_win[0] <= d < year_win[1]:
+            year_sessions.append(s)
+        if month_win[0] <= d < month_win[1]:
+            month_sessions.append(s)
+        if week_win[0] <= d < week_win[1]:
+            week_sessions.append(s)
+        if today_win[0] <= d < today_win[1]:
+            today_sessions.append(s)
 
     # Fill zeros: include every employee/dept/direction/entite even with no sessions
     for period_orgs in [today_orgs, week_orgs, month_orgs, year_orgs]:
