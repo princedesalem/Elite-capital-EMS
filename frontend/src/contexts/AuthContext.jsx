@@ -124,7 +124,12 @@ export function AuthProvider({children}){
                 setSessionId(res.data.id_session)
                 localStorage.setItem('session_id', res.data.id_session)
                 localStorage.setItem('session_date', todayStr)
-              }).catch(() => {})
+              })
+              .catch(err => {
+                // Important: ne pas avaler silencieusement — sinon les stats d'usage
+                // ne tracent que l'admin (regression observee en prod).
+                console.warn('[session] enregistrement quotidien echoue:', err?.response?.status, err?.message)
+              })
           }
         }
       }catch(e){localStorage.removeItem('ec_token'); localStorage.removeItem('access_token')}
