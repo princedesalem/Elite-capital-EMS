@@ -43,21 +43,35 @@ export default function AdminUsageStats() {
   const [summaryData, setSummaryData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [lastUpdated, setLastUpdated] = useState(null)
 
-  useEffect(() => { loadSummaryData() }, [])
+  // Detecte le fuseau du navigateur (ex: Africa/Douala) pour que le filtre
+  // "Aujourd'hui" soit aligne avec le calendrier local de l'admin, pas UTC.
+  const tz = (() => {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || '' } catch { return '' }
+  })()
 
-  const loadSummaryData = async () => {
+  const loadSummaryData = React.useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const res = await api.get('/employees/stats/usage/all/summary')
+      const res = await api.get('/employees/stats/usage/all/summary', { params: tz ? { tz } : {} })
       setSummaryData(res.data)
+      setLastUpdated(new Date())
     } catch (err) {
       setError('Erreur: ' + (err.response?.data?.detail || err.message))
     } finally {
       setLoading(false)
     }
-  }
+  }, [tz])
+
+  // Chargement initial + auto-refresh toutes les 30s pour refleter les
+  // connexions recentes sans avoir a cliquer Rafraichir.
+  useEffect(() => {
+    loadSummaryData()
+    const id = setInterval(loadSummaryData, 30000)
+    return () => clearInterval(id)
+  }, [loadSummaryData])
 
   const formatTime = (minutes) => {
     if (!minutes) return '0h 0min'
@@ -98,10 +112,17 @@ export default function AdminUsageStats() {
               <span style={{marginRight:4,verticalAlign:'middle'}}>{icon}</span>{label}
             </button>
           ))}
-          <button onClick={loadSummaryData} className="period-btn"
-            style={{marginLeft:'auto', borderColor:'#1e40af', color:'#1e40af'}} disabled={loading}>
-            <RefreshCw size={13} style={{marginRight:4,verticalAlign:'middle'}}/> {"Rafraîchir"}
-          </button>
+          <div style={{marginLeft:'auto', display:'flex', alignItems:'center', gap:10}}>
+            {lastUpdated && (
+              <span style={{fontSize:12, color:'#64748b'}} title={lastUpdated.toLocaleString()}>
+                {`Mis à jour à ${lastUpdated.toLocaleTimeString()}`}
+              </span>
+            )}
+            <button onClick={loadSummaryData} className="period-btn"
+              style={{borderColor:'#1e40af', color:'#1e40af'}} disabled={loading}>
+              <RefreshCw size={13} style={{marginRight:4,verticalAlign:'middle'}}/> {"Rafraîchir"}
+            </button>
+          </div>
         </div>
 
         {error && <div className="error-message">{error}</div>}

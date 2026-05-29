@@ -59,3 +59,38 @@ def test_session_login_accepts_any_matricule(client, db_session, seed_reference_
         resp = client.post('/employees/sessions/login', json={'matricule': matricule})
         assert resp.status_code == 200, f"matricule {matricule} a recu {resp.status_code}: {resp.text}"
         assert resp.json().get('status') == 'logged_in'
+
+
+def test_usage_summary_respects_tz_parameter(client, db_session, seed_reference_data, auth_headers):
+    """Une session ouverte a 23h30 heure locale Africa/Douala (UTC+1) =>
+    UTC 22h30 le meme jour. Avec ?tz=Africa/Douala elle doit etre comptee
+    dans 'today' local et non dans 'yesterday' UTC.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+    from app import models
+
+    # Now en local Douala
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        import pytest
+        pytest.skip('zoneinfo indisponible')
+
+    douala = ZoneInfo('Africa/Douala')
+    now_local = _dt.now(douala)
+    # Session ouverte il y a 5 minutes, heure locale
+    started_local = now_local.replace(minute=0, second=0, microsecond=0)
+    started_utc = started_local.astimezone(_tz.utc).replace(tzinfo=None)
+    db_session.add(models.SessionUtilisation(
+        matricule='9001', date_connexion=started_utc,
+        date_deconnexion=started_utc, duree_minutes=15,
+    ))
+    db_session.commit()
+
+    headers = auth_headers('9001', 'ADMIN')
+    resp = client.get('/employees/stats/usage/all/summary', params={'tz': 'Africa/Douala'}, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    # La session doit etre dans "today" local (au moins 1 user, >=15 min)
+    assert body['today']['users'] >= 1
+    assert body['today']['minutes'] >= 15
